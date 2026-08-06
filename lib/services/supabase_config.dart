@@ -1,25 +1,23 @@
 /// Supabase configuration.
 ///
-/// In production, pass credentials via --dart-define:
-///   flutter run --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...
+/// Credentials are passed via --dart-define at build time:
+///   flutter run --dart-define=SUPABASE_URL=https://... --dart-define=SUPABASE_ANON_KEY=sb_...
 ///
-/// For local dev, create `lib/services/local_config.dart` (gitignored) with:
-///   const String localSupabaseUrl = 'https://your-project.supabase.co';
-///   const String localSupabaseAnonKey = 'your-key';
+/// For local dev convenience, use the dev script:
+///   bash dev.sh        (reads credentials from lib/services/local_config.dart)
 ///
-/// If neither is provided, the app runs in local-only mode (no auth/sync).
+/// In CI/CD, GitHub Actions passes secrets as --dart-define.
+/// If no credentials are provided, the app runs in local-only mode.
 library;
-
-import 'local_config.dart' if (dart.library.html) 'empty_config.dart';
 
 const String supabaseUrl = String.fromEnvironment(
   'SUPABASE_URL',
-  defaultValue: localSupabaseUrl,
+  defaultValue: '',
 );
 
 const String supabaseAnonKey = String.fromEnvironment(
   'SUPABASE_ANON_KEY',
-  defaultValue: localSupabaseAnonKey,
+  defaultValue: '',
 );
 
 bool get isSupabaseConfigured =>
