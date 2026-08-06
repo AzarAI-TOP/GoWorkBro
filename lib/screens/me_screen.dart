@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/models.dart';
 import '../providers/app_provider.dart';
 import '../services/sync_service.dart';
+import '../services/update_service.dart';
 import '../theme/app_theme.dart';
 
 class MeScreen extends StatefulWidget {
@@ -531,6 +532,17 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
           ),
         ),
         const SizedBox(height: 16),
+        // Check for updates
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.system_update),
+            title: const Text('检查更新'),
+            subtitle: const Text('检查是否有新版本可用'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _checkForUpdate(context),
+          ),
+        ),
+        const SizedBox(height: 16),
         // App info
         Card(
           child: Column(
@@ -538,7 +550,7 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
               ListTile(
                 leading: const Icon(Icons.info_outline),
                 title: const Text('关于 GoWorkBro'),
-                subtitle: const Text('版本 1.0.0'),
+                subtitle: const Text('版本 0.1.0'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () {
                   showAboutDialog(
@@ -613,5 +625,35 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
         ],
       ),
     );
+  }
+
+  Future<void> _checkForUpdate(BuildContext context) async {
+    // Show loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 16),
+            Text('正在检查更新...'),
+          ],
+        ),
+      ),
+    );
+
+    final update = await UpdateService.checkForUpdate();
+
+    if (!mounted) return;
+    Navigator.of(context).pop(); // Close loading dialog
+
+    if (update != null) {
+      UpdateService.showUpdateDialog(context, update);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('当前已是最新版本')),
+      );
+    }
   }
 }
