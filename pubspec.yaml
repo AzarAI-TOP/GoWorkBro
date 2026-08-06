@@ -1,0 +1,54 @@
+name: goworkbro
+description: "GoWorkBro — 仿番茄TODO 风格的待办与专注管理软件"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # Database — sqflite_common_ffi works on both Android and Windows desktop
+  sqflite_common_ffi: ^2.3.3
+  path: ^1.9.0
+  path_provider: ^2.1.4
+  shared_preferences: ^2.3.2
+
+  # State management
+  provider: ^6.1.2
+
+  # Charts for Today screen
+  fl_chart: ^0.69.0
+
+  # Markdown rendering for USTC news
+  flutter_markdown: ^0.7.4+3
+  markdown: ^7.2.2
+
+  # HTTP for backend API
+  http: ^1.2.2
+
+  # Supabase sync
+  supabase_flutter: ^2.8.0
+
+  # Utils
+  intl: ^0.19.0
+  uuid: ^4.5.1
+
+  # Desktop window management
+  window_manager: ^0.4.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/icons/

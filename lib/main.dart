@@ -1,0 +1,248 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:window_manager/window_manager.dart';
+import 'providers/app_provider.dart';
+import 'services/supabase_config.dart';
+import 'theme/app_theme.dart';
+import 'screens/auth_screen.dart';
+import 'screens/todo_screen.dart';
+import 'screens/countdown_screen.dart';
+import 'screens/today_screen.dart';
+import 'screens/me_screen.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+    await windowManager.ensureInitialized();
+    await windowManager.waitUntilReadyToShow(
+      const WindowOptions(
+        size: Size(1200, 800),
+        minimumSize: Size(400, 600),
+        title: 'GoWorkBro',
+        titleBarStyle: TitleBarStyle.normal,
+        center: true,
+      ),
+      () async {
+        await windowManager.show();
+        await windowManager.focus();
+      },
+    );
+  }
+
+  // Initialize Supabase before running app (if configured)
+  if (isSupabaseConfigured) {
+    await Supabase.initialize(
+      url: supabaseUrl,
+      anonKey: supabaseAnonKey,
+      debug: kDebugMode,
+    );
+  }
+
+  runApp(const GoWorkBroApp());
+}
+
+class GoWorkBroApp extends StatelessWidget {
+  const GoWorkBroApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider(
+      create: (_) => AppProvider(),
+      child: MaterialApp(
+        title: 'GoWorkBro',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.light,
+        darkTheme: AppTheme.dark,
+        themeMode: ThemeMode.system,
+        home: const AuthGate(),
+      ),
+    );
+  }
+}
+
+/// Decides whether to show the auth screen or the main app.
+/// Listens to Supabase auth state changes.
+class AuthGate extends StatefulWidget {
+  const AuthGate({super.key});
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  bool _isLoggedIn = false;
+  bool _checkingSession = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkInitialSession();
+    _listenAuthChanges();
+  }
+
+  void _checkInitialSession() {
+    if (!isSupabaseConfigured) {
+      setState(() => _checkingSession = false);
+      return;
+    }
+    final session = Supabase.instance.client.auth.currentSession;
+    _isLoggedIn = session != null;
+    if (_isLoggedIn) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        context.read<AppProvider>().init();
+      });
+    }
+    setState(() => _checkingSession = false);
+  }
+
+  void _listenAuthChanges() {
+    if (!isSupabaseConfigured) return;
+    Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      if (!mounted) return;
+      final event = data.event;
+      final session = data.session;
+
+      if (event == AuthChangeEvent.signedIn && session != null) {
+        setState(() => _isLoggedIn = true);
+        context.read<AppProvider>().init();
+      } else if (event == AuthChangeEvent.signedOut) {
+        setState(() => _isLoggedIn = false);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_checkingSession) {
+      return Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(
+            color: Theme.of(context).colorScheme.primary,
+          ),
+        ),
+      );
+    }
+
+    if (!isSupabaseConfigured) {
+      return const AppShell();
+    }
+
+    if (!_isLoggedIn) {
+      return const AuthScreen();
+    }
+
+    return const AppShell();
+  }
+}
+
+class AppShell extends StatefulWidget {
+  const AppShell({super.key});
+
+  @override
+  State<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends State<AppShell> {
+  int _currentIndex = 0;
+
+  final _screens = const [
+    TodoScreen(),
+    CountdownScreen(),
+    TodayScreen(),
+    MeScreen(),
+  ];
+
+  final _labels = ['待办', '倒计时', '今天', '我的'];
+  final _icons = [
+    Icons.check_circle_outline,
+    Icons.hourglass_empty,
+    Icons.today_outlined,
+    Icons.person_outline,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final isDesktop = MediaQuery.of(context).size.width >= 900;
+
+    if (isDesktop) {
+      return Scaffold(
+        body: Row(
+          children: [
+            _buildSideNav(context),
+            const VerticalDivider(width: 1),
+            Expanded(child: _screens[_currentIndex]),
+          ],
+        ),
+      );
+    }
+
+    return Scaffold(
+      body: IndexedStack(
+        index: _currentIndex,
+        children: _screens,
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (i) => setState(() => _currentIndex = i),
+        items: List.generate(
+            4,
+            (i) => BottomNavigationBarItem(
+                  icon: Icon(_icons[i]),
+                  label: _labels[i],
+                )),
+      ),
+    );
+  }
+
+  Widget _buildSideNav(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Container(
+      width: 120,
+      padding: const EdgeInsets.symmetric(vertical: 24),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: List.generate(4, (i) {
+          final selected = _currentIndex == i;
+          final color = selected ? colorScheme.primary : colorScheme.onSurfaceVariant;
+          return Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => setState(() => _currentIndex = i),
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                decoration: BoxDecoration(
+                  color: selected
+                      ? colorScheme.primary.withValues(alpha: 0.12)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(_icons[i], size: selected ? 28 : 24, color: color),
+                    const SizedBox(height: 6),
+                    Text(
+                      _labels[i],
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                        color: color,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+}
