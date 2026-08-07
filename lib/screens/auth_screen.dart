@@ -6,7 +6,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 /// Shown when the user is not authenticated.
 /// On success, AuthGate's onAuthStateChange listener navigates to the main app.
 class AuthScreen extends StatefulWidget {
-  const AuthScreen({super.key});
+  final VoidCallback? onUseOffline;
+  const AuthScreen({super.key, this.onUseOffline});
 
   @override
   State<AuthScreen> createState() => _AuthScreenState();
@@ -103,6 +104,27 @@ class _AuthScreenState extends State<AuthScreen> {
     if (msg.contains('already registered')) return '该邮箱已注册';
     if (msg.contains('rate limit')) return '操作过于频繁，请稍后再试';
     return msg;
+  }
+
+  /// #14: Password reset via Supabase
+  Future<void> _showForgotPassword() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
+      setState(() => _error = '请先输入邮箱地址');
+      return;
+    }
+    try {
+      await Supabase.instance.client.auth.resetPasswordForEmail(email);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('密码重置邮件已发送，请检查邮箱')),
+        );
+      }
+    } on AuthException catch (e) {
+      if (mounted) setState(() => _error = _friendlyError(e.message));
+    } catch (_) {
+      if (mounted) setState(() => _error = '发送失败，请检查网络连接');
+    }
   }
 
   @override
@@ -234,6 +256,19 @@ class _AuthScreenState extends State<AuthScreen> {
                   ),
                   const SizedBox(height: 16),
 
+                  // Forgot password (#14)
+                  if (_isLogin)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: _loading ? null : _showForgotPassword,
+                        child: Text(
+                          '忘记密码？',
+                          style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 8),
                   // Toggle login/register
                   TextButton(
                     onPressed: _loading
@@ -250,6 +285,15 @@ class _AuthScreenState extends State<AuthScreen> {
                           : '已有账号？点击登录',
                     ),
                   ),
+                  // Use offline (#13)
+                  if (widget.onUseOffline != null)
+                    TextButton(
+                      onPressed: _loading ? null : widget.onUseOffline,
+                      child: Text(
+                        '离线使用（不同步数据）',
+                        style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                      ),
+                    ),
                   // Dev quick-login (debug mode only)
                   if (kDebugMode)
                     TextButton(

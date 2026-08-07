@@ -302,6 +302,15 @@ class AppProvider extends ChangeNotifier {
     SyncService.pushCountdown(countdown);
   }
 
+  Future<void> updateCountdown(Countdown countdown) async {
+    await DatabaseService.updateCountdown(countdown);
+    final i = _countdowns.indexWhere((c) => c.id == countdown.id);
+    if (i >= 0) _countdowns[i] = countdown;
+    _countdowns.sort((a, b) => a.targetDateTime.compareTo(b.targetDateTime));
+    notifyListeners();
+    SyncService.pushCountdown(countdown);
+  }
+
   Future<void> deleteCountdown(String id) async {
     await DatabaseService.deleteCountdown(id);
     _countdowns.removeWhere((c) => c.id == id);

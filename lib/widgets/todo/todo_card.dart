@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../models/models.dart';
 
@@ -8,6 +9,7 @@ class TodoCard extends StatelessWidget {
   final int index;
   final VoidCallback onToggle;
   final VoidCallback onLongPress;
+  final bool showDragHandle;
 
   const TodoCard({
     super.key,
@@ -15,6 +17,7 @@ class TodoCard extends StatelessWidget {
     required this.index,
     required this.onToggle,
     required this.onLongPress,
+    this.showDragHandle = true,
   });
 
   @override
@@ -36,22 +39,23 @@ class TodoCard extends StatelessWidget {
 
     return Card(
       child: InkWell(
-        onTap: onToggle,
-        onLongPress: onLongPress,
+        onTap: () { HapticFeedback.lightImpact(); onToggle(); },
+        onLongPress: () { HapticFeedback.mediumImpact(); onLongPress(); },
         borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           child: Row(
             children: [
-              ReorderableDragStartListener(
-                index: index,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 2),
-                  child: Icon(Icons.drag_indicator,
-                      color: theme.hintColor, size: 22),
+              if (showDragHandle)
+                ReorderableDragStartListener(
+                  index: index,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: Icon(Icons.drag_indicator,
+                        color: theme.hintColor, size: 22),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 6),
+              if (showDragHandle) const SizedBox(width: 6),
               // No circle icon — just tap the card to toggle
               Expanded(
                 child: Column(

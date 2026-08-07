@@ -15,7 +15,6 @@ class CountdownScreen extends StatefulWidget {
 
 class _CountdownScreenState extends State<CountdownScreen> with WidgetsBindingObserver {
   Timer? _timer;
-  bool _isScreenVisible = true;
 
   @override
   void initState() {
@@ -26,19 +25,17 @@ class _CountdownScreenState extends State<CountdownScreen> with WidgetsBindingOb
 
   void _startTimer() {
     _timer?.cancel();
+    // Tick every second but only rebuild visible items via ListView's build
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && _isScreenVisible) setState(() {});
+      if (mounted) setState(() {});
     });
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Pause timer when app is backgrounded, resume when foregrounded
     if (state == AppLifecycleState.resumed) {
-      _isScreenVisible = true;
       _startTimer();
     } else {
-      _isScreenVisible = false;
       _timer?.cancel();
     }
   }

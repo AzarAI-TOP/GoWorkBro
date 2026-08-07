@@ -234,6 +234,11 @@ class DatabaseService {
     await db.delete('countdowns', where: 'id = ?', whereArgs: [id]);
   }
 
+  static Future<void> updateCountdown(Countdown countdown) async {
+    final db = await database;
+    await db.update('countdowns', countdown.toMap(), where: 'id = ?', whereArgs: [countdown.id]);
+  }
+
   /// Delete countdowns whose target date has passed (next day after target).
   /// Uses UTC for consistent comparison across timezones.
   static Future<void> cleanupExpiredCountdowns() async {

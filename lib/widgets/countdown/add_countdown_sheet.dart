@@ -143,13 +143,21 @@ class AddCountdownSheetState extends State<AddCountdownSheet> {
       return;
     }
     if (widget.existing != null) {
-      widget.provider.deleteCountdown(widget.existing!.id);
+      // #7: Update in place instead of delete-then-add (no data loss risk)
+      widget.provider.updateCountdown(Countdown(
+        id: widget.existing!.id,
+        title: title,
+        targetDateTime: target,
+        createdDate: widget.existing!.createdDate,
+        colorIndex: _selectedColor,
+      ));
+    } else {
+      widget.provider.addCountdown(Countdown.create(
+        title: title,
+        targetDateTime: target,
+        colorIndex: _selectedColor,
+      ));
     }
-    widget.provider.addCountdown(Countdown.create(
-      title: title,
-      targetDateTime: target,
-      colorIndex: _selectedColor,
-    ));
     Navigator.pop(context);
   }
 

@@ -38,10 +38,10 @@ class _TodayScreenState extends State<TodayScreen> {
     });
   }
 
+  // #2: Only refresh weekly data on session count change, NOT news
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Refresh weekly data when session count changes (e.g. after timer finishes)
     final provider = context.read<AppProvider>();
     if (provider.todaySessionCount != _lastSessionCount) {
       _lastSessionCount = provider.todaySessionCount;

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../providers/app_provider.dart';
@@ -16,33 +17,62 @@ class TimerScreen extends StatefulWidget {
   State<TimerScreen> createState() => _TimerScreenState();
 }
 
-class _TimerScreenState extends State<TimerScreen> {
+class _TimerScreenState extends State<TimerScreen> with WidgetsBindingObserver {
   late int _elapsedSeconds;
   late int _targetSeconds;
   Timer? _timer;
   bool _isRunning = false;
   bool _isFinished = false;
+  DateTime? _backgroundedAt;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _elapsedSeconds = 0;
     if (widget.todo.timingType == TimingType.backward) {
       _targetSeconds = widget.todo.durationMinutes * 60;
     } else {
-      _targetSeconds = 0; // forward or none
+      _targetSeconds = 0;
     }
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused && _isRunning) {
+      // Record when app went to background so we can recover elapsed time
+      _backgroundedAt = DateTime.now();
+      _timer?.cancel();
+      setState(() => _isRunning = false);
+    } else if (state == AppLifecycleState.resumed && _backgroundedAt != null) {
+      // Recover elapsed time while in background
+      final delta = DateTime.now().difference(_backgroundedAt!).inSeconds;
+      _backgroundedAt = null;
+      _elapsedSeconds += delta;
+      if (widget.todo.timingType == TimingType.backward &&
+          _elapsedSeconds >= _targetSeconds) {
+        setState(() {
+          _isFinished = true;
+        });
+        _recordSessionAndComplete();
+      } else {
+        setState(() {});
+        _start();
+      }
+    }
   }
 
   void _start() {
     if (_isFinished) return;
     setState(() => _isRunning = true);
+    HapticFeedback.lightImpact();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       setState(() {
         _elapsedSeconds++;
@@ -59,15 +89,24 @@ class _TimerScreenState extends State<TimerScreen> {
 
   void _pause() {
     _timer?.cancel();
+    HapticFeedback.lightImpact();
     setState(() => _isRunning = false);
   }
 
   void _finish() {
     if (_elapsedSeconds == 0) {
-      Navigator.pop(context);
+      // #9: Show feedback instead of silently popping
+      HapticFeedback.heavyImpact();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('尚未开始计时'),
+          duration: Duration(milliseconds: 1200),
+        ),
+      );
       return;
     }
     _timer?.cancel();
+    HapticFeedback.mediumImpact();
     setState(() {
       _isRunning = false;
       _isFinished = true;
@@ -76,22 +115,21 @@ class _TimerScreenState extends State<TimerScreen> {
   }
 
   /// Record focus session AND mark the todo as completed.
-  /// Uses completeTodoWithDuration which:
-  /// 1. Reads current todo state from provider (no stale snapshot)
-  /// 2. Creates keepTomorrow copy if needed
-  /// 3. Silently skips if todo was deleted while timer was running
+  /// #10: Read current todo title from provider to avoid stale snapshot.
   void _recordSessionAndComplete() {
     final provider = context.read<AppProvider>();
 
-    // Record focus session (always, even if todo was deleted)
+    // #10: Use current title from provider if available
+    final currentTodo = provider.todos.where((t) => t.id == widget.todo.id).firstOrNull;
+    final currentTitle = currentTodo?.title ?? widget.todo.title;
+
     provider.recordFocusSession(FocusSession.create(
       todoId: widget.todo.id,
       sourceType: 'todo',
-      sourceTitle: widget.todo.title,
+      sourceTitle: currentTitle,
       durationSeconds: _elapsedSeconds,
     ));
 
-    // Complete the todo with accumulated duration
     provider.completeTodoWithDuration(widget.todo.id, _elapsedSeconds);
   }
 
@@ -112,13 +150,11 @@ class _TimerScreenState extends State<TimerScreen> {
     final isBackward = widget.todo.timingType == TimingType.backward;
     final isNoTiming = widget.todo.timingType == TimingType.none;
 
-    // Progress for ring
     double progress = 0;
     if (isBackward && _targetSeconds > 0) {
       progress = (_elapsedSeconds / _targetSeconds).clamp(0.0, 1.0);
     }
 
-    // Remaining seconds for backward
     final displaySeconds = isBackward
         ? (_targetSeconds - _elapsedSeconds).clamp(0, _targetSeconds)
         : _elapsedSeconds;
@@ -160,7 +196,6 @@ class _TimerScreenState extends State<TimerScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Timer ring / display
                 SizedBox(
                   width: 260,
                   height: 260,
@@ -173,10 +208,8 @@ class _TimerScreenState extends State<TimerScreen> {
                           child: CircularProgressIndicator(
                             value: isBackward ? progress : null,
                             strokeWidth: 6,
-                            backgroundColor:
-                                cs.primary.withValues(alpha: 0.12),
-                            valueColor:
-                                AlwaysStoppedAnimation(cs.primary),
+                            backgroundColor: cs.primary.withValues(alpha: 0.12),
+                            valueColor: AlwaysStoppedAnimation(cs.primary),
                           ),
                         ),
                       Center(
@@ -189,32 +222,19 @@ class _TimerScreenState extends State<TimerScreen> {
                                 fontSize: 56,
                                 fontWeight: FontWeight.w700,
                                 color: cs.onSurface,
-                                fontFeatures: const [
-                                  FontFeature.tabularFigures()
-                                ],
+                                fontFeatures: const [FontFeature.tabularFigures()],
                               ),
                             ),
                             const SizedBox(height: 8),
                             if (isBackward)
                               Text(
                                 _isFinished ? '已完成' : '剩余时间',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: cs.onSurfaceVariant,
-                                ),
+                                style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
                               )
                             else if (!isNoTiming)
-                              Text(
-                                '正向计时',
-                                style: TextStyle(
-                                    fontSize: 14, color: cs.onSurfaceVariant),
-                              )
+                              Text('正向计时', style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant))
                             else
-                              Text(
-                                '不记时',
-                                style: TextStyle(
-                                    fontSize: 14, color: cs.onSurfaceVariant),
-                              ),
+                              Text('不记时', style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant)),
                           ],
                         ),
                       ),
@@ -222,13 +242,10 @@ class _TimerScreenState extends State<TimerScreen> {
                   ),
                 ),
                 const SizedBox(height: 48),
-                // Control buttons
                 if (_isFinished) ...[
-                  Icon(Icons.check_circle,
-                      size: 64, color: cs.primary),
+                  Icon(Icons.check_circle, size: 64, color: cs.primary),
                   const SizedBox(height: 16),
-                  Text('专注 ${_formatTime(_elapsedSeconds)}',
-                      style: theme.textTheme.titleMedium),
+                  Text('专注 ${_formatTime(_elapsedSeconds)}', style: theme.textTheme.titleMedium),
                   const SizedBox(height: 8),
                   Text('待办已完成 ✓', style: theme.textTheme.bodyMedium?.copyWith(color: cs.primary)),
                   const SizedBox(height: 24),
@@ -244,27 +261,12 @@ class _TimerScreenState extends State<TimerScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       if (_isRunning)
-                        _controlButton(
-                          icon: Icons.pause,
-                          label: '暂停',
-                          color: cs.primary,
-                          onTap: _pause,
-                        )
+                        _controlButton(icon: Icons.pause, label: '暂停', color: cs.primary, onTap: _pause)
                       else
-                        _controlButton(
-                          icon: Icons.play_arrow,
-                          label: '开始',
-                          color: cs.primary,
-                          onTap: _start,
-                        ),
+                        _controlButton(icon: Icons.play_arrow, label: '开始', color: cs.primary, onTap: _start),
                       const SizedBox(width: 24),
                       if (_elapsedSeconds > 0) ...[
-                        _controlButton(
-                          icon: Icons.stop,
-                          label: '完成',
-                          color: cs.error,
-                          onTap: _finish,
-                        ),
+                        _controlButton(icon: Icons.stop, label: '完成', color: cs.error, onTap: _finish),
                         const SizedBox(width: 24),
                       ],
                       _controlButton(
@@ -311,8 +313,7 @@ class _TimerScreenState extends State<TimerScreen> {
             child: Icon(icon, color: color, size: 28),
           ),
           const SizedBox(height: 6),
-          Text(label,
-              style: TextStyle(fontSize: 12, color: color)),
+          Text(label, style: TextStyle(fontSize: 12, color: color)),
         ],
       ),
     );

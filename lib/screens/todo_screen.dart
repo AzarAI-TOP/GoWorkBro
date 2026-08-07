@@ -89,7 +89,12 @@ class _TodoScreenState extends State<TodoScreen> with SingleTickerProviderStateM
   }
 
   // ---- Custom FAB overlay: two large buttons (TODO / Habit) ----
+  bool _overlayShowing = false;
+
   void _showAddOverlay() {
+    if (_overlayShowing) return; // #8: debounce — prevent multiple overlays
+    _overlayShowing = true;
+
     final overlay = Overlay.of(context);
     late OverlayEntry entry;
     late AnimationController animController;
@@ -101,27 +106,24 @@ class _TodoScreenState extends State<TodoScreen> with SingleTickerProviderStateM
     );
     scaleAnim = CurvedAnimation(parent: animController, curve: Curves.easeOutBack);
 
+    void dismiss() {
+      _overlayShowing = false;
+      animController.reverse().then((_) {
+        entry.remove();
+        animController.dispose();
+      });
+    }
+
     entry = OverlayEntry(
       builder: (ctx) => _AddOverlay(
         scaleAnim: scaleAnim,
-        onDismiss: () {
-          animController.reverse().then((_) {
-            entry.remove();
-            animController.dispose();
-          });
-        },
+        onDismiss: dismiss,
         onTodo: () {
-          animController.reverse().then((_) {
-            entry.remove();
-            animController.dispose();
-          });
+          dismiss();
           _openTodoEdit(null);
         },
         onHabit: () {
-          animController.reverse().then((_) {
-            entry.remove();
-            animController.dispose();
-          });
+          dismiss();
           _openHabitEdit(null);
         },
       ),
@@ -304,6 +306,7 @@ class _TodoScreenState extends State<TodoScreen> with SingleTickerProviderStateM
                     index: index,
                     onToggle: () => _onTodoTap(context, item),
                     onLongPress: () => _showItemOptions(item),
+                    showDragHandle: !item.isCompleted,
                   );
                 }
                 if (item is Habit) {

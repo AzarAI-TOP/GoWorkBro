@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../models/models.dart';
 
@@ -28,7 +29,7 @@ class HabitCard extends StatelessWidget {
 
     return Card(
       child: InkWell(
-        onLongPress: onLongPress,
+        onLongPress: () { HapticFeedback.mediumImpact(); onLongPress(); },
         borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -120,7 +121,7 @@ Widget _circleButton(
   bool enabled = true,
 }) {
   return GestureDetector(
-    onTap: enabled ? onTap : null,
+    onTap: enabled ? () { HapticFeedback.lightImpact(); onTap(); } : null,
     child: Container(
       width: 30,
       height: 30,

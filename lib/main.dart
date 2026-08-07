@@ -159,7 +159,13 @@ class _AuthGateState extends State<AuthGate> {
     }
 
     if (!_isLoggedIn) {
-      return const AuthScreen();
+      return AuthScreen(onUseOffline: () {
+        // #13: Allow offline mode — init AppProvider without auth
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          context.read<AppProvider>().init();
+        });
+        setState(() => _isLoggedIn = true); // bypass auth
+      });
     }
 
     return const AppShell();
