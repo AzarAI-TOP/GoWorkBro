@@ -44,6 +44,9 @@ dependencies:
   # Desktop window management
   window_manager: ^0.4.2
 
+  # System tray icon for Windows background mode
+  tray_manager: ^0.2.3
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

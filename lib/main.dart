@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:window_manager/window_manager.dart';
 import 'providers/app_provider.dart';
 import 'services/supabase_config.dart';
+import 'services/tray_service.dart';
 import 'theme/app_theme.dart';
 import 'screens/auth_screen.dart';
 import 'screens/todo_screen.dart';
@@ -15,6 +16,7 @@ import 'screens/me_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Must be initialized before window_manager on Windows
   if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
     await windowManager.ensureInitialized();
     await windowManager.waitUntilReadyToShow(
@@ -30,6 +32,10 @@ void main() async {
         await windowManager.focus();
       },
     );
+    // Prevent default close — we hide to tray instead
+    await windowManager.setPreventClose(true);
+    // Initialize system tray
+    await TrayService().init();
   }
 
   // Initialize Supabase before running app (if configured)
@@ -145,8 +151,26 @@ class AppShell extends StatefulWidget {
   State<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends State<AppShell> {
+class _AppShellState extends State<AppShell> with WindowListener {
   int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    windowManager.addListener(this);
+  }
+
+  @override
+  void dispose() {
+    windowManager.removeListener(this);
+    super.dispose();
+  }
+
+  /// Intercept the window close button — hide to tray instead of quitting.
+  @override
+  void onWindowClose() async {
+    await windowManager.hide();
+  }
 
   final _screens = const [
     TodoScreen(),
