@@ -48,18 +48,23 @@ void main() async {
     );
   }
 
-  runApp(const GoWorkBroApp());
+  // Load persisted locale/theme before first paint
+  final localeProvider = AppLocaleProvider();
+  await localeProvider.init();
+
+  runApp(GoWorkBroApp(localeProvider: localeProvider));
 }
 
 class GoWorkBroApp extends StatelessWidget {
-  const GoWorkBroApp({super.key});
+  final AppLocaleProvider localeProvider;
+  const GoWorkBroApp({super.key, required this.localeProvider});
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider<AppLocaleProvider>(
-          create: (_) => AppLocaleProvider(),
+        ChangeNotifierProvider<AppLocaleProvider>.value(
+          value: localeProvider,
         ),
         ChangeNotifierProvider<AppProvider>(
           create: (_) => AppProvider(),
@@ -147,6 +152,10 @@ class _AuthGateState extends State<AuthGate> {
     }
 
     if (!isSupabaseConfigured) {
+      // Local-only mode — init AppProvider directly
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        context.read<AppProvider>().init();
+      });
       return const AppShell();
     }
 

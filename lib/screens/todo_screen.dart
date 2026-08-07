@@ -37,33 +37,26 @@ class _TodoScreenState extends State<TodoScreen> with SingleTickerProviderStateM
   void _onReorder(int oldIndex, int newIndex) {
     final provider = context.read<AppProvider>();
     final items = _combined(provider);
-    final todoCount = provider.todos.length;
-    final habitCount = provider.habits.length;
-
     final oldItem = items[oldIndex];
 
-    // Determine the type of the dragged item
     if (oldItem is Habit) {
-      // Habit drag — reorder within habits region
-      final oldHabitIndex = provider.habits.indexOf(oldItem);
-      final habitStart = todoCount;
-      var newHabitIndex = newIndex;
-      if (newIndex > habitStart) {
-        newHabitIndex -= habitStart;
-      } else if (newIndex < habitStart) {
-        newHabitIndex = 0;
-      } else {
-        newHabitIndex -= habitStart;
-      }
+      // Habit drag — find the target habit index.
+      final habits = provider.habits;
+      final oldHabitIndex = habits.indexOf(oldItem);
+      // Count how many habits come before the drop position
+      final habitStartIndex = items.length - habits.length;
+      var newHabitIndex = newIndex - habitStartIndex;
       if (newHabitIndex < 0) newHabitIndex = 0;
-      if (newHabitIndex > habitCount) newHabitIndex = habitCount;
+      if (newHabitIndex > habits.length) newHabitIndex = habits.length;
+      if (oldHabitIndex == newHabitIndex || newHabitIndex == oldHabitIndex + 1) return;
       provider.reorderHabits(oldHabitIndex, newHabitIndex);
     } else if (oldItem is Todo) {
-      // Todo drag — reorder within todos region
+      // Todo drag — only allow reordering among incomplete todos.
+      if (oldItem.isCompleted) return; // completed todos aren't reorderable
+      final incompleteTodos = provider.todos.where((t) => !t.isCompleted).toList();
       final oldTodoIndex = provider.todos.indexOf(oldItem);
-      var newTodoIndex = newIndex;
-      if (newTodoIndex > todoCount) newTodoIndex = todoCount;
-      if (newTodoIndex < 0) newTodoIndex = 0;
+      var newTodoIndex = newIndex.clamp(0, incompleteTodos.length);
+      if (newTodoIndex == oldTodoIndex || newTodoIndex == oldTodoIndex + 1) return;
       provider.reorderTodos(oldTodoIndex, newTodoIndex);
     }
   }

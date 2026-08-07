@@ -25,19 +25,15 @@ class SyncService {
   static bool get isConfigured => isSupabaseConfigured;
   static bool get isInitialized => _client != null;
 
+  /// Initialize — does NOT call Supabase.initialize (that's done in main.dart).
+  /// Just grabs the already-initialized client and sets up realtime.
   static Future<void> initialize() async {
     if (!isSupabaseConfigured) return;
     if (_client != null) return;
 
-    await Supabase.initialize(
-      url: supabaseUrl,
-      publishableKey: supabaseAnonKey,
-      debug: kDebugMode,
-    );
+    // Supabase.initialize is called in main.dart before runApp.
+    // Here we just reference the singleton client.
     _client = Supabase.instance.client;
-    // Auth is handled by the AuthScreen — SyncService just uses the
-    // authenticated session. No automatic sign-in here.
-
     _setupRealtime();
   }
 
@@ -45,8 +41,6 @@ class SyncService {
 
   // ============ Startup Pull ============
 
-  /// Pull all data from Supabase and merge into local SQLite.
-  /// Called on app startup after local data is loaded.
   static Future<void> pullAll() async {
     if (_client == null || _isSyncing) return;
     _isSyncing = true;
@@ -54,45 +48,28 @@ class SyncService {
     try {
       await _pullTable('todos', (rows) async {
         for (final row in rows) {
-          final remoteUpdatedAt = DateTime.parse(row['updated_at'] as String);
-          final local = await DatabaseService.getTodoById(row['id'] as String);
-          if (local == null || _remoteNewer(remoteUpdatedAt, local)) {
-            await DatabaseService.upsertTodoFromRemote(row);
-          }
+          await DatabaseService.upsertTodoFromRemote(row);
         }
       });
 
       await _pullTable('habits', (rows) async {
         for (final row in rows) {
-          final remoteUpdatedAt = DateTime.parse(row['updated_at'] as String);
-          final local = await DatabaseService.getHabitById(row['id'] as String);
-          if (local == null || _remoteNewer(remoteUpdatedAt, local)) {
-            await DatabaseService.upsertHabitFromRemote(row);
-          }
+          await DatabaseService.upsertHabitFromRemote(row);
         }
       });
 
       await _pullTable('countdowns', (rows) async {
         for (final row in rows) {
-          final remoteUpdatedAt = DateTime.parse(row['updated_at'] as String);
-          final local = await DatabaseService.getCountdownById(row['id'] as String);
-          if (local == null || _remoteNewer(remoteUpdatedAt, local)) {
-            await DatabaseService.upsertCountdownFromRemote(row);
-          }
+          await DatabaseService.upsertCountdownFromRemote(row);
         }
       });
 
       await _pullTable('sleep_records', (rows) async {
         for (final row in rows) {
-          final remoteUpdatedAt = DateTime.parse(row['updated_at'] as String);
-          final local = await DatabaseService.getSleepRecordById(row['id'] as String);
-          if (local == null || _remoteNewer(remoteUpdatedAt, local)) {
-            await DatabaseService.upsertSleepFromRemote(row);
-          }
+          await DatabaseService.upsertSleepFromRemote(row);
         }
       });
 
-      // Focus sessions: pull all (append-only, no conflict)
       await _pullTable('focus_sessions', (rows) async {
         for (final row in rows) {
           await DatabaseService.insertFocusSessionIfNotExists(row);
@@ -116,12 +93,6 @@ class SyncService {
         .select()
         .eq('user_id', uid);
     await handler(response);
-  }
-
-  static bool _remoteNewer(DateTime remoteUpdatedAt, dynamic localModel) {
-    // For simplicity, always accept remote if local doesn't have updated_at.
-    // In practice, we compare timestamps. For now, remote wins if it's newer.
-    return true; // TODO: add updated_at to local models for proper comparison
   }
 
   // ============ Push (per-table) ============
@@ -223,6 +194,7 @@ class SyncService {
         'record_date': record.recordDate,
         'wake_time': record.wakeTime,
         'sleep_time': record.sleepTime,
+        'workout_time': record.workoutTime,
         'note': record.note,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       });
@@ -253,6 +225,8 @@ class SyncService {
 
   static void _setupRealtime() {
     if (_client == null) return;
+    // Note: Supabase RLS policies filter by user_id automatically.
+    // Realtime payloads only contain rows the authenticated user can SELECT.
 
     _todosChannel = _client!
         .channel('public:todos')
@@ -261,7 +235,6 @@ class SyncService {
           schema: 'public',
           table: 'todos',
           callback: (payload) {
-            debugPrint('Realtime todo change: ${payload.eventType}');
             DatabaseService.upsertTodoFromRemote(payload.newRecord);
           },
         )

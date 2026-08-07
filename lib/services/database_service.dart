@@ -56,16 +56,6 @@ class DatabaseService {
     ''');
 
     await db.execute('''
-      CREATE TABLE habit_logs (
-        id TEXT PRIMARY KEY,
-        habit_id TEXT NOT NULL,
-        log_date TEXT NOT NULL,
-        count_done INTEGER NOT NULL,
-        FOREIGN KEY (habit_id) REFERENCES habits(id) ON DELETE CASCADE
-      )
-    ''');
-
-    await db.execute('''
       CREATE TABLE focus_sessions (
         id TEXT PRIMARY KEY,
         todo_id TEXT,
@@ -108,8 +98,6 @@ class DatabaseService {
 
     // Insert default settings
     await db.insert('user_settings', {'key': 'user_name', 'value': 'AzarAI'});
-    await db.insert('user_settings', {'key': 'theme_mode', 'value': 'light'});
-    await db.insert('user_settings', {'key': 'api_base_url', 'value': 'http://localhost:8765'});
   }
 
   /// Handle database schema migrations between versions.
@@ -128,7 +116,6 @@ class DatabaseService {
     await db.transaction((txn) async {
       await txn.execute('DROP TABLE IF EXISTS todos');
       await txn.execute('DROP TABLE IF EXISTS habits');
-      await txn.execute('DROP TABLE IF EXISTS habit_logs');
       await txn.execute('DROP TABLE IF EXISTS focus_sessions');
       await txn.execute('DROP TABLE IF EXISTS countdowns');
       await txn.execute('DROP TABLE IF EXISTS sleep_records');
@@ -161,17 +148,16 @@ class DatabaseService {
     await db.delete('todos', where: 'id = ?', whereArgs: [id]);
   }
 
-  /// Roll over todos for a new day: delete completed non-keep items,
-  /// reset completed status for keep items
+  /// Roll over todos for a new day.
+  /// With the new "明天继续" semantics, completed todos with keepTomorrow=true
+  /// already had an incomplete copy created at completion time.
+  /// So at rollover we simply delete all completed todos (both keep and non-keep).
+  /// Incomplete todos carry over automatically (no action needed).
   static Future<void> rollOverTodos(String todayDate) async {
     final db = await database;
-    // Delete completed items that don't keep tomorrow
-    await db.delete('todos',
-        where: 'is_completed = 1 AND keep_tomorrow = 0');
-    // Reset keep_tomorrow items to incomplete
-    await db.update('todos',
-        {'is_completed': 0, 'completed_date': null, 'actual_duration_seconds': 0},
-        where: 'is_completed = 1 AND keep_tomorrow = 1');
+    // Delete all completed todos — the "明天继续" copy was already created
+    // at the moment of completion, so there's nothing to reset.
+    await db.delete('todos', where: 'is_completed = 1');
   }
 
   // ============ HABIT CRUD ============

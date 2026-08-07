@@ -45,13 +45,14 @@ class ApiService {
     return null;
   }
 
-  /// Fetch directly from local Obsidian vault file (desktop fallback)
+  /// Fetch directly from local Obsidian vault file (desktop fallback).
+  /// Vault path is read from DB settings; falls back to platform-specific default.
   static Future<UstcNews?> _fetchUstcNewsFromLocalVault(String? date) async {
     try {
       final dateStr = date ??
           DateTime.now().toIso8601String().substring(0, 10);
       final vaultPath = await DatabaseService.getSetting('obsidian_vault_path') ??
-          r'C:\Users\ASUS\Documents\Notes';
+          _defaultVaultPath();
       final file = File('$vaultPath/USTC 每日要闻/$dateStr.md');
       if (await file.exists()) {
         final content = await file.readAsString();
@@ -121,7 +122,7 @@ class ApiService {
 
     try {
       final vaultPath = await DatabaseService.getSetting('obsidian_vault_path') ??
-          r'C:\Users\ASUS\Documents\Notes';
+          _defaultVaultPath();
       final dir = Directory('$vaultPath/USTC 每日要闻');
       if (!await dir.exists()) return [];
       final files = await dir.list().toList();
@@ -152,4 +153,21 @@ class UstcNews {
     required this.title,
     required this.markdown,
   });
+}
+
+/// Platform-aware default vault path. Only used as a last-resort fallback
+/// when no setting is configured. On mobile this returns an empty string
+/// (no local vault), so the fallback gracefully does nothing.
+String _defaultVaultPath() {
+  if (Platform.isWindows) {
+    return r'C:\Users\ASUS\Documents\Notes';
+  }
+  if (Platform.isMacOS) {
+    return '${Platform.environment['HOME']}/Documents/Notes';
+  }
+  if (Platform.isLinux) {
+    return '${Platform.environment['HOME']}/Documents/Notes';
+  }
+  // Mobile — no local vault
+  return '';
 }

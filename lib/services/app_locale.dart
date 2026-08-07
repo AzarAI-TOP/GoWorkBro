@@ -1,33 +1,69 @@
 import 'package:flutter/material.dart';
 
-/// App locale provider — supports Chinese and English with hot-switch.
-/// Also holds the theme mode for the MaterialApp.
-/// Persisted to the database via AppProvider.
+import 'database_service.dart';
+
+/// Single source of truth for locale and theme mode.
+/// Persists to SQLite via DatabaseService (no AppProvider dependency).
 enum AppLocale { zh, en }
 
 class AppLocaleProvider extends ChangeNotifier {
   AppLocale _locale = AppLocale.zh;
   ThemeMode _themeMode = ThemeMode.system;
+  bool _loaded = false;
 
   AppLocale get locale => _locale;
   ThemeMode get themeMode => _themeMode;
+  bool get loaded => _loaded;
   Locale get flutterLocale => _locale == AppLocale.zh
       ? const Locale('zh')
       : const Locale('en');
 
+  /// Load persisted values from DB. Call once at startup.
+  Future<void> init() async {
+    final savedLocale = await DatabaseService.getSetting('locale');
+    _locale = savedLocale == 'en' ? AppLocale.en : AppLocale.zh;
+
+    final savedTheme = await DatabaseService.getSetting('theme_mode');
+    switch (savedTheme) {
+      case 'light':
+        _themeMode = ThemeMode.light;
+        break;
+      case 'dark':
+        _themeMode = ThemeMode.dark;
+        break;
+      default:
+        _themeMode = ThemeMode.system;
+    }
+    _loaded = true;
+    notifyListeners();
+  }
+
   void setLocale(AppLocale locale) {
     _locale = locale;
+    DatabaseService.setSetting('locale', locale == AppLocale.en ? 'en' : 'zh');
     notifyListeners();
   }
 
   void setThemeMode(ThemeMode mode) {
     _themeMode = mode;
+    String value;
+    switch (mode) {
+      case ThemeMode.light:
+        value = 'light';
+        break;
+      case ThemeMode.dark:
+        value = 'dark';
+        break;
+      case ThemeMode.system:
+        value = 'system';
+        break;
+    }
+    DatabaseService.setSetting('theme_mode', value);
     notifyListeners();
   }
 
   void toggle() {
-    _locale = _locale == AppLocale.zh ? AppLocale.en : AppLocale.zh;
-    notifyListeners();
+    setLocale(_locale == AppLocale.zh ? AppLocale.en : AppLocale.zh);
   }
 }
 
@@ -66,15 +102,17 @@ class S {
   String get dailyHabit => locale == AppLocale.zh ? '每日打卡 · 计量目标' : 'Daily · Track count';
   String get delete => locale == AppLocale.zh ? '删除' : 'Delete';
   String get edit => locale == AppLocale.zh ? '编辑' : 'Edit';
-  String get confirmDelete => locale == AppLocale.zh ? '确定删除「\$0」吗？此操作不可撤销。' : 'Delete "\$0"? This cannot be undone.';
+  String confirmDelete(String name) => locale == AppLocale.zh
+      ? '确定删除「$name」吗？此操作不可撤销。'
+      : 'Delete "$name"? This cannot be undone.';
   String get cancel => locale == AppLocale.zh ? '取消' : 'Cancel';
   String get save => locale == AppLocale.zh ? '保存' : 'Save';
   String get enterTitle => locale == AppLocale.zh ? '请输入标题' : 'Please enter a title';
 
   // ---- Habit ----
   String get habitName => locale == AppLocale.zh ? '习惯名称' : 'Habit name';
-  String get targetCount => locale == AppLocale.zh ? '目标数量' : 'Target count';
-  String get unit => locale == AppLocale.zh ? '单位' : 'Unit';
+  String get targetCount => locale == AppLocale.zh ? '每日目标数量' : 'Daily target count';
+  String get unit => locale == AppLocale.zh ? '量词' : 'Unit';
   String get daily => locale == AppLocale.zh ? '每日' : 'Daily';
   String get customUnit => locale == AppLocale.zh ? '自定义量词' : 'Custom unit';
   String get unitHint => locale == AppLocale.zh ? '输入自定义量词' : 'Enter custom unit';
@@ -85,12 +123,14 @@ class S {
   String get stop => locale == AppLocale.zh ? '完成' : 'Done';
   String get record => locale == AppLocale.zh ? '记录' : 'Record';
   String get exitTimer => locale == AppLocale.zh ? '退出计时' : 'Exit Timer';
-  String get recordPrompt => locale == AppLocale.zh ? '已计时 \$0，是否记录本次专注？' : 'Tracked \$0, record this session?';
+  String recordPrompt(String time) => locale == AppLocale.zh
+      ? '已计时 $time，是否记录本次专注？'
+      : 'Tracked $time, record this session?';
   String get keepTiming => locale == AppLocale.zh ? '继续计时' : 'Keep Timing';
   String get recordAndExit => locale == AppLocale.zh ? '记录并退出' : 'Record & Exit';
   String get abandon => locale == AppLocale.zh ? '放弃' : 'Discard';
   String get back => locale == AppLocale.zh ? '返回' : 'Back';
-  String get focusTime => locale == AppLocale.zh ? '专注 \$0' : 'Focused \$0';
+  String focusTime(String time) => locale == AppLocale.zh ? '专注 $time' : 'Focused $time';
   String get remaining => locale == AppLocale.zh ? '剩余时间' : 'Remaining';
   String get done => locale == AppLocale.zh ? '已完成' : 'Done';
 
@@ -103,7 +143,7 @@ class S {
   String get ustcNews => locale == AppLocale.zh ? 'USTC 要闻' : 'USTC News';
   String get noNews => locale == AppLocale.zh ? '暂无 USTC 要闻' : 'No USTC news available';
   String get retry => locale == AppLocale.zh ? '重试' : 'Retry';
-  String get viewNews => locale == AppLocale.zh ? '查看今日 USTC 要闻' : 'View Today\'s USTC News';
+  String get viewNews => locale == AppLocale.zh ? '查看今日 USTC 要闻' : "View Today's USTC News";
   String get loadFailed => locale == AppLocale.zh ? '加载失败' : 'Failed to load';
 
   // ---- Me ----
@@ -148,7 +188,7 @@ class S {
   String get deleteDataConfirm => locale == AppLocale.zh ? '确定删除所有本地数据？此操作不可撤销，包括待办、习惯、打卡记录等。' : 'Delete all local data? This is irreversible and includes todos, habits, check-in records, etc.';
   String get deleteDataSuccess => locale == AppLocale.zh ? '所有数据已删除' : 'All data deleted';
   String get avatarUpload => locale == AppLocale.zh ? '更换头像' : 'Change Avatar';
-  String get avatarHint => locale == AppLocale.zh ? '头像功能开发中，敬请期待 🚀' : 'Avatar upload coming soon 🚀';
+  String get avatarHint => locale == AppLocale.zh ? '头像上传功能开发中，敬请期待 🚀' : 'Avatar upload coming soon 🚀';
   String get editName => locale == AppLocale.zh ? '编辑昵称' : 'Edit Name';
   String get nameHint => locale == AppLocale.zh ? '输入昵称' : 'Enter name';
 
@@ -163,4 +203,8 @@ class S {
   String get mins => locale == AppLocale.zh ? '分' : 'm';
   String get secs => locale == AppLocale.zh ? '秒' : 's';
   String get expired => locale == AppLocale.zh ? '已过期' : 'Expired';
+  String get countdownFinished => locale == AppLocale.zh ? '已结束' : 'Finished';
+  String get deleteCountdownTitle => locale == AppLocale.zh ? '删除倒计时' : 'Delete Countdown';
+  String get targetMustBeFuture => locale == AppLocale.zh ? '目标时间必须在未来' : 'Target must be in the future';
+  String get create => locale == AppLocale.zh ? '创建' : 'Create';
 }

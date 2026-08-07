@@ -20,7 +20,12 @@ class UpdateService {
 
       final res = await http.get(
         Uri.parse('https://api.github.com/repos/$_owner/$_repo/releases/latest'),
-        headers: {'Accept': 'application/vnd.github.v3+json'},
+        headers: {
+          'Accept': 'application/vnd.github.v3+json',
+          // Use gh auth token if available to avoid rate limits
+          if (Platform.environment.containsKey('GH_TOKEN'))
+            'Authorization': 'Bearer ${Platform.environment['GH_TOKEN']}',
+        },
       ).timeout(const Duration(seconds: 10));
 
       if (res.statusCode != 200) return null;

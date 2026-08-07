@@ -3,13 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
-import '../services/app_locale.dart';
 import '../services/sync_service.dart';
 import '../services/supabase_config.dart';
 
 const _uuid = Uuid();
 
-/// Central app state — manages all data and daily rollover logic
+/// Central app state — manages all data and daily rollover logic.
+/// Locale and theme mode live in AppLocaleProvider (single source of truth).
 class AppProvider extends ChangeNotifier {
   List<Todo> _todos = [];
   bool _isInitialized = false;
@@ -19,8 +19,6 @@ class AppProvider extends ChangeNotifier {
   List<FocusSession> _todaySessions = [];
   List<SleepRecord> _sleepRecords = [];
   String _userName = 'AzarAI';
-  AppLocale _locale = AppLocale.zh;
-  ThemeMode _themeMode = ThemeMode.system;
   String _lastRolloverDate = '';
   Timer? _rolloverTimer;
 
@@ -30,11 +28,6 @@ class AppProvider extends ChangeNotifier {
   List<FocusSession> get todaySessions => _todaySessions;
   List<SleepRecord> get sleepRecords => _sleepRecords;
   String get userName => _userName;
-  AppLocale get locale => _locale;
-  ThemeMode get themeMode => _themeMode;
-  Locale get flutterLocale => _locale == AppLocale.zh
-      ? const Locale('zh')
-      : const Locale('en');
 
   String get todayDate {
     final now = DateTime.now();
@@ -43,26 +36,6 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> init() async {
     _userName = await DatabaseService.getSetting('user_name') ?? 'AzarAI';
-
-    // Load persisted locale and theme mode
-    final savedLocale = await DatabaseService.getSetting('locale');
-    if (savedLocale == 'en') {
-      _locale = AppLocale.en;
-    } else {
-      _locale = AppLocale.zh;
-    }
-    final savedTheme = await DatabaseService.getSetting('theme_mode');
-    switch (savedTheme) {
-      case 'light':
-        _themeMode = ThemeMode.light;
-        break;
-      case 'dark':
-        _themeMode = ThemeMode.dark;
-        break;
-      default:
-        _themeMode = ThemeMode.system;
-    }
-
     _lastRolloverDate =
         await DatabaseService.getSetting('last_rollover_date') ?? '';
 
@@ -73,15 +46,12 @@ class AppProvider extends ChangeNotifier {
     if (isSupabaseConfigured) {
       await SyncService.initialize();
       if (SyncService.isInitialized) {
-        // Pull remote data first
         await SyncService.pullAll();
         await refreshAll();
-        // Then push all local data to remote (first-time sync)
         _pushAllLocal();
       }
     }
 
-    // Check every minute if the date has changed (for cross-day rollover)
     _rolloverTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       if (_lastRolloverDate != todayDate) {
         _performDailyRollover().then((_) => refreshAll());
@@ -244,7 +214,6 @@ class AppProvider extends ChangeNotifier {
     SyncService.pushFocusSession(session);
   }
 
-  /// Get focus seconds for the last 7 days (oldest first, today last)
   Future<List<int>> getWeeklyFocusSeconds() async {
     final now = DateTime.now();
     final results = <int>[];
@@ -290,30 +259,6 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setLocale(AppLocale locale) async {
-    _locale = locale;
-    await DatabaseService.setSetting('locale', locale == AppLocale.en ? 'en' : 'zh');
-    notifyListeners();
-  }
-
-  Future<void> setThemeMode(ThemeMode mode) async {
-    _themeMode = mode;
-    String value;
-    switch (mode) {
-      case ThemeMode.light:
-        value = 'light';
-        break;
-      case ThemeMode.dark:
-        value = 'dark';
-        break;
-      case ThemeMode.system:
-        value = 'system';
-        break;
-    }
-    await DatabaseService.setSetting('theme_mode', value);
-    notifyListeners();
-  }
-
   /// Delete all local data and reset in-memory state.
   Future<void> deleteAllData() async {
     await DatabaseService.deleteAllData();
@@ -328,23 +273,12 @@ class AppProvider extends ChangeNotifier {
 
   // ============ Computed stats ============
 
-  /// Push all local data to Supabase (first-time sync)
   void _pushAllLocal() {
-    for (final t in _todos) {
-      SyncService.pushTodo(t);
-    }
-    for (final h in _habits) {
-      SyncService.pushHabit(h);
-    }
-    for (final c in _countdowns) {
-      SyncService.pushCountdown(c);
-    }
-    for (final s in _todaySessions) {
-      SyncService.pushFocusSession(s);
-    }
-    for (final r in _sleepRecords) {
-      SyncService.pushSleepRecord(r);
-    }
+    for (final t in _todos) { SyncService.pushTodo(t); }
+    for (final h in _habits) { SyncService.pushHabit(h); }
+    for (final c in _countdowns) { SyncService.pushCountdown(c); }
+    for (final s in _todaySessions) { SyncService.pushFocusSession(s); }
+    for (final r in _sleepRecords) { SyncService.pushSleepRecord(r); }
   }
 
   int get todayTotalFocusSeconds =>

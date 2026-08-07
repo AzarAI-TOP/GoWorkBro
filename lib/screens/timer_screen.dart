@@ -87,20 +87,21 @@ class _TimerScreenState extends State<TimerScreen> {
       durationSeconds: _elapsedSeconds,
     ));
 
-    // Mark the todo as completed (this adds the strikethrough)
-    if (!widget.todo.isCompleted) {
-      final completed = widget.todo.copyWith(
+    // Read the CURRENT state of the todo from the provider (avoids stale
+    // widget.todo snapshot if the todo was modified while timer was open).
+    final currentTodo = provider.todos.where((t) => t.id == widget.todo.id).firstOrNull;
+    final base = currentTodo ?? widget.todo;
+
+    if (!base.isCompleted) {
+      final completed = base.copyWith(
         isCompleted: true,
         completedDate: DateTime.now().toIso8601String(),
-        actualDurationSeconds:
-            widget.todo.actualDurationSeconds + _elapsedSeconds,
+        actualDurationSeconds: base.actualDurationSeconds + _elapsedSeconds,
       );
       provider.updateTodo(completed);
     } else {
-      // Already completed, just update duration
-      final updated = widget.todo.copyWith(
-        actualDurationSeconds:
-            widget.todo.actualDurationSeconds + _elapsedSeconds,
+      final updated = base.copyWith(
+        actualDurationSeconds: base.actualDurationSeconds + _elapsedSeconds,
       );
       provider.updateTodo(updated);
     }
