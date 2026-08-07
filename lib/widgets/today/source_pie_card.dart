@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:provider/provider.dart';
 
+import '../../services/app_locale.dart';
 import '../../theme/app_theme.dart';
 
 /// Pie chart card showing today's focus time allocation by source.
@@ -13,6 +15,7 @@ class SourcePieCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final s = S.of(context.watch<AppLocaleProvider>().locale);
 
     final entries = bySource.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
@@ -30,14 +33,14 @@ class SourcePieCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '时间分配',
+              s.timeAllocation,
               style: theme.textTheme.titleMedium?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 16),
             if (entries.isEmpty || total == 0)
-              _emptyHint(context, '今天还没有专注数据')
+              _emptyHint(context, s.noFocusData)
             else
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,

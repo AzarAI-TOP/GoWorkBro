@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../models/models.dart';
+import '../../services/app_locale.dart';
 import '../../theme/app_theme.dart';
 
 class CountdownCard extends StatelessWidget {
@@ -17,6 +19,7 @@ class CountdownCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final s = S.of(context.watch<AppLocaleProvider>().locale);
     final color = AppTheme.chartColors[countdown.colorIndex % AppTheme.chartColors.length];
     final remaining = countdown.remaining;
     final expired = countdown.isExpired;
@@ -78,21 +81,21 @@ class CountdownCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     if (expired)
-                      Text('已结束', style: TextStyle(fontSize: 14, color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.w500))
+                      Text(s.countdownFinished, style: TextStyle(fontSize: 14, color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.w500))
                     else ...[
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.baseline,
                         textBaseline: TextBaseline.alphabetic,
                         children: [
                           if (days > 0) ...[
-                            _buildTimeUnit(theme, days, '天'),
+                            _buildTimeUnit(theme, days, s.days),
                             const SizedBox(width: 8),
                           ],
-                          _buildTimeUnit(theme, hours, '时'),
+                          _buildTimeUnit(theme, hours, s.hours),
                           const SizedBox(width: 8),
-                          _buildTimeUnit(theme, minutes, '分'),
+                          _buildTimeUnit(theme, minutes, s.mins),
                           const SizedBox(width: 8),
-                          _buildTimeUnit(theme, seconds, '秒'),
+                          _buildTimeUnit(theme, seconds, s.secs),
                         ],
                       ),
                       const SizedBox(height: 6),
@@ -146,17 +149,18 @@ class CountdownCard extends StatelessWidget {
   }
 
   void _showDeleteConfirm(BuildContext context, VoidCallback onDelete) {
+    final s = S.of(context.read<AppLocaleProvider>().locale);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('删除倒计时'),
+        title: Text(s.deleteCountdownTitle),
         content: Text('确认删除「${countdown.title}」？'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(s.cancel)),
           TextButton(
             onPressed: () { Navigator.pop(context); onDelete(); },
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('删除'),
+            child: Text(s.delete),
           ),
         ],
       ),

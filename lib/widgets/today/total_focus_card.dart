@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../services/app_locale.dart';
 
 /// Big number card showing today's total focus time and session count.
 class TotalFocusCard extends StatelessWidget {
@@ -23,6 +25,7 @@ class TotalFocusCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final s = S.of(context.watch<AppLocaleProvider>().locale);
 
     return Card(
       elevation: 0,
@@ -36,7 +39,7 @@ class TotalFocusCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '今日专注',
+              s.todayFocus,
               style: theme.textTheme.titleMedium?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),
@@ -52,7 +55,7 @@ class TotalFocusCard extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              '$sessionCount 次番茄钟',
+              '$sessionCount ${s.pomodoroCount}',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),

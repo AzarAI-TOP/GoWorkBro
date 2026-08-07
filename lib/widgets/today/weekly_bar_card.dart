@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:provider/provider.dart';
+
+import '../../services/app_locale.dart';
 
 /// 7-day bar chart card showing focus time per day.
 class WeeklyBarCard extends StatelessWidget {
@@ -11,6 +14,7 @@ class WeeklyBarCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final s = S.of(context.watch<AppLocaleProvider>().locale);
 
     // Convert seconds to hours; fallback to zeros if no data yet
     final hours = List<double>.generate(7, (i) {
@@ -35,7 +39,7 @@ class WeeklyBarCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '最近 7 天',
+              s.last7days,
               style: theme.textTheme.titleMedium?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),

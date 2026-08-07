@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../providers/app_provider.dart';
 import '../services/api_service.dart';
+import '../services/app_locale.dart';
 import '../widgets/today/focus_data_section.dart';
 import '../widgets/today/ustc_news_section.dart';
 
@@ -85,7 +86,7 @@ class _TodayScreenState extends State<TodayScreen> {
     setState(() {
       _news = news;
       _loadingNews = false;
-      _newsError = news == null ? '暂无 USTC 要闻' : null;
+      _newsError = news == null ? S.of(context.read<AppLocaleProvider>().locale).noNews : null;
     });
   }
 
@@ -93,6 +94,7 @@ class _TodayScreenState extends State<TodayScreen> {
   Widget build(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
     final isDesktop = width >= 900;
+    final s = S.of(context.read<AppLocaleProvider>().locale);
 
     final dataSection = FocusDataSection(weeklySeconds: _weeklySeconds);
     final newsSection = UstcNewsSection(
@@ -105,7 +107,7 @@ class _TodayScreenState extends State<TodayScreen> {
     if (isDesktop) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text('今天'),
+          title: Text(s.today),
           centerTitle: false,
         ),
         body: Row(
@@ -133,7 +135,7 @@ class _TodayScreenState extends State<TodayScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('今天'),
+        title: Text(s.today),
         centerTitle: false,
       ),
       body: Padding(
@@ -146,7 +148,7 @@ class _TodayScreenState extends State<TodayScreen> {
             FilledButton.icon(
               onPressed: _openNewsModal,
               icon: const Icon(Icons.article_outlined),
-              label: const Text('查看今日 USTC 要闻'),
+              label: Text(s.viewNews),
             ),
             const SizedBox(height: 8),
           ],

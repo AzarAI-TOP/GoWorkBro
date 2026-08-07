@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../models/models.dart';
+import '../../services/app_locale.dart';
 
 /// Card listing today's focus sessions.
 class SessionsCard extends StatelessWidget {
@@ -12,6 +14,7 @@ class SessionsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final s = S.of(context.watch<AppLocaleProvider>().locale);
 
     return Card(
       elevation: 0,
@@ -25,7 +28,7 @@ class SessionsCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '今日番茄钟',
+              s.pomodoroCount,
               style: theme.textTheme.titleMedium?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),
@@ -36,7 +39,7 @@ class SessionsCard extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 24),
                 child: Center(
                   child: Text(
-                    '还没有番茄钟记录',
+                    '还没有${s.pomodoroCount}记录',
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: colorScheme.onSurfaceVariant,
                     ),

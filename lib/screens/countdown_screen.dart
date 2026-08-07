@@ -5,6 +5,7 @@ import '../models/models.dart';
 import '../providers/app_provider.dart';
 import '../widgets/countdown/countdown_card.dart';
 import '../widgets/countdown/add_countdown_sheet.dart';
+import '../services/app_locale.dart';
 
 class CountdownScreen extends StatefulWidget {
   const CountdownScreen({super.key});
@@ -51,14 +52,15 @@ class _CountdownScreenState extends State<CountdownScreen> with WidgetsBindingOb
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
     final theme = Theme.of(context);
+    final s = S.of(context.read<AppLocaleProvider>().locale);
     final countdowns = provider.countdowns;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('倒计时'),
+        title: Text(s.countdown),
       ),
       body: countdowns.isEmpty
-          ? _buildEmptyState(theme)
+          ? _buildEmptyState(context, theme)
           : ListView.builder(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
               itemCount: countdowns.length,
@@ -78,16 +80,17 @@ class _CountdownScreenState extends State<CountdownScreen> with WidgetsBindingOb
     );
   }
 
-  Widget _buildEmptyState(ThemeData theme) {
+  Widget _buildEmptyState(BuildContext context, ThemeData theme) {
+    final s = S.of(context.read<AppLocaleProvider>().locale);
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.hourglass_empty, size: 64, color: theme.colorScheme.primary.withValues(alpha: 0.5)),
           const SizedBox(height: 16),
-          Text('还没有倒计时', style: theme.textTheme.titleMedium),
+          Text(s.noCountdowns, style: theme.textTheme.titleMedium),
           const SizedBox(height: 8),
-          Text('点击右下角 + 添加', style: theme.textTheme.bodyMedium),
+          Text(s.addCountdownHint, style: theme.textTheme.bodyMedium),
         ],
       ),
     );

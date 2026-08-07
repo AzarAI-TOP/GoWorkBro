@@ -34,6 +34,7 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
     final theme = Theme.of(context);
+    final s = S.of(context.read<AppLocaleProvider>().locale);
 
     return Scaffold(
       body: Column(
@@ -41,10 +42,10 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
           _buildProfileHeader(context, provider, theme),
           TabBar(
             controller: _tabController,
-            tabs: const [
-              Tab(text: '打卡'),
-              Tab(text: '统计'),
-              Tab(text: '设置'),
+            tabs: [
+              Tab(text: s.checkIn),
+              Tab(text: s.stats),
+              Tab(text: s.settings),
             ],
             labelColor: theme.colorScheme.primary,
             unselectedLabelColor: theme.colorScheme.onSurfaceVariant,
@@ -138,6 +139,7 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
   // ============ Sleep / Check-in Tab ============
 
   Widget _buildSleepTab(BuildContext context, AppProvider provider, ThemeData theme) {
+    final s = S.of(context.read<AppLocaleProvider>().locale);
     final today = provider.todayDate;
     final todayRecord = provider.sleepRecords.where((r) => r.recordDate == today).toList();
     final wakeTime = todayRecord.isNotEmpty ? todayRecord.first.wakeTime : null;
@@ -154,7 +156,7 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('今日打卡', style: theme.textTheme.titleLarge),
+                Text(s.todayCheckIn, style: theme.textTheme.titleLarge),
                 const SizedBox(height: 16),
                 Row(
                   children: [
@@ -162,7 +164,7 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
                       child: _buildCheckInButton(
                         context,
                         theme,
-                        label: '起床',
+                        label: s.wakeUp,
                         icon: Icons.wb_sunny_outlined,
                         time: wakeTime,
                         onTap: () => _recordTime(context, provider, 'wake'),
@@ -173,7 +175,7 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
                       child: _buildCheckInButton(
                         context,
                         theme,
-                        label: '健身',
+                        label: s.workout,
                         icon: Icons.fitness_center_outlined,
                         time: workoutTime,
                         onTap: () => _recordTime(context, provider, 'workout'),
@@ -184,7 +186,7 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
                       child: _buildCheckInButton(
                         context,
                         theme,
-                        label: '睡觉',
+                        label: s.sleep,
                         icon: Icons.bedtime_outlined,
                         time: sleepTime,
                         onTap: () => _recordTime(context, provider, 'sleep'),
@@ -198,13 +200,13 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
         ),
         const SizedBox(height: 16),
         // Sleep history
-        Text('打卡记录', style: theme.textTheme.titleMedium),
+        Text(s.checkInHistory, style: theme.textTheme.titleMedium),
         const SizedBox(height: 8),
         if (provider.sleepRecords.isEmpty)
           Center(
             child: Padding(
               padding: const EdgeInsets.all(32),
-              child: Text('暂无打卡记录', style: theme.textTheme.bodyMedium),
+              child: Text(s.noCheckInRecords, style: theme.textTheme.bodyMedium),
             ),
           )
         else
@@ -247,7 +249,7 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
               Text(label, style: theme.textTheme.bodyMedium),
               const SizedBox(height: 4),
               Text(
-                hasRecord ? _formatTime(time) : '未打卡',
+                hasRecord ? _formatTime(time) : S.of(context.read<AppLocaleProvider>().locale).notCheckedIn,
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: hasRecord ? FontWeight.w600 : FontWeight.normal,
@@ -333,10 +335,11 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
   }
 
   void _showAvatarPicker(BuildContext context) {
+    final s = S.of(context.read<AppLocaleProvider>().locale);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('更换头像'),
+        title: Text(s.avatarUpload),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -361,18 +364,19 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
   }
 
   void _showEditNameDialog(BuildContext context, AppProvider provider) {
+    final s = S.of(context.read<AppLocaleProvider>().locale);
     final controller = TextEditingController(text: provider.userName);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('编辑昵称'),
+        title: Text(s.editName),
         content: TextField(
           controller: controller,
-          decoration: const InputDecoration(hintText: '输入昵称'),
+          decoration: InputDecoration(hintText: s.nameHint),
           autofocus: true,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(s.cancel)),
           TextButton(
             onPressed: () {
               if (controller.text.trim().isNotEmpty) {
@@ -380,7 +384,7 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
               }
               Navigator.pop(context);
             },
-            child: const Text('保存'),
+            child: Text(s.save),
           ),
         ],
       ),
@@ -390,12 +394,13 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
   // ============ Stats Tab ============
 
   Widget _buildStatsTab(BuildContext context, AppProvider provider, ThemeData theme) {
+    final s = S.of(context.read<AppLocaleProvider>().locale);
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         _buildStatCard(
           theme,
-          title: '今日专注',
+          title: s.todayFocus,
           value: _formatDuration(provider.todayTotalFocusSeconds),
           icon: Icons.timer_outlined,
           color: AppTheme.chartColors[0],
@@ -403,7 +408,7 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
         const SizedBox(height: 12),
         _buildStatCard(
           theme,
-          title: '今日番茄数',
+          title: s.pomodoroCount,
           value: '${provider.todaySessionCount} 个',
           icon: Icons.local_fire_department_outlined,
           color: AppTheme.chartColors[3],
@@ -411,7 +416,7 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
         const SizedBox(height: 12),
         _buildStatCard(
           theme,
-          title: '待办完成',
+          title: s.todoCompleted,
           value: '${provider.todos.where((t) => t.isCompleted).length} / ${provider.todos.length}',
           icon: Icons.check_circle_outline,
           color: AppTheme.chartColors[2],
@@ -419,7 +424,7 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
         const SizedBox(height: 12),
         _buildStatCard(
           theme,
-          title: '习惯完成',
+          title: s.habitCompleted,
           value: '${provider.habits.where((h) => h.isCompleted).length} / ${provider.habits.length}',
           icon: Icons.repeat_outlined,
           color: AppTheme.chartColors[1],
@@ -427,7 +432,7 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
         const SizedBox(height: 12),
         _buildStatCard(
           theme,
-          title: '活跃倒计时',
+          title: s.activeCountdowns,
           value: '${provider.countdowns.length} 个',
           icon: Icons.hourglass_empty,
           color: AppTheme.chartColors[4],
@@ -477,6 +482,7 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
   // ============ Settings Tab ============
 
   Widget _buildSettingsTab(BuildContext context, AppProvider provider, ThemeData theme) {
+    final s = S.of(context.read<AppLocaleProvider>().locale);
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -491,14 +497,14 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
                   children: [
                     Icon(Icons.language, size: 20, color: theme.colorScheme.primary),
                     const SizedBox(width: 8),
-                    Text('语言', style: theme.textTheme.titleMedium),
+                    Text(s.language, style: theme.textTheme.titleMedium),
                   ],
                 ),
                 const SizedBox(height: 12),
                 SegmentedButton<AppLocale>(
-                  segments: const [
-                    ButtonSegment(value: AppLocale.zh, label: Text('中文')),
-                    ButtonSegment(value: AppLocale.en, label: Text('English')),
+                  segments: [
+                    ButtonSegment(value: AppLocale.zh, label: Text(s.chinese)),
+                    ButtonSegment(value: AppLocale.en, label: Text(s.english)),
                   ],
                   selected: {context.read<AppLocaleProvider>().locale},
                   onSelectionChanged: (set) => context.read<AppLocaleProvider>().setLocale(set.first),
@@ -520,15 +526,15 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
                   children: [
                     Icon(Icons.palette_outlined, size: 20, color: theme.colorScheme.primary),
                     const SizedBox(width: 8),
-                    Text('主题', style: theme.textTheme.titleMedium),
+                    Text(s.theme, style: theme.textTheme.titleMedium),
                   ],
                 ),
                 const SizedBox(height: 12),
                 SegmentedButton<ThemeMode>(
-                  segments: const [
-                    ButtonSegment(value: ThemeMode.light, label: Text('浅色')),
-                    ButtonSegment(value: ThemeMode.dark, label: Text('深色')),
-                    ButtonSegment(value: ThemeMode.system, label: Text('跟随系统')),
+                  segments: [
+                    ButtonSegment(value: ThemeMode.light, label: Text(s.lightMode)),
+                    ButtonSegment(value: ThemeMode.dark, label: Text(s.darkMode)),
+                    ButtonSegment(value: ThemeMode.system, label: Text(s.systemMode)),
                   ],
                   selected: {context.read<AppLocaleProvider>().themeMode},
                   onSelectionChanged: (set) => context.read<AppLocaleProvider>().setThemeMode(set.first),
@@ -551,7 +557,7 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
                     Icon(Icons.cloud_done_outlined, size: 20,
                         color: SyncService.isInitialized ? Colors.green : Colors.grey),
                     const SizedBox(width: 8),
-                    Text('云端同步', style: theme.textTheme.titleMedium),
+                    Text(s.cloudSync, style: theme.textTheme.titleMedium),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -567,7 +573,7 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      SyncService.isInitialized ? '已连接 Supabase' : '未连接',
+                      SyncService.isInitialized ? s.connectedToSupabase : s.notConnected,
                       style: theme.textTheme.bodyMedium,
                     ),
                   ],
@@ -575,7 +581,7 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
                 if (SyncService.isInitialized) ...[
                   const SizedBox(height: 8),
                   Text(
-                    '用户: ${Supabase.instance.client.auth.currentUser?.email ?? "未知"}',
+                    '${s.user}: ${Supabase.instance.client.auth.currentUser?.email ?? s.unknown}',
                     style: theme.textTheme.bodySmall,
                   ),
                 ],
@@ -589,7 +595,7 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
         Card(
           child: ListTile(
             leading: const Icon(Icons.system_update),
-            title: const Text('检查更新'),
+            title: Text(s.checkUpdate),
             subtitle: const Text('检查是否有新版本可用'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => _checkForUpdate(context),
@@ -601,8 +607,8 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
         Card(
           child: ListTile(
             leading: const Icon(Icons.info_outline),
-            title: const Text('关于 GoWorkBro'),
-            subtitle: const Text('版本 1.0.0'),
+            title: Text(s.aboutGoWorkBro),
+            subtitle: Text('${s.version} 1.0.0'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
               showAboutDialog(
@@ -629,7 +635,7 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
         Card(
           child: ListTile(
             leading: const Icon(Icons.logout, color: Colors.redAccent),
-            title: const Text('退出登录', style: TextStyle(color: Colors.redAccent)),
+            title: Text(s.logout, style: const TextStyle(color: Colors.redAccent)),
             subtitle: const Text('退出后数据保留在本地，重新登录可同步'),
             trailing: const Icon(Icons.chevron_right, color: Colors.redAccent),
             onTap: () => _showLogoutConfirm(context),
@@ -643,7 +649,7 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
           child: OutlinedButton.icon(
             onPressed: () => _showDeleteDataConfirm(context, provider),
             icon: const Icon(Icons.delete_forever, color: Colors.redAccent),
-            label: const Text('删除所有数据', style: TextStyle(color: Colors.redAccent)),
+            label: Text(s.deleteData, style: const TextStyle(color: Colors.redAccent)),
             style: OutlinedButton.styleFrom(
               foregroundColor: Colors.redAccent,
               side: const BorderSide(color: Colors.redAccent),
@@ -660,20 +666,21 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
   }
 
   void _showLogoutConfirm(BuildContext context) {
+    final s = S.of(context.read<AppLocaleProvider>().locale);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('退出登录'),
-        content: const Text('确定退出登录？本地数据会保留，重新登录后将从云端同步。'),
+        title: Text(s.logout),
+        content: Text(s.logoutConfirm),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(s.cancel)),
           TextButton(
             onPressed: () {
               Navigator.pop(context);
               Supabase.instance.client.auth.signOut();
             },
             style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
-            child: const Text('退出'),
+            child: Text(s.signOut),
           ),
         ],
       ),
@@ -681,17 +688,18 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
   }
 
   void _showDeleteDataConfirm(BuildContext context, AppProvider provider) async {
+    final s = S.of(context.read<AppLocaleProvider>().locale);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('删除所有数据'),
-        content: const Text('确定删除所有本地数据？此操作不可撤销，包括待办、习惯、打卡记录等。'),
+        title: Text(s.deleteData),
+        content: Text(s.deleteDataConfirm),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(s.cancel)),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
-            child: const Text('删除'),
+            child: Text(s.delete),
           ),
         ],
       ),
@@ -700,21 +708,22 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
     await provider.deleteAllData();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('所有数据已删除')),
+      SnackBar(content: Text(s.deleteDataSuccess)),
     );
   }
 
   Future<void> _checkForUpdate(BuildContext context) async {
+    final s = S.of(context.read<AppLocaleProvider>().locale);
     // Show loading
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const AlertDialog(
+      builder: (context) => AlertDialog(
         content: Row(
           children: [
-            CircularProgressIndicator(),
-            SizedBox(width: 16),
-            Text('正在检查更新...'),
+            const CircularProgressIndicator(),
+            const SizedBox(width: 16),
+            Text(s.checkingUpdate),
           ],
         ),
       ),
@@ -729,7 +738,7 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
       UpdateService.showUpdateDialog(context, update);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('当前已是最新版本')),
+        SnackBar(content: Text(s.latestVersion)),
       );
     }
   }

@@ -207,7 +207,10 @@ class _AppShellState extends State<AppShell> with WindowListener {
     MeScreen(),
   ];
 
-  final _labels = ['待办', '倒计时', '今天', '我的'];
+  List<String> get _labels {
+    final s = S.of(context.read<AppLocaleProvider>().locale);
+    return [s.todo, s.countdown, s.today, s.me];
+  }
   final _icons = [
     Icons.check_circle_outline,
     Icons.hourglass_empty,

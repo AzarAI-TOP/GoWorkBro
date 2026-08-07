@@ -11,6 +11,7 @@ import '../widgets/todo/todo_card.dart';
 import '../widgets/todo/habit_card.dart';
 import '../widgets/todo/todo_edit_dialog.dart';
 import '../widgets/todo/habit_edit_dialog.dart';
+import '../services/app_locale.dart';
 
 class TodoScreen extends StatefulWidget {
   const TodoScreen({super.key});
@@ -134,6 +135,7 @@ class _TodoScreenState extends State<TodoScreen> with SingleTickerProviderStateM
 
   // ---- Long-press options: edit / delete ----
   void _showItemOptions(Object item) {
+    final s = S.of(context.read<AppLocaleProvider>().locale);
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -143,7 +145,7 @@ class _TodoScreenState extends State<TodoScreen> with SingleTickerProviderStateM
           children: [
             ListTile(
               leading: const Icon(Icons.edit_outlined),
-              title: const Text('编辑'),
+              title: Text(s.edit),
               onTap: () {
                 Navigator.pop(ctx);
                 if (item is Todo) {
@@ -155,7 +157,7 @@ class _TodoScreenState extends State<TodoScreen> with SingleTickerProviderStateM
             ),
             ListTile(
               leading: const Icon(Icons.delete_outline, color: Colors.redAccent),
-              title: const Text('删除', style: TextStyle(color: Colors.redAccent)),
+              title: Text(s.delete, style: const TextStyle(color: Colors.redAccent)),
               onTap: () {
                 Navigator.pop(ctx);
                 _confirmDelete(item);
@@ -169,6 +171,7 @@ class _TodoScreenState extends State<TodoScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _confirmDelete(Object item) async {
+    final s = S.of(context.read<AppLocaleProvider>().locale);
     String title;
     if (item is Todo) {
       title = item.title;
@@ -180,14 +183,14 @@ class _TodoScreenState extends State<TodoScreen> with SingleTickerProviderStateM
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('删除'),
-        content: Text('确定删除「$title」吗？此操作不可撤销。'),
+        title: Text(s.delete),
+        content: Text(s.confirmDelete(title)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(s.cancel)),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
-            child: const Text('删除'),
+            child: Text(s.delete),
           ),
         ],
       ),
@@ -243,15 +246,16 @@ class _TodoScreenState extends State<TodoScreen> with SingleTickerProviderStateM
 
   Widget _buildEmptyState() {
     final theme = Theme.of(context);
+    final s = S.of(context.read<AppLocaleProvider>().locale);
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(Icons.check_circle_outline, size: 72, color: theme.dividerColor),
           const SizedBox(height: 16),
-          Text('还没有待办事项', style: theme.textTheme.titleMedium),
+          Text(s.noTodos, style: theme.textTheme.titleMedium),
           const SizedBox(height: 6),
-          Text('点击右下角 + 添加待办或习惯', style: theme.textTheme.bodySmall),
+          Text(s.noTodosHint, style: theme.textTheme.bodySmall),
         ],
       ),
     );
@@ -260,21 +264,22 @@ class _TodoScreenState extends State<TodoScreen> with SingleTickerProviderStateM
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
+    final s = S.of(context.read<AppLocaleProvider>().locale);
     final items = _combined(provider);
     final doneCount = provider.todos.where((t) => t.isCompleted).length;
     final habitDoneCount = provider.habits.where((h) => h.isCompleted).length;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('待办'),
+        title: Text(s.todo),
         actions: [
           if (items.isNotEmpty)
             Center(
               child: Padding(
                 padding: const EdgeInsets.only(right: 16),
                 child: Text(
-                  '已完成 $doneCount/${provider.todos.length}'
-                  '${provider.habits.isNotEmpty ? ' · 习惯 $habitDoneCount/${provider.habits.length}' : ''}',
+                  '${s.completed} $doneCount/${provider.todos.length}'
+                  '${provider.habits.isNotEmpty ? ' · ${s.habits} $habitDoneCount/${provider.habits.length}' : ''}',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),

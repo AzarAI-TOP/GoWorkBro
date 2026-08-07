@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../models/models.dart';
+import '../../services/app_locale.dart';
 
 /// Dialog for creating/editing TODOs — extracted from todo_screen.dart
 class TodoEditDialog extends StatefulWidget {
@@ -69,9 +71,9 @@ class _TodoEditDialogState extends State<TodoEditDialog> {
     final title = _titleCtrl.text.trim();
     if (title.isEmpty) {
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(
-          content: Text('请输入标题'),
-          duration: Duration(milliseconds: 900),
+        SnackBar(
+          content: Text(S.of(context.read<AppLocaleProvider>().locale).enterTitle),
+          duration: const Duration(milliseconds: 900),
         ),
       );
       return;
@@ -99,8 +101,9 @@ class _TodoEditDialogState extends State<TodoEditDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final s = S.of(context.read<AppLocaleProvider>().locale);
     return AlertDialog(
-      title: Text(widget.initial == null ? '新建待办' : '编辑待办'),
+      title: Text(widget.initial == null ? s.addTodo : '编辑待办'),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -109,11 +112,11 @@ class _TodoEditDialogState extends State<TodoEditDialog> {
             TextField(
               controller: _titleCtrl,
               autofocus: true,
-              decoration: const InputDecoration(hintText: '输入待办标题'),
+              decoration: InputDecoration(hintText: s.todoTitleHint),
               textInputAction: TextInputAction.done,
             ),
             const SizedBox(height: 16),
-            Text('计时方式', style: theme.textTheme.labelLarge),
+            Text(s.timingMethod, style: theme.textTheme.labelLarge),
             RadioGroup<TimingType>(
               groupValue: _timingType,
               onChanged: (v) {
@@ -124,19 +127,19 @@ class _TodoEditDialogState extends State<TodoEditDialog> {
                 children: [
                   RadioListTile<TimingType>(
                     value: TimingType.forward,
-                    title: const Text('正向计时'),
+                    title: Text(s.forwardTimer),
                     dense: true,
                     contentPadding: EdgeInsets.zero,
                   ),
                   RadioListTile<TimingType>(
                     value: TimingType.backward,
-                    title: const Text('倒向计时'),
+                    title: Text(s.backwardTimer),
                     dense: true,
                     contentPadding: EdgeInsets.zero,
                   ),
                   RadioListTile<TimingType>(
                     value: TimingType.none,
-                    title: const Text('不记时'),
+                    title: Text(s.noTimer),
                     dense: true,
                     contentPadding: EdgeInsets.zero,
                   ),
@@ -145,7 +148,7 @@ class _TodoEditDialogState extends State<TodoEditDialog> {
             ),
             if (_timingType == TimingType.backward) ...[
               const SizedBox(height: 8),
-              Text('时长', style: theme.textTheme.labelLarge),
+              Text(s.duration, style: theme.textTheme.labelLarge),
               Wrap(
                 spacing: 10,
                 runSpacing: 8,
@@ -166,7 +169,7 @@ class _TodoEditDialogState extends State<TodoEditDialog> {
                     onSelected: (_) => setState(() => _durationChoice = '40'),
                   ),
                   ChoiceChip(
-                    label: const Text('自定义'),
+                    label: Text(s.customMin),
                     selected: _durationChoice == 'custom',
                     onSelected: (_) => setState(() => _durationChoice = 'custom'),
                   ),
@@ -177,8 +180,8 @@ class _TodoEditDialogState extends State<TodoEditDialog> {
                 TextField(
                   controller: _customCtrl,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    hintText: '自定义分钟数',
+                  decoration: InputDecoration(
+                    hintText: s.customMinHint,
                     suffixText: 'min',
                   ),
                 ),
@@ -188,8 +191,8 @@ class _TodoEditDialogState extends State<TodoEditDialog> {
             CheckboxListTile(
               value: _keepTomorrow,
               onChanged: (v) => setState(() => _keepTomorrow = v ?? false),
-              title: const Text('明天继续'),
-              subtitle: const Text('完成后明天自动重建'),
+              title: Text(s.keepTomorrow),
+              subtitle: Text(s.keepTomorrowDesc),
               dense: true,
               contentPadding: EdgeInsets.zero,
               controlAffinity: ListTileControlAffinity.leading,
@@ -200,9 +203,9 @@ class _TodoEditDialogState extends State<TodoEditDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(null),
-          child: const Text('取消'),
+          child: Text(s.cancel),
         ),
-        ElevatedButton(onPressed: _save, child: const Text('保存')),
+        ElevatedButton(onPressed: _save, child: Text(s.save)),
       ],
     );
   }

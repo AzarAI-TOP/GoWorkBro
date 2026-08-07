@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:provider/provider.dart';
 
 import '../../services/api_service.dart';
+import '../../services/app_locale.dart';
 
 /// Right/news column of the Today screen (desktop layout).
 class UstcNewsSection extends StatelessWidget {
@@ -22,6 +24,7 @@ class UstcNewsSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final s = S.of(context.watch<AppLocaleProvider>().locale);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -31,7 +34,7 @@ class UstcNewsSection extends StatelessWidget {
             Icon(Icons.menu_book_outlined, color: colorScheme.primary, size: 20),
             const SizedBox(width: 8),
             Text(
-              'USTC 要闻',
+              s.ustcNews,
               style: theme.textTheme.titleMedium?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),
@@ -59,12 +62,12 @@ class UstcNewsSection extends StatelessWidget {
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
             const SizedBox(height: 12),
-            Text(error ?? '加载失败'),
+            Text(error ?? S.of(context.watch<AppLocaleProvider>().locale).loadFailed),
             const SizedBox(height: 12),
             OutlinedButton.icon(
               onPressed: onRetry,
               icon: const Icon(Icons.refresh),
-              label: const Text('重试'),
+              label: Text(S.of(context.watch<AppLocaleProvider>().locale).retry),
             ),
           ],
         ),
@@ -156,9 +159,10 @@ class NewsFullScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context.watch<AppLocaleProvider>().locale);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('今日 USTC 要闻'),
+        title: Text(s.viewNews),
         leading: IconButton(
           icon: const Icon(Icons.close),
           onPressed: () => Navigator.of(context).pop(),
@@ -188,12 +192,12 @@ class NewsFullScreen extends StatelessWidget {
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
             const SizedBox(height: 12),
-            Text(error ?? '加载失败'),
+            Text(error ?? S.of(context.watch<AppLocaleProvider>().locale).loadFailed),
             const SizedBox(height: 12),
             OutlinedButton.icon(
               onPressed: onRetry,
               icon: const Icon(Icons.refresh),
-              label: const Text('重试'),
+              label: Text(S.of(context.watch<AppLocaleProvider>().locale).retry),
             ),
           ],
         ),

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/models.dart';
+import '../../services/app_locale.dart';
 
 /// Dialog for creating/editing habits — with custom unit support
 class HabitEditDialog extends StatefulWidget {
@@ -69,9 +71,9 @@ class _HabitEditDialogState extends State<HabitEditDialog> {
     final title = _titleCtrl.text.trim();
     if (title.isEmpty) {
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(
-          content: Text('请输入标题'),
-          duration: Duration(milliseconds: 900),
+        SnackBar(
+          content: Text(S.of(context.read<AppLocaleProvider>().locale).enterTitle),
+          duration: const Duration(milliseconds: 900),
         ),
       );
       return;
@@ -99,8 +101,9 @@ class _HabitEditDialogState extends State<HabitEditDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final s = S.of(context.read<AppLocaleProvider>().locale);
     return AlertDialog(
-      title: Text(widget.initial == null ? '新建习惯' : '编辑习惯'),
+      title: Text(widget.initial == null ? s.addHabit : '编辑习惯'),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -109,19 +112,19 @@ class _HabitEditDialogState extends State<HabitEditDialog> {
             TextField(
               controller: _titleCtrl,
               autofocus: true,
-              decoration: const InputDecoration(hintText: '习惯名称'),
+              decoration: InputDecoration(hintText: s.habitName),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: _targetCtrl,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                hintText: '每日目标数量',
-                prefixText: '每日 ',
+              decoration: InputDecoration(
+                hintText: s.targetCount,
+                prefixText: '${s.daily} ',
               ),
             ),
             const SizedBox(height: 16),
-            Text('量词', style: theme.textTheme.labelLarge),
+            Text(s.unit, style: theme.textTheme.labelLarge),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -150,7 +153,7 @@ class _HabitEditDialogState extends State<HabitEditDialog> {
                           },
                         )),
                 ChoiceChip(
-                  label: const Text('自定义'),
+                  label: Text(s.customMin),
                   selected: _isCustomUnit,
                   onSelected: (_) {
                     setState(() => _isCustomUnit = true);
@@ -162,8 +165,8 @@ class _HabitEditDialogState extends State<HabitEditDialog> {
               const SizedBox(height: 8),
               TextField(
                 controller: _customUnitCtrl,
-                decoration: const InputDecoration(
-                  hintText: '输入自定义量词',
+                decoration: InputDecoration(
+                  hintText: s.unitHint,
                   isDense: true,
                 ),
               ),
@@ -174,9 +177,9 @@ class _HabitEditDialogState extends State<HabitEditDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(null),
-          child: const Text('取消'),
+          child: Text(s.cancel),
         ),
-        ElevatedButton(onPressed: _save, child: const Text('保存')),
+        ElevatedButton(onPressed: _save, child: Text(s.save)),
       ],
     );
   }

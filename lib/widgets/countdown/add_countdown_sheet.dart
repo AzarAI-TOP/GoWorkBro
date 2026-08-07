@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../models/models.dart';
 import '../../providers/app_provider.dart';
+import '../../services/app_locale.dart';
 import '../../theme/app_theme.dart';
 
 class AddCountdownSheet extends StatefulWidget {
@@ -39,6 +41,7 @@ class AddCountdownSheetState extends State<AddCountdownSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final s = S.of(context.read<AppLocaleProvider>().locale);
     final isEditing = widget.existing != null;
     return Padding(
       padding: EdgeInsets.only(
@@ -63,7 +66,7 @@ class AddCountdownSheetState extends State<AddCountdownSheet> {
           const SizedBox(height: 16),
           TextField(
             controller: _titleController,
-            decoration: const InputDecoration(labelText: '标题', hintText: '如：考试、截止日期'),
+            decoration: InputDecoration(labelText: '标题', hintText: '如：考试、截止日期'),
             autofocus: true,
           ),
           const SizedBox(height: 16),
@@ -116,7 +119,7 @@ class AddCountdownSheetState extends State<AddCountdownSheet> {
             width: double.infinity,
             child: FilledButton(
               onPressed: _save,
-              child: Text(isEditing ? '保存' : '创建'),
+              child: Text(isEditing ? s.save : s.create),
             ),
           ),
         ],
@@ -128,7 +131,7 @@ class AddCountdownSheetState extends State<AddCountdownSheet> {
     final title = _titleController.text.trim();
     if (title.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请输入标题'), duration: Duration(milliseconds: 900)),
+        SnackBar(content: Text(S.of(context.read<AppLocaleProvider>().locale).enterTitle), duration: const Duration(milliseconds: 900)),
       );
       return;
     }
@@ -138,7 +141,7 @@ class AddCountdownSheetState extends State<AddCountdownSheet> {
     );
     if (!target.isAfter(DateTime.now())) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('目标时间必须在未来'), duration: Duration(milliseconds: 1200)),
+        SnackBar(content: Text(S.of(context.read<AppLocaleProvider>().locale).targetMustBeFuture), duration: const Duration(milliseconds: 1200)),
       );
       return;
     }

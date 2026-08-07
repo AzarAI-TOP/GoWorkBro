@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../providers/app_provider.dart';
+import '../services/app_locale.dart';
 
 /// Full-screen pomodoro timer page.
 /// Supports forward (count up), backward (count down), and none (no timing).
@@ -147,6 +148,7 @@ class _TimerScreenState extends State<TimerScreen> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    final s = S.of(context.read<AppLocaleProvider>().locale);
     final isBackward = widget.todo.timingType == TimingType.backward;
     final isNoTiming = widget.todo.timingType == TimingType.none;
 
@@ -184,7 +186,7 @@ class _TimerScreenState extends State<TimerScreen> with WidgetsBindingObserver {
               TextButton(
                 onPressed: _finish,
                 child: Text(
-                  isNoTiming ? '记录' : '完成',
+                  isNoTiming ? s.record : s.stop,
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
               ),
@@ -228,13 +230,13 @@ class _TimerScreenState extends State<TimerScreen> with WidgetsBindingObserver {
                             const SizedBox(height: 8),
                             if (isBackward)
                               Text(
-                                _isFinished ? '已完成' : '剩余时间',
+                                _isFinished ? s.done : s.remaining,
                                 style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
                               )
                             else if (!isNoTiming)
-                              Text('正向计时', style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant))
+                              Text(s.forwardTimer, style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant))
                             else
-                              Text('不记时', style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant)),
+                              Text(s.noTimer, style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant)),
                           ],
                         ),
                       ),
@@ -245,15 +247,15 @@ class _TimerScreenState extends State<TimerScreen> with WidgetsBindingObserver {
                 if (_isFinished) ...[
                   Icon(Icons.check_circle, size: 64, color: cs.primary),
                   const SizedBox(height: 16),
-                  Text('专注 ${_formatTime(_elapsedSeconds)}', style: theme.textTheme.titleMedium),
+                  Text(s.focusTime(_formatTime(_elapsedSeconds)), style: theme.textTheme.titleMedium),
                   const SizedBox(height: 8),
-                  Text('待办已完成 ✓', style: theme.textTheme.bodyMedium?.copyWith(color: cs.primary)),
+                  Text('${s.todo}${s.done} ✓', style: theme.textTheme.bodyMedium?.copyWith(color: cs.primary)),
                   const SizedBox(height: 24),
                   FilledButton(
                     onPressed: () => Navigator.pop(context),
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 32, vertical: 8),
-                      child: Text('返回'),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 8),
+                      child: Text(s.back),
                     ),
                   ),
                 ] else ...[
@@ -261,17 +263,17 @@ class _TimerScreenState extends State<TimerScreen> with WidgetsBindingObserver {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       if (_isRunning)
-                        _controlButton(icon: Icons.pause, label: '暂停', color: cs.primary, onTap: _pause)
+                        _controlButton(icon: Icons.pause, label: s.pause, color: cs.primary, onTap: _pause)
                       else
-                        _controlButton(icon: Icons.play_arrow, label: '开始', color: cs.primary, onTap: _start),
+                        _controlButton(icon: Icons.play_arrow, label: s.start, color: cs.primary, onTap: _start),
                       const SizedBox(width: 24),
                       if (_elapsedSeconds > 0) ...[
-                        _controlButton(icon: Icons.stop, label: '完成', color: cs.error, onTap: _finish),
+                        _controlButton(icon: Icons.stop, label: s.stop, color: cs.error, onTap: _finish),
                         const SizedBox(width: 24),
                       ],
                       _controlButton(
                         icon: Icons.close,
-                        label: '取消',
+                        label: s.cancel,
                         color: cs.onSurfaceVariant,
                         onTap: () {
                           if (_elapsedSeconds > 0) {
@@ -320,17 +322,18 @@ class _TimerScreenState extends State<TimerScreen> with WidgetsBindingObserver {
   }
 
   void _showExitConfirm() {
+    final s = S.of(context.read<AppLocaleProvider>().locale);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('退出计时'),
+        title: Text(s.exitTimer),
         content: Text(_elapsedSeconds > 0
-            ? '已计时 ${_formatTime(_elapsedSeconds)}，是否记录本次专注？'
+            ? s.recordPrompt(_formatTime(_elapsedSeconds))
             : '确定退出计时？'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('继续计时'),
+            child: Text(s.keepTiming),
           ),
           if (_elapsedSeconds > 0)
             TextButton(
@@ -339,7 +342,7 @@ class _TimerScreenState extends State<TimerScreen> with WidgetsBindingObserver {
                 _finish();
                 Navigator.pop(context);
               },
-              child: const Text('记录并退出'),
+              child: Text(s.recordAndExit),
             ),
           TextButton(
             onPressed: () {
@@ -347,7 +350,7 @@ class _TimerScreenState extends State<TimerScreen> with WidgetsBindingObserver {
               Navigator.pop(context);
             },
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('放弃'),
+            child: Text(s.abandon),
           ),
         ],
       ),
