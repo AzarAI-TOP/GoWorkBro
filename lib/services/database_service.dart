@@ -18,8 +18,9 @@ class DatabaseService {
     _db = await dbFactory.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(
-        version: 1,
+        version: 2,
         onCreate: _onCreate,
+        onUpgrade: _onUpgrade,
       ),
     );
     return _db!;
@@ -93,6 +94,7 @@ class DatabaseService {
         record_date TEXT NOT NULL,
         wake_time TEXT,
         sleep_time TEXT,
+        workout_time TEXT,
         note TEXT
       )
     ''');
@@ -108,6 +110,31 @@ class DatabaseService {
     await db.insert('user_settings', {'key': 'user_name', 'value': 'AzarAI'});
     await db.insert('user_settings', {'key': 'theme_mode', 'value': 'light'});
     await db.insert('user_settings', {'key': 'api_base_url', 'value': 'http://localhost:8765'});
+  }
+
+  /// Handle database schema migrations between versions.
+  static Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    // v1 -> v2: add workout_time column to sleep_records
+    if (oldVersion < 2) {
+      await db.execute('ALTER TABLE sleep_records ADD COLUMN workout_time TEXT;');
+    }
+  }
+
+  /// Drop all tables and recreate the database from scratch.
+  /// Used by "delete all data" — wipes todos, habits, focus sessions,
+  /// countdowns, sleep records, and user settings.
+  static Future<void> deleteAllData() async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.execute('DROP TABLE IF EXISTS todos');
+      await txn.execute('DROP TABLE IF EXISTS habits');
+      await txn.execute('DROP TABLE IF EXISTS habit_logs');
+      await txn.execute('DROP TABLE IF EXISTS focus_sessions');
+      await txn.execute('DROP TABLE IF EXISTS countdowns');
+      await txn.execute('DROP TABLE IF EXISTS sleep_records');
+      await txn.execute('DROP TABLE IF EXISTS user_settings');
+    });
+    await _onCreate(db, 2);
   }
 
   // ============ TODO CRUD ============
@@ -344,6 +371,7 @@ class DatabaseService {
       'record_date': row['record_date'],
       'wake_time': row['wake_time'],
       'sleep_time': row['sleep_time'],
+      'workout_time': row['workout_time'],
       'note': row['note'],
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }

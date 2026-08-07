@@ -113,7 +113,14 @@ class NewsView extends StatelessWidget {
             selectable: true,
             padding: EdgeInsets.zero,
             styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
-              p: theme.textTheme.bodyMedium,
+              p: theme.textTheme.bodyMedium?.copyWith(
+                fontFamily: 'LXGWWenKai',
+                height: 1.8,
+              ),
+              h1: theme.textTheme.headlineMedium?.copyWith(
+                fontFamily: 'LXGWWenKai',
+                fontWeight: FontWeight.w700,
+              ),
               h2: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w700,
               ),

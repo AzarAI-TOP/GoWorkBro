@@ -1,23 +1,26 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
-import '../services/api_service.dart';
+import '../services/app_locale.dart';
 import '../services/sync_service.dart';
 import '../services/supabase_config.dart';
+
+const _uuid = Uuid();
 
 /// Central app state — manages all data and daily rollover logic
 class AppProvider extends ChangeNotifier {
   List<Todo> _todos = [];
-  final bool _isInitialized = false;
+  bool _isInitialized = false;
   bool get isInitialized => _isInitialized;
   List<Habit> _habits = [];
   List<Countdown> _countdowns = [];
   List<FocusSession> _todaySessions = [];
   List<SleepRecord> _sleepRecords = [];
   String _userName = 'AzarAI';
-  String _apiBaseUrl = 'http://localhost:8765';
-  bool _apiConnected = false;
+  AppLocale _locale = AppLocale.zh;
+  ThemeMode _themeMode = ThemeMode.system;
   String _lastRolloverDate = '';
   Timer? _rolloverTimer;
 
@@ -27,8 +30,11 @@ class AppProvider extends ChangeNotifier {
   List<FocusSession> get todaySessions => _todaySessions;
   List<SleepRecord> get sleepRecords => _sleepRecords;
   String get userName => _userName;
-  String get apiBaseUrl => _apiBaseUrl;
-  bool get apiConnected => _apiConnected;
+  AppLocale get locale => _locale;
+  ThemeMode get themeMode => _themeMode;
+  Locale get flutterLocale => _locale == AppLocale.zh
+      ? const Locale('zh')
+      : const Locale('en');
 
   String get todayDate {
     final now = DateTime.now();
@@ -37,8 +43,26 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> init() async {
     _userName = await DatabaseService.getSetting('user_name') ?? 'AzarAI';
-    _apiBaseUrl = await DatabaseService.getSetting('api_base_url') ??
-        'http://localhost:8765';
+
+    // Load persisted locale and theme mode
+    final savedLocale = await DatabaseService.getSetting('locale');
+    if (savedLocale == 'en') {
+      _locale = AppLocale.en;
+    } else {
+      _locale = AppLocale.zh;
+    }
+    final savedTheme = await DatabaseService.getSetting('theme_mode');
+    switch (savedTheme) {
+      case 'light':
+        _themeMode = ThemeMode.light;
+        break;
+      case 'dark':
+        _themeMode = ThemeMode.dark;
+        break;
+      default:
+        _themeMode = ThemeMode.system;
+    }
+
     _lastRolloverDate =
         await DatabaseService.getSetting('last_rollover_date') ?? '';
 
@@ -57,14 +81,15 @@ class AppProvider extends ChangeNotifier {
       }
     }
 
-    _apiConnected = await ApiService.testConnection();
-
     // Check every minute if the date has changed (for cross-day rollover)
     _rolloverTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       if (_lastRolloverDate != todayDate) {
         _performDailyRollover().then((_) => refreshAll());
       }
     });
+
+    _isInitialized = true;
+    notifyListeners();
   }
 
   @override
@@ -116,6 +141,24 @@ class AppProvider extends ChangeNotifier {
       completedDate: !todo.isCompleted ? DateTime.now().toIso8601String() : null,
     );
     await DatabaseService.updateTodo(updated);
+
+    // "明天继续": when marking complete and the todo wants to repeat tomorrow,
+    // auto-recreate an incomplete copy for the next day.
+    if (!todo.isCompleted && todo.keepTomorrow) {
+      final newTodo = Todo(
+        id: _uuid.v4(),
+        title: todo.title,
+        timingType: todo.timingType,
+        durationMinutes: todo.durationMinutes,
+        isCompleted: false,
+        sortOrder: todo.sortOrder,
+        keepTomorrow: true,
+        createdDate: DateTime.now().toIso8601String(),
+      );
+      await DatabaseService.insertTodo(newTodo);
+      SyncService.pushTodo(newTodo);
+    }
+
     _todos = await DatabaseService.getTodos();
     notifyListeners();
     SyncService.pushTodo(updated);
@@ -247,10 +290,39 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setApiBaseUrl(String url) async {
-    _apiBaseUrl = url;
-    await ApiService.setBaseUrl(url);
-    _apiConnected = await ApiService.testConnection();
+  Future<void> setLocale(AppLocale locale) async {
+    _locale = locale;
+    await DatabaseService.setSetting('locale', locale == AppLocale.en ? 'en' : 'zh');
+    notifyListeners();
+  }
+
+  Future<void> setThemeMode(ThemeMode mode) async {
+    _themeMode = mode;
+    String value;
+    switch (mode) {
+      case ThemeMode.light:
+        value = 'light';
+        break;
+      case ThemeMode.dark:
+        value = 'dark';
+        break;
+      case ThemeMode.system:
+        value = 'system';
+        break;
+    }
+    await DatabaseService.setSetting('theme_mode', value);
+    notifyListeners();
+  }
+
+  /// Delete all local data and reset in-memory state.
+  Future<void> deleteAllData() async {
+    await DatabaseService.deleteAllData();
+    _todos = [];
+    _habits = [];
+    _countdowns = [];
+    _todaySessions = [];
+    _sleepRecords = [];
+    _lastRolloverDate = '';
     notifyListeners();
   }
 

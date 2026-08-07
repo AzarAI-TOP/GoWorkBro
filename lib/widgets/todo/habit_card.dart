@@ -69,7 +69,7 @@ class HabitCard extends StatelessWidget {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          '${habit.currentCount}/${habit.targetCount} ${habit.unit}',
+                          '每日 ${habit.currentCount}/${habit.targetCount} ${habit.unit}',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: done ? cs.primary : theme.hintColor,
                             fontWeight: FontWeight.w600,

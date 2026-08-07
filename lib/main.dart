@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:window_manager/window_manager.dart';
 import 'providers/app_provider.dart';
+import 'services/app_locale.dart';
 import 'services/supabase_config.dart';
 import 'services/tray_service.dart';
 import 'theme/app_theme.dart';
@@ -55,15 +56,28 @@ class GoWorkBroApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => AppProvider(),
-      child: MaterialApp(
-        title: 'GoWorkBro',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.light,
-        darkTheme: AppTheme.dark,
-        themeMode: ThemeMode.system,
-        home: const AuthGate(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider<AppLocaleProvider>(
+          create: (_) => AppLocaleProvider(),
+        ),
+        ChangeNotifierProvider<AppProvider>(
+          create: (_) => AppProvider(),
+        ),
+      ],
+      child: Consumer<AppLocaleProvider>(
+        builder: (context, localeProvider, _) {
+          return MaterialApp(
+            title: 'GoWorkBro',
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.light,
+            darkTheme: AppTheme.dark,
+            themeMode: localeProvider.themeMode,
+            locale: localeProvider.flutterLocale,
+            supportedLocales: const [Locale('zh'), Locale('en')],
+            home: const AuthGate(),
+          );
+        },
       ),
     );
   }

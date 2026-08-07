@@ -7,6 +7,7 @@ class SleepRecord {
   final String recordDate;
   final String? wakeTime;
   final String? sleepTime;
+  final String? workoutTime;
   final String? note;
 
   SleepRecord({
@@ -14,6 +15,7 @@ class SleepRecord {
     required this.recordDate,
     this.wakeTime,
     this.sleepTime,
+    this.workoutTime,
     this.note,
   });
 
@@ -21,6 +23,7 @@ class SleepRecord {
     required String recordDate,
     String? wakeTime,
     String? sleepTime,
+    String? workoutTime,
     String? note,
   }) {
     return SleepRecord(
@@ -28,6 +31,7 @@ class SleepRecord {
       recordDate: recordDate,
       wakeTime: wakeTime,
       sleepTime: sleepTime,
+      workoutTime: workoutTime,
       note: note,
     );
   }
@@ -35,6 +39,7 @@ class SleepRecord {
   SleepRecord copyWith({
     String? wakeTime,
     String? sleepTime,
+    String? workoutTime,
     String? note,
   }) {
     return SleepRecord(
@@ -42,6 +47,7 @@ class SleepRecord {
       recordDate: recordDate,
       wakeTime: wakeTime ?? this.wakeTime,
       sleepTime: sleepTime ?? this.sleepTime,
+      workoutTime: workoutTime ?? this.workoutTime,
       note: note ?? this.note,
     );
   }
@@ -51,6 +57,7 @@ class SleepRecord {
     'record_date': recordDate,
     'wake_time': wakeTime,
     'sleep_time': sleepTime,
+    'workout_time': workoutTime,
     'note': note,
   };
 
@@ -59,6 +66,7 @@ class SleepRecord {
     recordDate: m['record_date'] as String,
     wakeTime: m['wake_time'] as String?,
     sleepTime: m['sleep_time'] as String?,
+    workoutTime: m['workout_time'] as String?,
     note: m['note'] as String?,
   );
 }

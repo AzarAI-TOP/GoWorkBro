@@ -15,7 +15,7 @@ class _TodoEditDialogState extends State<TodoEditDialog> {
   late final TextEditingController _titleCtrl;
   late final TextEditingController _customCtrl;
   TimingType _timingType = TimingType.forward;
-  String _durationChoice = '25'; // '25' | '40' | 'custom'
+  String _durationChoice = '25'; // '15' | '25' | '40' | 'custom'
   bool _keepTomorrow = true;
 
   @override
@@ -26,7 +26,9 @@ class _TodoEditDialogState extends State<TodoEditDialog> {
     _timingType = t?.timingType ?? TimingType.forward;
     _keepTomorrow = t?.keepTomorrow ?? true;
     if (t != null && t.timingType == TimingType.backward) {
-      if (t.durationMinutes == 25) {
+      if (t.durationMinutes == 15) {
+        _durationChoice = '15';
+      } else if (t.durationMinutes == 25) {
         _durationChoice = '25';
       } else if (t.durationMinutes == 40) {
         _durationChoice = '40';
@@ -51,6 +53,8 @@ class _TodoEditDialogState extends State<TodoEditDialog> {
       return widget.initial?.durationMinutes ?? 25;
     }
     switch (_durationChoice) {
+      case '15':
+        return 15;
       case '25':
         return 25;
       case '40':
@@ -143,8 +147,14 @@ class _TodoEditDialogState extends State<TodoEditDialog> {
               const SizedBox(height: 8),
               Text('时长', style: theme.textTheme.labelLarge),
               Wrap(
-                spacing: 8,
+                spacing: 10,
+                runSpacing: 8,
                 children: [
+                  ChoiceChip(
+                    label: const Text('15min'),
+                    selected: _durationChoice == '15',
+                    onSelected: (_) => setState(() => _durationChoice = '15'),
+                  ),
                   ChoiceChip(
                     label: const Text('25min'),
                     selected: _durationChoice == '25',
@@ -179,7 +189,7 @@ class _TodoEditDialogState extends State<TodoEditDialog> {
               value: _keepTomorrow,
               onChanged: (v) => setState(() => _keepTomorrow = v ?? false),
               title: const Text('明天继续'),
-              subtitle: const Text('未完成时自动延续到次日'),
+              subtitle: const Text('完成后明天自动重建'),
               dense: true,
               contentPadding: EdgeInsets.zero,
               controlAffinity: ListTileControlAffinity.leading,

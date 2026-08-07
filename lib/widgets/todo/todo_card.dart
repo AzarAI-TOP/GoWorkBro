@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/models.dart';
 
-/// TODO item card widget — extracted from todo_screen.dart
+/// TODO item card widget — no circle icon (tap to toggle complete)
 class TodoCard extends StatelessWidget {
   final Todo todo;
   final int index;
@@ -52,26 +52,7 @@ class TodoCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 6),
-              GestureDetector(
-                onTap: onToggle,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: isDone ? cs.primary : Colors.transparent,
-                    border: Border.all(
-                      color: isDone ? cs.primary : theme.dividerColor,
-                      width: 2,
-                    ),
-                  ),
-                  child: isDone
-                      ? const Icon(Icons.check, size: 16, color: Colors.white)
-                      : null,
-                ),
-              ),
-              const SizedBox(width: 12),
+              // No circle icon — just tap the card to toggle
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

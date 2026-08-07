@@ -6,7 +6,7 @@ import '../providers/app_provider.dart';
 
 /// Full-screen pomodoro timer page.
 /// Supports forward (count up), backward (count down), and none (no timing).
-/// On finish, records a FocusSession.
+/// On finish, records a FocusSession AND marks the todo as completed.
 class TimerScreen extends StatefulWidget {
   final Todo todo;
 
@@ -51,7 +51,7 @@ class _TimerScreenState extends State<TimerScreen> {
           _timer?.cancel();
           _isRunning = false;
           _isFinished = true;
-          _recordSession();
+          _recordSessionAndComplete();
         }
       });
     });
@@ -72,23 +72,38 @@ class _TimerScreenState extends State<TimerScreen> {
       _isRunning = false;
       _isFinished = true;
     });
-    _recordSession();
+    _recordSessionAndComplete();
   }
 
-  void _recordSession() {
+  /// Record focus session AND mark the todo as completed.
+  void _recordSessionAndComplete() {
     final provider = context.read<AppProvider>();
+
+    // Record focus session
     provider.recordFocusSession(FocusSession.create(
       todoId: widget.todo.id,
       sourceType: 'todo',
       sourceTitle: widget.todo.title,
       durationSeconds: _elapsedSeconds,
     ));
-    // Also update the todo's actual duration
-    final updated = widget.todo.copyWith(
-      actualDurationSeconds:
-          widget.todo.actualDurationSeconds + _elapsedSeconds,
-    );
-    provider.updateTodo(updated);
+
+    // Mark the todo as completed (this adds the strikethrough)
+    if (!widget.todo.isCompleted) {
+      final completed = widget.todo.copyWith(
+        isCompleted: true,
+        completedDate: DateTime.now().toIso8601String(),
+        actualDurationSeconds:
+            widget.todo.actualDurationSeconds + _elapsedSeconds,
+      );
+      provider.updateTodo(completed);
+    } else {
+      // Already completed, just update duration
+      final updated = widget.todo.copyWith(
+        actualDurationSeconds:
+            widget.todo.actualDurationSeconds + _elapsedSeconds,
+      );
+      provider.updateTodo(updated);
+    }
   }
 
   String _formatTime(int seconds) {
@@ -225,6 +240,8 @@ class _TimerScreenState extends State<TimerScreen> {
                   const SizedBox(height: 16),
                   Text('专注 ${_formatTime(_elapsedSeconds)}',
                       style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  Text('待办已完成 ✓', style: theme.textTheme.bodyMedium?.copyWith(color: cs.primary)),
                   const SizedBox(height: 24),
                   FilledButton(
                     onPressed: () => Navigator.pop(context),

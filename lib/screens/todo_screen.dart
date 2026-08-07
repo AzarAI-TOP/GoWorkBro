@@ -19,28 +19,52 @@ class TodoScreen extends StatefulWidget {
   State<TodoScreen> createState() => _TodoScreenState();
 }
 
-class _TodoScreenState extends State<TodoScreen> {
-  // ---- Combined display list: TODOs first, then Habits ----
-  List<Object> _combined(AppProvider p) => <Object>[...p.todos, ...p.habits];
+class _TodoScreenState extends State<TodoScreen> with SingleTickerProviderStateMixin {
+  // ---- Combined display list ----
+  // Order: incomplete todos (by sortOrder) → completed todos (by completedDate desc) → habits
+  List<Object> _combined(AppProvider p) {
+    final incompleteTodos = p.todos.where((t) => !t.isCompleted).toList()
+      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    final completedTodos = p.todos.where((t) => t.isCompleted).toList()
+      ..sort((a, b) {
+        final ad = a.completedDate ?? '';
+        final bd = b.completedDate ?? '';
+        return bd.compareTo(ad); // desc — most recently completed first
+      });
+    return <Object>[...incompleteTodos, ...completedTodos, ...p.habits];
+  }
 
   void _onReorder(int oldIndex, int newIndex) {
     final provider = context.read<AppProvider>();
+    final items = _combined(provider);
     final todoCount = provider.todos.length;
     final habitCount = provider.habits.length;
 
-    if (oldIndex < todoCount) {
-      // Dragged a TODO → reorder within todos (clamp into todo region)
-      var newTodoIndex = newIndex;
-      if (newTodoIndex < 0) newTodoIndex = 0;
-      if (newTodoIndex > todoCount) newTodoIndex = todoCount;
-      provider.reorderTodos(oldIndex, newTodoIndex);
-    } else {
-      // Dragged a Habit → reorder within habits
-      final oldHabitIndex = oldIndex - todoCount;
-      var newHabitIndex = newIndex - todoCount;
+    final oldItem = items[oldIndex];
+
+    // Determine the type of the dragged item
+    if (oldItem is Habit) {
+      // Habit drag — reorder within habits region
+      final oldHabitIndex = provider.habits.indexOf(oldItem);
+      final habitStart = todoCount;
+      var newHabitIndex = newIndex;
+      if (newIndex > habitStart) {
+        newHabitIndex -= habitStart;
+      } else if (newIndex < habitStart) {
+        newHabitIndex = 0;
+      } else {
+        newHabitIndex -= habitStart;
+      }
       if (newHabitIndex < 0) newHabitIndex = 0;
       if (newHabitIndex > habitCount) newHabitIndex = habitCount;
       provider.reorderHabits(oldHabitIndex, newHabitIndex);
+    } else if (oldItem is Todo) {
+      // Todo drag — reorder within todos region
+      final oldTodoIndex = provider.todos.indexOf(oldItem);
+      var newTodoIndex = newIndex;
+      if (newTodoIndex > todoCount) newTodoIndex = todoCount;
+      if (newTodoIndex < 0) newTodoIndex = 0;
+      provider.reorderTodos(oldTodoIndex, newTodoIndex);
     }
   }
 
@@ -59,42 +83,46 @@ class _TodoScreenState extends State<TodoScreen> {
     }
   }
 
-  // ---- Add sheet: choose TODO or Habit ----
-  void _showAddSheet() {
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(top: 4, bottom: 8),
-              child: Text('新建', style: Theme.of(context).textTheme.titleMedium),
-            ),
-            ListTile(
-              leading: const Icon(Icons.check_circle_outline),
-              title: const Text('新建待办'),
-              subtitle: const Text('一次性任务 · 支持计时'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _openTodoEdit(null);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.repeat_rounded),
-              title: const Text('新建习惯'),
-              subtitle: const Text('每日打卡 · 计量目标'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _openHabitEdit(null);
-              },
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
+  // ---- Custom FAB overlay: two large buttons (TODO / Habit) ----
+  void _showAddOverlay() {
+    final overlay = Overlay.of(context);
+    late OverlayEntry entry;
+    late AnimationController animController;
+    late Animation<double> scaleAnim;
+
+    animController = AnimationController(
+      duration: const Duration(milliseconds: 200),
+      vsync: this,
+    );
+    scaleAnim = CurvedAnimation(parent: animController, curve: Curves.easeOutBack);
+
+    entry = OverlayEntry(
+      builder: (ctx) => _AddOverlay(
+        scaleAnim: scaleAnim,
+        onDismiss: () {
+          animController.reverse().then((_) {
+            entry.remove();
+            animController.dispose();
+          });
+        },
+        onTodo: () {
+          animController.reverse().then((_) {
+            entry.remove();
+            animController.dispose();
+          });
+          _openTodoEdit(null);
+        },
+        onHabit: () {
+          animController.reverse().then((_) {
+            entry.remove();
+            animController.dispose();
+          });
+          _openHabitEdit(null);
+        },
       ),
     );
+    overlay.insert(entry);
+    animController.forward();
   }
 
   // ---- Long-press options: edit / delete ----
@@ -289,9 +317,123 @@ class _TodoScreenState extends State<TodoScreen> {
               },
             ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _showAddSheet,
+        onPressed: _showAddOverlay,
         tooltip: '添加',
         child: const Icon(Icons.add),
+      ),
+    );
+  }
+}
+
+// ---- Full-screen overlay with two large buttons ----
+class _AddOverlay extends StatelessWidget {
+  final Animation<double> scaleAnim;
+  final VoidCallback onDismiss;
+  final VoidCallback onTodo;
+  final VoidCallback onHabit;
+
+  const _AddOverlay({
+    required this.scaleAnim,
+    required this.onDismiss,
+    required this.onTodo,
+    required this.onHabit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+
+    return Material(
+      color: Colors.black54,
+      child: GestureDetector(
+        onTap: onDismiss,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          width: screenSize.width,
+          height: screenSize.height,
+          color: Colors.transparent,
+          child: Center(
+            child: GestureDetector(
+              onTap: () {}, // swallow taps on the buttons row
+              child: ScaleTransition(
+                scale: scaleAnim,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Left button — TODO (25% width, orange)
+                    _BigButton(
+                      label: 'TODO',
+                      color: const Color(0xFFE85D3C),
+                      widthFraction: 0.25,
+                      onTap: onTodo,
+                    ),
+                    const SizedBox(width: 16),
+                    // Right button — Habit (75% width, blue)
+                    _BigButton(
+                      label: 'Habit',
+                      color: const Color(0xFF4A90D9),
+                      widthFraction: 0.75,
+                      onTap: onHabit,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BigButton extends StatelessWidget {
+  final String label;
+  final Color color;
+  final double widthFraction;
+  final VoidCallback onTap;
+
+  const _BigButton({
+    required this.label,
+    required this.color,
+    required this.widthFraction,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final screenW = MediaQuery.of(context).size.width;
+    final btnWidth = screenW * widthFraction;
+    // Keep ~120 tall, but if width fraction is small, use at least 120
+    final btnHeight = 120.0;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: btnWidth,
+        height: btnHeight,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.4),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 24,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.5,
+              decoration: TextDecoration.none,
+            ),
+          ),
+        ),
       ),
     );
   }

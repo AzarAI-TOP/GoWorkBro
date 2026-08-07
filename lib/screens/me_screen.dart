@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/models.dart';
 import '../providers/app_provider.dart';
+import '../services/app_locale.dart';
 import '../services/sync_service.dart';
 import '../services/update_service.dart';
 import '../theme/app_theme.dart';
@@ -139,11 +140,14 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
   Widget _buildSleepTab(BuildContext context, AppProvider provider, ThemeData theme) {
     final today = provider.todayDate;
     final todayRecord = provider.sleepRecords.where((r) => r.recordDate == today).toList();
+    final wakeTime = todayRecord.isNotEmpty ? todayRecord.first.wakeTime : null;
+    final workoutTime = todayRecord.isNotEmpty ? todayRecord.first.workoutTime : null;
+    final sleepTime = todayRecord.isNotEmpty ? todayRecord.first.sleepTime : null;
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        // Today's check-in card
+        // Today's check-in card — 3 buttons in a row
         Card(
           child: Padding(
             padding: const EdgeInsets.all(20),
@@ -160,18 +164,29 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
                         theme,
                         label: '起床',
                         icon: Icons.wb_sunny_outlined,
-                        time: todayRecord.isNotEmpty ? todayRecord.first.wakeTime : null,
+                        time: wakeTime,
                         onTap: () => _recordTime(context, provider, 'wake'),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildCheckInButton(
+                        context,
+                        theme,
+                        label: '健身',
+                        icon: Icons.fitness_center_outlined,
+                        time: workoutTime,
+                        onTap: () => _recordTime(context, provider, 'workout'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: _buildCheckInButton(
                         context,
                         theme,
                         label: '睡觉',
                         icon: Icons.bedtime_outlined,
-                        time: todayRecord.isNotEmpty ? todayRecord.first.sleepTime : null,
+                        time: sleepTime,
                         onTap: () => _recordTime(context, provider, 'sleep'),
                       ),
                     ),
@@ -213,7 +228,7 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
           decoration: BoxDecoration(
             color: hasRecord
                 ? theme.colorScheme.primary.withValues(alpha: 0.08)
@@ -225,22 +240,22 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
                   : Colors.transparent,
             ),
           ),
-        child: Column(
-          children: [
-            Icon(icon, size: 32, color: hasRecord ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant),
-            const SizedBox(height: 8),
-            Text(label, style: theme.textTheme.bodyMedium),
-            const SizedBox(height: 4),
-            Text(
-              hasRecord ? _formatTime(time) : '未打卡',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: hasRecord ? FontWeight.w600 : FontWeight.normal,
-                color: hasRecord ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant,
+          child: Column(
+            children: [
+              Icon(icon, size: 28, color: hasRecord ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant),
+              const SizedBox(height: 8),
+              Text(label, style: theme.textTheme.bodyMedium),
+              const SizedBox(height: 4),
+              Text(
+                hasRecord ? _formatTime(time) : '未打卡',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: hasRecord ? FontWeight.w600 : FontWeight.normal,
+                  color: hasRecord ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant,
+                ),
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
         ),
       ),
     );
@@ -261,7 +276,7 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
         ),
         title: Text(record.recordDate, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
         subtitle: Text(
-          '起床 ${_formatTime(record.wakeTime)}  ·  睡觉 ${_formatTime(record.sleepTime)}',
+          '起床 ${_formatTime(record.wakeTime)}  ·  健身 ${_formatTime(record.workoutTime)}  ·  睡觉 ${_formatTime(record.sleepTime)}',
           style: const TextStyle(fontSize: 12),
         ),
       ),
@@ -270,10 +285,16 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
 
   void _recordTime(BuildContext context, AppProvider provider, String type) async {
     final now = TimeOfDay.now();
+    final helpText = switch (type) {
+      'wake' => '选择起床时间',
+      'workout' => '选择健身时间',
+      'sleep' => '选择睡觉时间',
+      _ => '选择时间',
+    };
     final picked = await showTimePicker(
       context: context,
       initialTime: now,
-      helpText: type == 'wake' ? '选择起床时间' : '选择睡觉时间',
+      helpText: helpText,
     );
     if (picked == null) return;
 
@@ -283,13 +304,24 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
 
     SleepRecord record;
     if (existing.isNotEmpty) {
-      record = type == 'wake'
-          ? existing.first.copyWith(wakeTime: timeStr)
-          : existing.first.copyWith(sleepTime: timeStr);
+      switch (type) {
+        case 'wake':
+          record = existing.first.copyWith(wakeTime: timeStr);
+          break;
+        case 'workout':
+          record = existing.first.copyWith(workoutTime: timeStr);
+          break;
+        case 'sleep':
+          record = existing.first.copyWith(sleepTime: timeStr);
+          break;
+        default:
+          record = existing.first;
+      }
     } else {
       record = SleepRecord.create(
         recordDate: today,
         wakeTime: type == 'wake' ? timeStr : null,
+        workoutTime: type == 'workout' ? timeStr : null,
         sleepTime: type == 'sleep' ? timeStr : null,
       );
     }
@@ -305,8 +337,25 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('更换头像'),
-        content: const Text('头像功能开发中，敬请期待 🚀'),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('好的'))],
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+              ),
+              child: Icon(Icons.cloud_upload_outlined, size: 36, color: Theme.of(context).colorScheme.primary),
+            ),
+            const SizedBox(height: 16),
+            const Text('头像上传功能开发中，敬请期待 🚀'),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('好的')),
+        ],
       ),
     );
   }
@@ -431,7 +480,66 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        // Cloud sync status
+        // ---- Language selector ----
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.language, size: 20, color: theme.colorScheme.primary),
+                    const SizedBox(width: 8),
+                    Text('语言', style: theme.textTheme.titleMedium),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                SegmentedButton<AppLocale>(
+                  segments: const [
+                    ButtonSegment(value: AppLocale.zh, label: Text('中文')),
+                    ButtonSegment(value: AppLocale.en, label: Text('English')),
+                  ],
+                  selected: {provider.locale},
+                  onSelectionChanged: (set) => provider.setLocale(set.first),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // ---- Theme mode selector ----
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.palette_outlined, size: 20, color: theme.colorScheme.primary),
+                    const SizedBox(width: 8),
+                    Text('主题', style: theme.textTheme.titleMedium),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                SegmentedButton<ThemeMode>(
+                  segments: const [
+                    ButtonSegment(value: ThemeMode.light, label: Text('浅色')),
+                    ButtonSegment(value: ThemeMode.dark, label: Text('深色')),
+                    ButtonSegment(value: ThemeMode.system, label: Text('跟随系统')),
+                  ],
+                  selected: {provider.themeMode},
+                  onSelectionChanged: (set) => provider.setThemeMode(set.first),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // ---- Cloud sync status ----
         Card(
           child: Padding(
             padding: const EdgeInsets.all(20),
@@ -476,63 +584,8 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
           ),
         ),
         const SizedBox(height: 16),
-        // Local API connection status
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.dns_outlined, size: 20, color: theme.colorScheme.primary),
-                    const SizedBox(width: 8),
-                    Text('本地后端', style: theme.textTheme.titleMedium),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: provider.apiConnected ? Colors.green : Colors.grey,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      provider.apiConnected ? '已连接' : '未连接',
-                      style: theme.textTheme.bodyMedium,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text('API 地址: ${provider.apiBaseUrl}', style: theme.textTheme.bodySmall),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: () => _showApiUrlDialog(context, provider),
-                  icon: const Icon(Icons.edit, size: 18),
-                  label: const Text('修改 API 地址'),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        // Logout
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.logout, color: Colors.redAccent),
-            title: const Text('退出登录', style: TextStyle(color: Colors.redAccent)),
-            subtitle: const Text('退出后数据保留在本地，重新登录可同步'),
-            trailing: const Icon(Icons.chevron_right, color: Colors.redAccent),
-            onTap: () => _showLogoutConfirm(context),
-          ),
-        ),
-        const SizedBox(height: 16),
-        // Check for updates
+
+        // ---- Check for updates ----
         Card(
           child: ListTile(
             leading: const Icon(Icons.system_update),
@@ -543,66 +596,66 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
           ),
         ),
         const SizedBox(height: 16),
-        // App info
-        Card(
-          child: Column(
-            children: [
-              ListTile(
-                leading: const Icon(Icons.info_outline),
-                title: const Text('关于 GoWorkBro'),
-                subtitle: const Text('版本 1.0.0'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  showAboutDialog(
-                    context: context,
-                    applicationName: 'GoWorkBro',
-                    applicationVersion: '1.0.0',
-                    applicationLegalese: '© 2026 AzarAI',
-                  );
-                },
-              ),
-              const Divider(height: 1, indent: 16),
-              ListTile(
-                leading: const Icon(Icons.code),
-                title: const Text('开源许可'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  showLicensePage(
-                    context: context,
-                    applicationName: 'GoWorkBro',
-                    applicationVersion: '1.0.0',
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
 
-  void _showApiUrlDialog(BuildContext context, AppProvider provider) {
-    final controller = TextEditingController(text: provider.apiBaseUrl);
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('API 地址'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(hintText: 'http://localhost:8765'),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
-          TextButton(
-            onPressed: () {
-              provider.setApiBaseUrl(controller.text.trim());
-              Navigator.pop(context);
+        // ---- About (merged with licenses) ----
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.info_outline),
+            title: const Text('关于 GoWorkBro'),
+            subtitle: const Text('版本 1.0.0'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              showAboutDialog(
+                context: context,
+                applicationName: 'GoWorkBro',
+                applicationVersion: '1.0.0',
+                applicationLegalese: '© 2026 AzarAI',
+                applicationIcon: Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.check_circle, color: Colors.white, size: 28),
+                ),
+              );
             },
-            child: const Text('保存'),
           ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 16),
+
+        // ---- Logout ----
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.logout, color: Colors.redAccent),
+            title: const Text('退出登录', style: TextStyle(color: Colors.redAccent)),
+            subtitle: const Text('退出后数据保留在本地，重新登录可同步'),
+            trailing: const Icon(Icons.chevron_right, color: Colors.redAccent),
+            onTap: () => _showLogoutConfirm(context),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // ---- Delete all data (red, bottom) ----
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () => _showDeleteDataConfirm(context, provider),
+            icon: const Icon(Icons.delete_forever, color: Colors.redAccent),
+            label: const Text('删除所有数据', style: TextStyle(color: Colors.redAccent)),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.redAccent,
+              side: const BorderSide(color: Colors.redAccent),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+      ],
     );
   }
 
@@ -624,6 +677,30 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
           ),
         ],
       ),
+    );
+  }
+
+  void _showDeleteDataConfirm(BuildContext context, AppProvider provider) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('删除所有数据'),
+        content: const Text('确定删除所有本地数据？此操作不可撤销，包括待办、习惯、打卡记录等。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await provider.deleteAllData();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('所有数据已删除')),
     );
   }
 
