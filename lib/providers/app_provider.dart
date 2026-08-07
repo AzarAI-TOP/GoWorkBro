@@ -9,7 +9,7 @@ import '../services/supabase_config.dart';
 /// Central app state — manages all data and daily rollover logic
 class AppProvider extends ChangeNotifier {
   List<Todo> _todos = [];
-  bool _isInitialized = false;
+  final bool _isInitialized = false;
   bool get isInitialized => _isInitialized;
   List<Habit> _habits = [];
   List<Countdown> _countdowns = [];

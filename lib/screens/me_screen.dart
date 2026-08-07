@@ -118,7 +118,7 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    'ID: AzarAI',
+                    'ID: ${provider.userName == 'AzarAI' ? 'AzarAI' : provider.userName}',
                     style: TextStyle(
                       fontSize: 12,
                       color: theme.colorScheme.primary,
@@ -550,7 +550,7 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
               ListTile(
                 leading: const Icon(Icons.info_outline),
                 title: const Text('关于 GoWorkBro'),
-                subtitle: const Text('版本 0.1.0'),
+                subtitle: const Text('版本 1.0.0'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () {
                   showAboutDialog(

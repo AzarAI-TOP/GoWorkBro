@@ -48,3 +48,7 @@ app.*.map.json
 lib/services/local_config.dart
 *.env
 server/goworkbro-server.exe
+
+# Python cache
+__pycache__/
+*.pyc

@@ -1,5 +1,3 @@
-import 'dart:convert';
-import 'dart:io' as io;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -66,19 +64,18 @@ class _TodayScreenState extends State<TodayScreen> {
 
     UstcNews? news;
     try {
+      // fetchUstcNews now has a 3-tier fallback:
+      // 1. Supabase (cloud) → 2. Go backend → 3. Local Obsidian vault
       news = await ApiService.fetchUstcNews();
     } catch (_) {
       news = null;
     }
 
     if (news == null) {
+      // Try latest available news (not necessarily today's)
       try {
-        // Try common Obsidian vault paths as fallback
-        final vaultPath = await _getVaultPath();
-        if (vaultPath != null) {
-          news = await ApiService.fetchUstcNewsLocal(vaultPath);
-        }
-      } catch (e) {
+        news = await ApiService.fetchLatestUstcNews();
+      } catch (_) {
         news = null;
       }
     }
@@ -156,25 +153,6 @@ class _TodayScreenState extends State<TodayScreen> {
         ),
       ),
     );
-  }
-
-  Future<String?> _getVaultPath() async {
-    try {
-      // Check Obsidian config for vault path
-      final configFile = io.File(
-          '${io.Platform.environment['APPDATA']}/obsidian/obsidian.json');
-      if (await configFile.exists()) {
-        final config = json.decode(await configFile.readAsString());
-        final vaults = config['vaults'] as Map<String, dynamic>;
-        for (final v in vaults.values) {
-          final path = v['path'] as String?;
-          if (path != null && await io.Directory(path).exists()) {
-            return path;
-          }
-        }
-      }
-    } catch (_) {}
-    return null;
   }
 
   void _openNewsModal() {

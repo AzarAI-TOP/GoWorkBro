@@ -31,7 +31,7 @@ class SyncService {
 
     await Supabase.initialize(
       url: supabaseUrl,
-      anonKey: supabaseAnonKey,
+      publishableKey: supabaseAnonKey,
       debug: kDebugMode,
     );
     _client = Supabase.instance.client;
@@ -262,9 +262,7 @@ class SyncService {
           table: 'todos',
           callback: (payload) {
             debugPrint('Realtime todo change: ${payload.eventType}');
-            if (payload.newRecord != null) {
-              DatabaseService.upsertTodoFromRemote(payload.newRecord!);
-            }
+            DatabaseService.upsertTodoFromRemote(payload.newRecord);
           },
         )
         .subscribe();
@@ -276,9 +274,7 @@ class SyncService {
           schema: 'public',
           table: 'habits',
           callback: (payload) {
-            if (payload.newRecord != null) {
-              DatabaseService.upsertHabitFromRemote(payload.newRecord!);
-            }
+            DatabaseService.upsertHabitFromRemote(payload.newRecord);
           },
         )
         .subscribe();
@@ -290,9 +286,7 @@ class SyncService {
           schema: 'public',
           table: 'countdowns',
           callback: (payload) {
-            if (payload.newRecord != null) {
-              DatabaseService.upsertCountdownFromRemote(payload.newRecord!);
-            }
+            DatabaseService.upsertCountdownFromRemote(payload.newRecord);
           },
         )
         .subscribe();
@@ -304,9 +298,7 @@ class SyncService {
           schema: 'public',
           table: 'sleep_records',
           callback: (payload) {
-            if (payload.newRecord != null) {
-              DatabaseService.upsertSleepFromRemote(payload.newRecord!);
-            }
+            DatabaseService.upsertSleepFromRemote(payload.newRecord);
           },
         )
         .subscribe();
@@ -318,9 +310,7 @@ class SyncService {
           schema: 'public',
           table: 'focus_sessions',
           callback: (payload) {
-            if (payload.newRecord != null) {
-              DatabaseService.insertFocusSessionIfNotExists(payload.newRecord!);
-            }
+            DatabaseService.insertFocusSessionIfNotExists(payload.newRecord);
           },
         )
         .subscribe();

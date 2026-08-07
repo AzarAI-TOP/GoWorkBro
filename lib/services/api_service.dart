@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/models.dart';
 import 'database_service.dart';
+import 'supabase_config.dart';
 
 /// API service for backend sync (Go server) and USTC news fetching
 class ApiService {
@@ -55,8 +57,50 @@ class ApiService {
 
   // ============ USTC News ============
 
-  /// Fetch today's USTC news markdown from backend (which reads from Obsidian vault)
+  /// Fetch USTC news with a 3-tier fallback chain:
+  /// 1. Supabase (cloud — works on mobile without PC)
+  /// 2. Go backend (reads from Obsidian vault on PC)
+  /// 3. Local Obsidian vault file (desktop only)
   static Future<UstcNews?> fetchUstcNews({String? date}) async {
+    // Tier 1: Supabase cloud
+    final cloud = await _fetchUstcNewsFromSupabase(date);
+    if (cloud != null) return cloud;
+
+    // Tier 2: Go backend
+    final backend = await _fetchUstcNewsFromBackend(date);
+    if (backend != null) return backend;
+
+    // Tier 3: Local vault file (desktop only)
+    return _fetchUstcNewsFromLocalVault(date);
+  }
+
+  /// Fetch from Supabase ustc_news table
+  static Future<UstcNews?> _fetchUstcNewsFromSupabase(String? date) async {
+    try {
+      if (!isSupabaseConfigured) return null;
+      final client = Supabase.instance.client;
+      final dateStr = date ?? DateTime.now().toIso8601String().substring(0, 10);
+
+      final data = await client
+          .from('ustc_news')
+          .select('date, title, content')
+          .eq('date', dateStr)
+          .maybeSingle()
+          .timeout(const Duration(seconds: 5));
+
+      if (data != null) {
+        return UstcNews(
+          date: data['date'] as String,
+          title: data['title'] as String,
+          markdown: data['content'] as String,
+        );
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Fetch from Go backend (reads Obsidian vault)
+  static Future<UstcNews?> _fetchUstcNewsFromBackend(String? date) async {
     try {
       final url = await baseUrl;
       final endpoint = date != null
@@ -77,22 +121,21 @@ class ApiService {
     return null;
   }
 
-  /// Fetch today's USTC news directly from the Obsidian vault file
-  /// (used as fallback when backend is not running)
-  static Future<UstcNews?> fetchUstcNewsLocal(String vaultPath) async {
+  /// Fetch directly from local Obsidian vault file
+  static Future<UstcNews?> _fetchUstcNewsFromLocalVault(String? date) async {
     try {
-      final now = DateTime.now();
-      final dateStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final dateStr = date ??
+          DateTime.now().toIso8601String().substring(0, 10);
+      final vaultPath = await DatabaseService.getSetting('obsidian_vault_path') ??
+          r'C:\Users\ASUS\Documents\Notes';
       final file = File('$vaultPath/USTC 每日要闻/$dateStr.md');
       if (await file.exists()) {
         final content = await file.readAsString();
-        // Extract title from first H1
         String? title;
         final titleMatch = RegExp(r'^#\s+(.+)$', multiLine: true).firstMatch(content);
         if (titleMatch != null) {
           title = titleMatch.group(1)!.trim();
         }
-        // Strip frontmatter
         String markdown = content;
         if (markdown.startsWith('---')) {
           final end = markdown.indexOf('---', 3);
@@ -110,9 +153,54 @@ class ApiService {
     return null;
   }
 
-  /// List available USTC news dates from the vault
-  static Future<List<String>> listUstcNewsDates(String vaultPath) async {
+  /// Fetch latest available USTC news (most recent date in Supabase)
+  static Future<UstcNews?> fetchLatestUstcNews() async {
+    // Try Supabase first
     try {
+      if (isSupabaseConfigured) {
+        final client = Supabase.instance.client;
+        final data = await client
+            .from('ustc_news')
+            .select('date, title, content')
+            .order('date', ascending: false)
+            .limit(1)
+            .maybeSingle()
+            .timeout(const Duration(seconds: 5));
+        if (data != null) {
+          return UstcNews(
+            date: data['date'] as String,
+            title: data['title'] as String,
+            markdown: data['content'] as String,
+          );
+        }
+      }
+    } catch (_) {}
+
+    // Fallback to backend
+    return fetchUstcNews();
+  }
+
+  /// List available USTC news dates from Supabase (cloud) or local vault
+  static Future<List<String>> listUstcNewsDates() async {
+    // Try Supabase first
+    try {
+      if (isSupabaseConfigured) {
+        final client = Supabase.instance.client;
+        final data = await client
+            .from('ustc_news')
+            .select('date')
+            .order('date', ascending: false)
+            .timeout(const Duration(seconds: 5));
+        if (data.isNotEmpty) {
+          return data.map((row) => row['date'] as String).toList();
+        }
+      }
+    } catch (_) {}
+
+    // Fallback to local vault
+    try {
+      final vaultPath = await DatabaseService.getSetting('obsidian_vault_path') ??
+          r'C:\Users\ASUS\Documents\Notes';
       final dir = Directory('$vaultPath/USTC 每日要闻');
       if (!await dir.exists()) return [];
       final files = await dir.list().toList();
