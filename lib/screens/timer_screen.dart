@@ -76,10 +76,14 @@ class _TimerScreenState extends State<TimerScreen> {
   }
 
   /// Record focus session AND mark the todo as completed.
+  /// Uses completeTodoWithDuration which:
+  /// 1. Reads current todo state from provider (no stale snapshot)
+  /// 2. Creates keepTomorrow copy if needed
+  /// 3. Silently skips if todo was deleted while timer was running
   void _recordSessionAndComplete() {
     final provider = context.read<AppProvider>();
 
-    // Record focus session
+    // Record focus session (always, even if todo was deleted)
     provider.recordFocusSession(FocusSession.create(
       todoId: widget.todo.id,
       sourceType: 'todo',
@@ -87,24 +91,8 @@ class _TimerScreenState extends State<TimerScreen> {
       durationSeconds: _elapsedSeconds,
     ));
 
-    // Read the CURRENT state of the todo from the provider (avoids stale
-    // widget.todo snapshot if the todo was modified while timer was open).
-    final currentTodo = provider.todos.where((t) => t.id == widget.todo.id).firstOrNull;
-    final base = currentTodo ?? widget.todo;
-
-    if (!base.isCompleted) {
-      final completed = base.copyWith(
-        isCompleted: true,
-        completedDate: DateTime.now().toIso8601String(),
-        actualDurationSeconds: base.actualDurationSeconds + _elapsedSeconds,
-      );
-      provider.updateTodo(completed);
-    } else {
-      final updated = base.copyWith(
-        actualDurationSeconds: base.actualDurationSeconds + _elapsedSeconds,
-      );
-      provider.updateTodo(updated);
-    }
+    // Complete the todo with accumulated duration
+    provider.completeTodoWithDuration(widget.todo.id, _elapsedSeconds);
   }
 
   String _formatTime(int seconds) {

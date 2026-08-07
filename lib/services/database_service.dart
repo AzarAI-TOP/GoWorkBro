@@ -235,11 +235,12 @@ class DatabaseService {
     await db.delete('countdowns', where: 'id = ?', whereArgs: [id]);
   }
 
-  /// Delete countdowns whose target has passed (next day after target)
+  /// Delete countdowns whose target date has passed (next day after target).
+  /// Uses UTC for consistent comparison across timezones.
   static Future<void> cleanupExpiredCountdowns() async {
     final db = await database;
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
+    final todayUtc = DateTime.now().toUtc();
+    final today = DateTime.utc(todayUtc.year, todayUtc.month, todayUtc.day);
     await db.delete('countdowns',
         where: 'date(target_datetime) < date(?)',
         whereArgs: [today.toIso8601String()]);
@@ -253,10 +254,30 @@ class DatabaseService {
     return maps.map((m) => SleepRecord.fromMap(m)).toList();
   }
 
+  /// Upsert sleep record by record_date (not by id).
+  /// If a record already exists for the same date, update it in-place
+  /// (preserving the original id). Otherwise insert a new record.
   static Future<void> upsertSleepRecord(SleepRecord record) async {
     final db = await database;
-    await db.insert('sleep_records', record.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace);
+    // Check if a record already exists for this date
+    final existing = await db.query('sleep_records',
+        where: 'record_date = ?', whereArgs: [record.recordDate]);
+    if (existing.isNotEmpty) {
+      // Update existing record (preserve original id)
+      final existingId = existing.first['id'] as String;
+      final updated = SleepRecord(
+        id: existingId,
+        recordDate: record.recordDate,
+        wakeTime: record.wakeTime,
+        sleepTime: record.sleepTime,
+        workoutTime: record.workoutTime,
+        note: record.note,
+      );
+      await db.update('sleep_records', updated.toMap(),
+          where: 'id = ?', whereArgs: [existingId]);
+    } else {
+      await db.insert('sleep_records', record.toMap());
+    }
   }
 
   // ============ SETTINGS ============

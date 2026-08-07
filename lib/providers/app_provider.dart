@@ -105,28 +105,80 @@ class AppProvider extends ChangeNotifier {
     SyncService.pushTodo(todo);
   }
 
+  /// Toggle todo completion. Idempotent for keepTomorrow:
+  /// only creates a copy if the todo was NOT already completed,
+  /// preventing ghost duplicates on repeated taps.
   Future<void> toggleTodoComplete(Todo todo) async {
+    final isCompleting = !todo.isCompleted;
     final updated = todo.copyWith(
-      isCompleted: !todo.isCompleted,
-      completedDate: !todo.isCompleted ? DateTime.now().toIso8601String() : null,
+      isCompleted: isCompleting,
+      completedDate: isCompleting ? DateTime.now().toIso8601String() : null,
     );
     await DatabaseService.updateTodo(updated);
 
-    // "明天继续": when marking complete and the todo wants to repeat tomorrow,
-    // auto-recreate an incomplete copy for the next day.
-    if (!todo.isCompleted && todo.keepTomorrow) {
-      final newTodo = Todo(
-        id: _uuid.v4(),
-        title: todo.title,
-        timingType: todo.timingType,
-        durationMinutes: todo.durationMinutes,
-        isCompleted: false,
-        sortOrder: todo.sortOrder,
-        keepTomorrow: true,
-        createdDate: DateTime.now().toIso8601String(),
-      );
-      await DatabaseService.insertTodo(newTodo);
-      SyncService.pushTodo(newTodo);
+    // "明天继续": only when completing (not un-completing), and only if
+    // no incomplete duplicate already exists (idempotent).
+    if (isCompleting && todo.keepTomorrow) {
+      final hasIncompleteCopy = _todos.any((t) =>
+          t.title == todo.title &&
+          !t.isCompleted &&
+          t.createdDate != todo.createdDate);
+      if (!hasIncompleteCopy) {
+        final newTodo = Todo(
+          id: _uuid.v4(),
+          title: todo.title,
+          timingType: todo.timingType,
+          durationMinutes: todo.durationMinutes,
+          isCompleted: false,
+          sortOrder: todo.sortOrder,
+          keepTomorrow: true,
+          createdDate: DateTime.now().toIso8601String(),
+        );
+        await DatabaseService.insertTodo(newTodo);
+        SyncService.pushTodo(newTodo);
+      }
+    }
+
+    _todos = await DatabaseService.getTodos();
+    notifyListeners();
+    SyncService.pushTodo(updated);
+  }
+
+  /// Mark a todo as completed with accumulated focus duration.
+  /// Used by the timer screen. Creates keepTomorrow copy if needed.
+  /// If the todo was deleted while the timer was running, this is a no-op
+  /// (the focus session is still recorded, but no todo update happens).
+  Future<void> completeTodoWithDuration(String todoId, int additionalSeconds) async {
+    final current = _todos.where((t) => t.id == todoId).firstOrNull;
+    if (current == null) return; // Todo was deleted — silently skip todo update
+
+    final updated = current.copyWith(
+      isCompleted: true,
+      completedDate: DateTime.now().toIso8601String(),
+      actualDurationSeconds: current.actualDurationSeconds + additionalSeconds,
+    );
+    await DatabaseService.updateTodo(updated);
+
+    // Create keepTomorrow copy (same idempotent logic as toggleTodoComplete)
+    if (current.keepTomorrow && !current.isCompleted) {
+      final hasIncompleteCopy = _todos.any((t) =>
+          t.title == current.title &&
+          !t.isCompleted &&
+          t.createdDate != current.createdDate);
+      if (!hasIncompleteCopy) {
+        final newTodo = Todo(
+          id: _uuid.v4(),
+          title: current.title,
+          timingType: current.timingType,
+          durationMinutes: current.durationMinutes,
+          isCompleted: false,
+          sortOrder: current.sortOrder,
+          keepTomorrow: true,
+          createdDate: DateTime.now().toIso8601String(),
+        );
+        await DatabaseService.insertTodo(newTodo);
+        SyncService.pushTodo(newTodo);
+      }
     }
 
     _todos = await DatabaseService.getTodos();

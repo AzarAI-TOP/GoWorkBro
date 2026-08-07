@@ -52,12 +52,24 @@ class _TodoScreenState extends State<TodoScreen> with SingleTickerProviderStateM
       provider.reorderHabits(oldHabitIndex, newHabitIndex);
     } else if (oldItem is Todo) {
       // Todo drag — only allow reordering among incomplete todos.
-      if (oldItem.isCompleted) return; // completed todos aren't reorderable
+      if (oldItem.isCompleted) return;
       final incompleteTodos = provider.todos.where((t) => !t.isCompleted).toList();
-      final oldTodoIndex = provider.todos.indexOf(oldItem);
-      var newTodoIndex = newIndex.clamp(0, incompleteTodos.length);
-      if (newTodoIndex == oldTodoIndex || newTodoIndex == oldTodoIndex + 1) return;
-      provider.reorderTodos(oldTodoIndex, newTodoIndex);
+      final oldIncompleteIndex = incompleteTodos.indexOf(oldItem);
+      // Map display index to incomplete-todo index
+      var newIncompleteIndex = newIndex;
+      if (newIncompleteIndex > oldIndex) newIncompleteIndex--; // undo Flutter's pre-adjustment
+      newIncompleteIndex = newIncompleteIndex.clamp(0, incompleteTodos.length);
+      if (oldIncompleteIndex == newIncompleteIndex) return;
+
+      // Find the target position in the full provider.todos list
+      // by counting incomplete todos up to the new position
+      final targetTodo = newIncompleteIndex < incompleteTodos.length
+          ? incompleteTodos[newIncompleteIndex]
+          : null;
+      final newTodoIndex = targetTodo != null
+          ? provider.todos.indexOf(targetTodo)
+          : provider.todos.length;
+      provider.reorderTodos(provider.todos.indexOf(oldItem), newTodoIndex);
     }
   }
 
