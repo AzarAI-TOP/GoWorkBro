@@ -1,105 +1,126 @@
-# GoWorkBro 🍅
+# GoWorkBro
 
-仿"番茄TODO"风格的待办与专注管理软件，支持 Android 和 Windows 双端。
+A clean, geometric todo & focus management app inspired by 番茄TODO.
+Built with Flutter for Android and Windows desktop, with Supabase cloud sync.
 
-## 功能
+## Features
 
-| 模块 | 功能 |
-|------|------|
-| **待办** | TODO（正向计时/倒向计时/不记时，明天继续选项）+ 习惯（每日自动重置，量词选择） |
-| **倒计时** | 创建倒计时事件，到第二天自动删除，实时显示剩余时间 |
-| **Today** | 专注时间饼图、数据可视化、USTC 每日要闻渲染 |
-| **Me** | 个人信息、起床/睡觉打卡、专注统计、后端连接设置 |
+| Module | Description |
+|--------|-------------|
+| **待办 (Todo)** | TODO items with forward/backward/no timer, "repeat tomorrow" auto-recreate, habits with daily reset & custom units |
+| **倒计时 (Countdown)** | Create countdown events with color coding, auto-delete next day, live remaining time |
+| **Today** | Focus statistics with pie chart, 7-day bar chart, session list, USTC daily news (Markdown rendered with LXGW WenKai font) |
+| **Me** | Profile, wake/workout/sleep check-in, statistics, settings (language, theme, cloud sync, data management) |
 
-## 架构
+## Architecture
 
 ```
-GoWorkBro/
-├── lib/                    # Flutter 应用
-│   ├── main.dart           # 入口 + 自适应导航 (手机底部导航 / 电脑侧边导航)
-│   ├── models/             # 数据模型 (Todo, Habit, Countdown, FocusSession, SleepRecord)
-│   ├── services/           # 数据库(SQLite) + API(后端同步)
-│   ├── providers/          # 状态管理 (Provider)
-│   ├── theme/              # 番茄TODO风格主题
-│   └── screens/            # 四个主界面
-│       ├── todo_screen.dart
-│       ├── countdown_screen.dart
-│       ├── today_screen.dart
-│       └── me_screen.dart
-├── server/                 # Go 后端 (REST API)
-│   ├── main.go
-│   ├── go.mod
-│   └── goworkbro-server.exe
-└── pubspec.yaml
+lib/
+├── main.dart                  # App entry, providers, auth gate, navigation shell
+├── models/                    # Data models (Todo, Habit, Countdown, FocusSession, SleepRecord)
+├── providers/
+│   └── app_provider.dart      # Central state (ChangeNotifier), local-first with Supabase sync
+├── services/
+│   ├── app_locale.dart        # i18n provider (zh/en) + S translation class
+│   ├── api_service.dart       # USTC news fetching (Supabase → local vault fallback)
+│   ├── database_service.dart  # SQLite (sqflite_common_ffi) CRUD, migrations, daily rollover
+│   ├── sync_service.dart      # Supabase sync (push/pull/realtime)
+│   ├── supabase_config.dart   # Supabase URL/key via --dart-define
+│   ├── tray_service.dart      # Windows system tray icon
+│   └── update_service.dart    # GitHub release update checker
+├── screens/                   # 6 screens (todo, timer, countdown, today, me, auth)
+├── theme/
+│   └── app_theme.dart         # Light/dark themes, chart colors
+└── widgets/                   # Extracted widgets (cards, dialogs, chart components)
 ```
 
-## 快速开始
+### Data Flow
 
-### Flutter 应用
-
-```bash
-# 确保 flutter 在 PATH 中
-export PATH="/c/flutter/bin:$PATH"
-
-# 安装依赖
-cd D:\Workspace\GoWorkBro
-flutter pub get
-
-# 运行 (Windows 桌面)
-flutter run -d windows
-
-# 运行 (Android)
-flutter run -d android
-
-# 构建 Windows 发布版
-flutter build windows --release
-
-# 构建 Android APK
-flutter build apk --release
+```
+User Action → AppProvider (in-memory update + notifyListeners)
+                ↓                          ↓
+          SQLite (local-first)      Supabase (background push)
+                ↑
+          SyncService.pullAll() ← Supabase Realtime
 ```
 
-### Go 后端
+## Getting Started
 
-```bash
-cd D:\Workspace\GoWorkBro\server
-
-# 构建
-go build -o goworkbro-server.exe .
-
-# 运行 (默认端口 8765)
-./goworkbro-server.exe
-
-# 自定义端口和 Obsidian 路径
-GOWORKBRO_PORT=9000 OBSIDIAN_VAULT_PATH="C:\Users\ASUS\Documents\Notes" ./goworkbro-server.exe
-```
-
-## API 端点
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/health` | 健康检查 |
-| POST | `/api/todos/sync` | 同步 TODO 列表 |
-| GET | `/api/todos` | 获取所有 TODO |
-| POST | `/api/habits/sync` | 同步习惯列表 |
-| GET | `/api/habits` | 获取所有习惯 |
-| POST | `/api/focus-sessions` | 记录专注会话 |
-| GET | `/api/ustc-news/today` | 今日 USTC 要闻 |
-| GET | `/api/ustc-news?date=YYYY-MM-DD` | 指定日期 USTC 要闻 |
-| GET | `/api/ustc-news/dates` | 可用日期列表 |
-
-## 技术栈
-
-- **前端**: Flutter 3.44 + Dart 3.12
-- **后端**: Go 1.26 + rs/cors
-- **数据库**: SQLite (sqflite_common_ffi — 跨平台)
-- **状态管理**: Provider
-- **图表**: fl_chart
-- **Markdown**: flutter_markdown (USTC 要闻渲染)
-
-## 环境要求
+### Prerequisites
 
 - Flutter 3.44+ (stable channel)
-- Go 1.26+ (后端)
-- Android SDK 36+ (Android 端)
-- Visual Studio 2022+ with C++ workload (Windows 桌面端)
-- Java 21 (Android 构建)
+- Dart 3.12+
+- For Windows: Visual Studio with C++ desktop workload
+- For Android: Android SDK, JDK 21
+- A Supabase project (free tier works)
+
+### Setup
+
+1. **Clone & install dependencies:**
+   ```bash
+   git clone https://github.com/AzarAI-TOP/GoWorkBro.git
+   cd GoWorkBro
+   flutter pub get
+   ```
+
+2. **Configure Supabase credentials:**
+   Create `lib/services/local_config.dart` (gitignored):
+   ```dart
+   const String localSupabaseUrl = 'https://your-project.supabase.co';
+   const String localSupabaseAnonKey = 'your-publishable-key';
+   ```
+
+3. **Set up Supabase database:**
+   Run `supabase/schema.sql` in Supabase Dashboard → SQL Editor.
+
+4. **Run:**
+   ```bash
+   # Using dev script (reads local_config.dart):
+   bash dev.sh
+
+   # Or manually with --dart-define:
+   flutter run --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...
+   ```
+
+### Build
+
+```bash
+# Windows release
+flutter build windows --release --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...
+
+# Android APK
+flutter build apk --release --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...
+```
+
+## Configuration
+
+### USTC Daily News
+
+The Today screen displays USTC daily news fetched from:
+1. **Supabase** `ustc_news` table (cloud, works on all platforms)
+2. **Local Obsidian vault** (desktop fallback, path configurable via settings)
+
+To upload news to Supabase, use the included script:
+```bash
+python scripts/upload_ustc_news.py YYYY-MM-DD /path/to/news.md
+```
+
+### Windows Tray
+
+On Windows, closing the window hides the app to the system tray.
+Right-click the tray icon to show the window or quit.
+
+## Tech Stack
+
+- **Flutter** 3.44 + Dart 3.12
+- **State**: Provider (ChangeNotifier)
+- **Database**: SQLite via sqflite_common_ffi
+- **Cloud**: Supabase (Auth, Postgres, Realtime)
+- **Charts**: fl_chart
+- **Markdown**: flutter_markdown
+- **Fonts**: LXGW WenKai (霞鹜文楷)
+- **Desktop**: window_manager + tray_manager
+
+## License
+
+© 2026 AzarAI. All rights reserved.

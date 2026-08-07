@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.azarai" "\0"
-            VALUE "FileDescription", "goworkbro" "\0"
+            VALUE "CompanyName", "AzarAI" "\0"
+            VALUE "FileDescription", "GoWorkBro — Todo & Focus Manager" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "goworkbro" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.azarai. All rights reserved." "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 AzarAI. All rights reserved." "\0"
             VALUE "OriginalFilename", "goworkbro.exe" "\0"
-            VALUE "ProductName", "goworkbro" "\0"
+            VALUE "ProductName", "GoWorkBro" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
