@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'database_service.dart';
 import 'supabase_config.dart';
@@ -41,7 +42,9 @@ class ApiService {
           markdown: data['content'] as String,
         );
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Supabase USTC news fetch failed: $e');
+    }
     return null;
   }
 
@@ -74,7 +77,9 @@ class ApiService {
           markdown: markdown,
         );
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Local vault read failed: $e');
+    }
     return null;
   }
 
@@ -98,7 +103,9 @@ class ApiService {
           );
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Supabase latest news fetch failed: $e');
+    }
 
     // Fallback to local vault
     return _fetchUstcNewsFromLocalVault(null);
@@ -118,7 +125,9 @@ class ApiService {
           return data.map((row) => row['date'] as String).toList();
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Supabase news dates fetch failed: $e');
+    }
 
     try {
       final vaultPath = await DatabaseService.getSetting('obsidian_vault_path') ??
@@ -137,7 +146,8 @@ class ApiService {
       }
       dates.sort((a, b) => b.compareTo(a));
       return dates;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Local vault dates listing failed: $e');
       return [];
     }
   }

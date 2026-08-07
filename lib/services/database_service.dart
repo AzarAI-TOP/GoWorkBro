@@ -155,8 +155,7 @@ class DatabaseService {
   /// Incomplete todos carry over automatically (no action needed).
   static Future<void> rollOverTodos(String todayDate) async {
     final db = await database;
-    // Delete all completed todos — the "明天继续" copy was already created
-    // at the moment of completion, so there's nothing to reset.
+    // Delete completed — keepTomorrow copies were already created at completion time.
     await db.delete('todos', where: 'is_completed = 1');
   }
 

@@ -35,7 +35,6 @@ void main() async {
     );
     // Prevent default close — we hide to tray instead
     await windowManager.setPreventClose(true);
-    // Initialize system tray
     await TrayService().init();
   }
 
