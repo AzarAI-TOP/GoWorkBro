@@ -159,15 +159,13 @@ class UstcNews {
 /// when no setting is configured. On mobile this returns an empty string
 /// (no local vault), so the fallback gracefully does nothing.
 String _defaultVaultPath() {
+  // Desktop: ~/Documents/Notes (works for any user)
+  final home = Platform.environment['HOME'] ??
+      Platform.environment['USERPROFILE'] ??
+      '';
+  if (home.isEmpty) return '';
   if (Platform.isWindows) {
-    return r'C:\Users\ASUS\Documents\Notes';
+    return '$home\\Documents\\Notes';
   }
-  if (Platform.isMacOS) {
-    return '${Platform.environment['HOME']}/Documents/Notes';
-  }
-  if (Platform.isLinux) {
-    return '${Platform.environment['HOME']}/Documents/Notes';
-  }
-  // Mobile — no local vault
-  return '';
+  return '$home/Documents/Notes';
 }
