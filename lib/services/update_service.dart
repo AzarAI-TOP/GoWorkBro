@@ -40,8 +40,9 @@ class UpdateService {
       String? apkUrl;
       final assets = data['assets'] as List? ?? [];
       for (final asset in assets) {
-        final name = (asset['name'] as String?) ?? '';
-        final url = asset['browser_download_url'] as String?;
+        final assetMap = asset as Map<String, dynamic>;
+        final name = (assetMap['name'] as String?) ?? '';
+        final url = assetMap['browser_download_url'] as String?;
         if (name.endsWith('.msi')) msiUrl = url;
         if (name.endsWith('.apk')) apkUrl = url;
       }
