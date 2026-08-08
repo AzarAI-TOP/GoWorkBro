@@ -3,7 +3,7 @@
 ; Output: GoWorkBro-Setup-v1.0.0.exe
 
 #define MyAppName "GoWorkBro"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.0.1"
 #define MyAppPublisher "AzarAI"
 #define MyAppURL "https://github.com/AzarAI-TOP/GoWorkBro"
 #define MyAppExeName "goworkbro.exe"
