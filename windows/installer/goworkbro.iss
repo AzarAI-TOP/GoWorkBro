@@ -3,7 +3,7 @@
 ; Output version follows MyAppVersion below.
 
 #define MyAppName "GoWorkBro"
-#define MyAppVersion "1.0.2"
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "AzarAI"
 #define MyAppURL "https://github.com/AzarAI-TOP/GoWorkBro"
 #define MyAppExeName "goworkbro.exe"
