@@ -1,6 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../services/app_locale.dart';
 
 /// Login / Register screen.
 /// Shown when the user is not authenticated.
@@ -20,6 +23,7 @@ class _AuthScreenState extends State<AuthScreen> {
   bool _loading = false;
   bool _obscurePassword = true;
   String? _error;
+  S get _s => S.of(context.read<AppLocaleProvider>().locale);
 
   @override
   void dispose() {
@@ -37,12 +41,15 @@ class _AuthScreenState extends State<AuthScreen> {
     try {
       await Supabase.instance.client.auth.signInWithPassword(
         email: const String.fromEnvironment('TEST_EMAIL', defaultValue: ''),
-        password: const String.fromEnvironment('TEST_PASSWORD', defaultValue: ''),
+        password: const String.fromEnvironment(
+          'TEST_PASSWORD',
+          defaultValue: '',
+        ),
       );
     } on AuthException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } catch (e) {
-      if (mounted) setState(() => _error = '登录失败: $e');
+      if (mounted) setState(() => _error = _s.loginFailed(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -53,11 +60,11 @@ class _AuthScreenState extends State<AuthScreen> {
     final password = _passwordController.text.trim();
 
     if (email.isEmpty || password.isEmpty) {
-      setState(() => _error = '请输入邮箱和密码');
+      setState(() => _error = _s.enterEmailPassword);
       return;
     }
     if (password.length < 6) {
-      setState(() => _error = '密码至少 6 位');
+      setState(() => _error = _s.passwordTooShort);
       return;
     }
 
@@ -69,19 +76,13 @@ class _AuthScreenState extends State<AuthScreen> {
     try {
       final client = Supabase.instance.client;
       if (_isLogin) {
-        await client.auth.signInWithPassword(
-          email: email,
-          password: password,
-        );
+        await client.auth.signInWithPassword(email: email, password: password);
       } else {
-        await client.auth.signUp(
-          email: email,
-          password: password,
-        );
+        await client.auth.signUp(email: email, password: password);
         if (client.auth.currentSession == null) {
           if (mounted) {
             setState(() {
-              _error = '注册成功！请检查邮箱完成验证后登录。';
+              _error = _s.registrationSuccess;
               _isLogin = true;
               _loading = false;
             });
@@ -92,17 +93,17 @@ class _AuthScreenState extends State<AuthScreen> {
     } on AuthException catch (e) {
       if (mounted) setState(() => _error = _friendlyError(e.message));
     } catch (_) {
-      if (mounted) setState(() => _error = '网络错误，请检查连接后重试');
+      if (mounted) setState(() => _error = _s.networkError);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
   String _friendlyError(String msg) {
-    if (msg.contains('Invalid login credentials')) return '邮箱或密码错误';
-    if (msg.contains('Email not confirmed')) return '邮箱未验证，请检查邮箱';
-    if (msg.contains('already registered')) return '该邮箱已注册';
-    if (msg.contains('rate limit')) return '操作过于频繁，请稍后再试';
+    if (msg.contains('Invalid login credentials')) return _s.invalidCredentials;
+    if (msg.contains('Email not confirmed')) return _s.emailNotConfirmed;
+    if (msg.contains('already registered')) return _s.emailAlreadyRegistered;
+    if (msg.contains('rate limit')) return _s.rateLimited;
     return msg;
   }
 
@@ -110,20 +111,20 @@ class _AuthScreenState extends State<AuthScreen> {
   Future<void> _showForgotPassword() async {
     final email = _emailController.text.trim();
     if (email.isEmpty) {
-      setState(() => _error = '请先输入邮箱地址');
+      setState(() => _error = _s.enterEmailFirst);
       return;
     }
     try {
       await Supabase.instance.client.auth.resetPasswordForEmail(email);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('密码重置邮件已发送，请检查邮箱')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_s.resetEmailSent)));
       }
     } on AuthException catch (e) {
       if (mounted) setState(() => _error = _friendlyError(e.message));
     } catch (_) {
-      if (mounted) setState(() => _error = '发送失败，请检查网络连接');
+      if (mounted) setState(() => _error = _s.sendFailed);
     }
   }
 
@@ -131,6 +132,7 @@ class _AuthScreenState extends State<AuthScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    final s = S.of(context.watch<AppLocaleProvider>().locale);
 
     return Scaffold(
       body: SafeArea(
@@ -165,14 +167,12 @@ class _AuthScreenState extends State<AuthScreen> {
                     ),
                   ),
                   Text(
-                    _isLogin ? '登录' : '注册',
+                    _isLogin ? s.login : s.register,
                     style: theme.textTheme.headlineMedium,
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    _isLogin
-                        ? '登录你的账号，同步跨设备数据'
-                        : '创建新账号，开始记录你的专注时光',
+                    _isLogin ? s.loginSubtitle : s.registerSubtitle,
                     style: theme.textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 32),
@@ -180,10 +180,10 @@ class _AuthScreenState extends State<AuthScreen> {
                   // Email
                   TextField(
                     controller: _emailController,
-                    decoration: const InputDecoration(
-                      labelText: '邮箱',
+                    decoration: InputDecoration(
+                      labelText: s.email,
                       hintText: 'you@example.com',
-                      prefixIcon: Icon(Icons.email_outlined),
+                      prefixIcon: const Icon(Icons.email_outlined),
                     ),
                     keyboardType: TextInputType.emailAddress,
                     textInputAction: TextInputAction.next,
@@ -195,8 +195,8 @@ class _AuthScreenState extends State<AuthScreen> {
                   TextField(
                     controller: _passwordController,
                     decoration: InputDecoration(
-                      labelText: '密码',
-                      hintText: '至少 6 位',
+                      labelText: s.password,
+                      hintText: s.passwordHint,
                       prefixIcon: const Icon(Icons.lock_outline),
                       suffixIcon: IconButton(
                         icon: Icon(
@@ -252,7 +252,7 @@ class _AuthScreenState extends State<AuthScreen> {
                               color: Colors.white,
                             ),
                           )
-                        : Text(_isLogin ? '登录' : '注册'),
+                        : Text(_isLogin ? s.login : s.register),
                   ),
                   const SizedBox(height: 16),
 
@@ -263,8 +263,11 @@ class _AuthScreenState extends State<AuthScreen> {
                       child: TextButton(
                         onPressed: _loading ? null : _showForgotPassword,
                         child: Text(
-                          '忘记密码？',
-                          style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                          s.forgotPassword,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: cs.onSurfaceVariant,
+                          ),
                         ),
                       ),
                     ),
@@ -279,28 +282,27 @@ class _AuthScreenState extends State<AuthScreen> {
                               _error = null;
                             });
                           },
-                    child: Text(
-                      _isLogin
-                          ? '没有账号？点击注册'
-                          : '已有账号？点击登录',
-                    ),
+                    child: Text(_isLogin ? s.noAccount : s.haveAccount),
                   ),
                   // Use offline (#13)
                   if (widget.onUseOffline != null)
                     TextButton(
                       onPressed: _loading ? null : widget.onUseOffline,
                       child: Text(
-                        '离线使用（不同步数据）',
-                        style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                        s.useOffline,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: cs.onSurfaceVariant,
+                        ),
                       ),
                     ),
                   // Dev quick-login (debug mode only)
                   if (kDebugMode)
                     TextButton(
                       onPressed: _loading ? null : _devQuickLogin,
-                      child: const Text(
-                        '🧪 快速登录 (测试)',
-                        style: TextStyle(fontSize: 12),
+                      child: Text(
+                        s.quickLogin,
+                        style: const TextStyle(fontSize: 12),
                       ),
                     ),
                 ],

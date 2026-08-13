@@ -22,10 +22,12 @@ class WeeklyBarCard extends StatelessWidget {
       return 0.0;
     });
 
-    final maxY = (hours.fold<double>(0, (a, b) => a > b ? a : b) * 1.2)
-        .clamp(1.0, double.infinity);
+    final maxY = (hours.fold<double>(0, (a, b) => a > b ? a : b) * 1.2).clamp(
+      1.0,
+      double.infinity,
+    );
 
-    final labels = _last7DayLabels();
+    final labels = _last7DayLabels(s);
 
     return Card(
       elevation: 0,
@@ -101,7 +103,9 @@ class WeeklyBarCard extends StatelessWidget {
                     ),
                   ),
                   borderData: FlBorderData(show: false),
-                  barGroups: List<BarChartGroupData>.generate(hours.length, (i) {
+                  barGroups: List<BarChartGroupData>.generate(hours.length, (
+                    i,
+                  ) {
                     final isToday = i == hours.length - 1;
                     return BarChartGroupData(
                       x: i,
@@ -162,13 +166,12 @@ class WeeklyBarCard extends StatelessWidget {
     );
   }
 
-  List<String> _last7DayLabels() {
+  List<String> _last7DayLabels(S s) {
     final now = DateTime.now();
     final labels = <String>[];
-    const week = ['日', '一', '二', '三', '四', '五', '六'];
     for (int i = 6; i >= 0; i--) {
       final d = now.subtract(Duration(days: i));
-      labels.add(week[d.weekday % 7]);
+      labels.add(s.weekdayShort(d.weekday));
     }
     return labels;
   }

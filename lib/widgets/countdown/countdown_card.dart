@@ -20,15 +20,21 @@ class CountdownCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final s = S.of(context.watch<AppLocaleProvider>().locale);
-    final color = AppTheme.chartColors[countdown.colorIndex % AppTheme.chartColors.length];
+    final color = AppTheme
+        .chartColors[countdown.colorIndex % AppTheme.chartColors.length];
     final remaining = countdown.remaining;
     final expired = countdown.isExpired;
 
     // Progress ring: shows REMAINING proportion (full = lots of time, empty = almost done)
-    final totalDuration = countdown.targetDateTime.difference(DateTime.parse(countdown.createdDate));
+    final totalDuration = countdown.targetDateTime.difference(
+      DateTime.parse(countdown.createdDate),
+    );
     double remainingRatio = 0;
     if (totalDuration.inSeconds > 0) {
-      remainingRatio = (remaining.inSeconds / totalDuration.inSeconds).clamp(0.0, 1.0);
+      remainingRatio = (remaining.inSeconds / totalDuration.inSeconds).clamp(
+        0.0,
+        1.0,
+      );
     }
 
     final days = remaining.isNegative ? 0 : remaining.inDays;
@@ -48,18 +54,25 @@ class CountdownCard extends StatelessWidget {
             children: [
               // Progress ring (remaining)
               SizedBox(
-                width: 72, height: 72,
+                width: 72,
+                height: 72,
                 child: Stack(
                   children: [
                     CircularProgressIndicator(
                       value: expired ? 0.0 : remainingRatio,
                       strokeWidth: 4,
                       backgroundColor: color.withValues(alpha: 0.15),
-                      valueColor: AlwaysStoppedAnimation(expired ? theme.colorScheme.onSurfaceVariant : color),
+                      valueColor: AlwaysStoppedAnimation(
+                        expired ? theme.colorScheme.onSurfaceVariant : color,
+                      ),
                     ),
                     Center(
                       child: expired
-                          ? Icon(Icons.check, color: theme.colorScheme.onSurfaceVariant, size: 28)
+                          ? Icon(
+                              Icons.check,
+                              color: theme.colorScheme.onSurfaceVariant,
+                              size: 28,
+                            )
                           : Icon(Icons.hourglass_top, color: color, size: 28),
                     ),
                   ],
@@ -75,13 +88,24 @@ class CountdownCard extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
-                        decoration: expired ? TextDecoration.lineThrough : TextDecoration.none,
-                        color: expired ? theme.colorScheme.onSurfaceVariant : theme.colorScheme.onSurface,
+                        decoration: expired
+                            ? TextDecoration.lineThrough
+                            : TextDecoration.none,
+                        color: expired
+                            ? theme.colorScheme.onSurfaceVariant
+                            : theme.colorScheme.onSurface,
                       ),
                     ),
                     const SizedBox(height: 8),
                     if (expired)
-                      Text(s.countdownFinished, style: TextStyle(fontSize: 14, color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.w500))
+                      Text(
+                        s.countdownFinished,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: theme.colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      )
                     else ...[
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -100,7 +124,9 @@ class CountdownCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        '目标：${_formatDateTime(countdown.targetDateTime)}',
+                        s.countdownTarget(
+                          _formatDateTime(countdown.targetDateTime),
+                        ),
                         style: theme.textTheme.bodySmall,
                       ),
                     ],
@@ -137,7 +163,10 @@ class CountdownCard extends StatelessWidget {
           ),
           TextSpan(
             text: unit,
-            style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
+            style: TextStyle(
+              fontSize: 12,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),
@@ -154,11 +183,17 @@ class CountdownCard extends StatelessWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(s.deleteCountdownTitle),
-        content: Text('确认删除「${countdown.title}」？'),
+        content: Text(s.confirmDeleteCountdown(countdown.title)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text(s.cancel)),
           TextButton(
-            onPressed: () { Navigator.pop(context); onDelete(); },
+            onPressed: () => Navigator.pop(context),
+            child: Text(s.cancel),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              onDelete();
+            },
             style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: Text(s.delete),
           ),

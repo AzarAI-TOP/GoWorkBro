@@ -20,7 +20,7 @@ class TodoScreen extends StatefulWidget {
   State<TodoScreen> createState() => _TodoScreenState();
 }
 
-class _TodoScreenState extends State<TodoScreen> with SingleTickerProviderStateMixin {
+class _TodoScreenState extends State<TodoScreen> with TickerProviderStateMixin {
   // ---- Combined display list ----
   // Order: incomplete todos (by sortOrder) → completed todos (by completedDate desc) → habits
   List<Object> _combined(AppProvider p) {
@@ -49,16 +49,23 @@ class _TodoScreenState extends State<TodoScreen> with SingleTickerProviderStateM
       var newHabitIndex = newIndex - habitStartIndex;
       if (newHabitIndex < 0) newHabitIndex = 0;
       if (newHabitIndex > habits.length) newHabitIndex = habits.length;
-      if (oldHabitIndex == newHabitIndex || newHabitIndex == oldHabitIndex + 1) return;
+      if (oldHabitIndex == newHabitIndex ||
+          newHabitIndex == oldHabitIndex + 1) {
+        return;
+      }
       provider.reorderHabits(oldHabitIndex, newHabitIndex);
     } else if (oldItem is Todo) {
       // Todo drag — only allow reordering among incomplete todos.
       if (oldItem.isCompleted) return;
-      final incompleteTodos = provider.todos.where((t) => !t.isCompleted).toList();
+      final incompleteTodos = provider.todos
+          .where((t) => !t.isCompleted)
+          .toList();
       final oldIncompleteIndex = incompleteTodos.indexOf(oldItem);
       // Map display index to incomplete-todo index
       var newIncompleteIndex = newIndex;
-      if (newIncompleteIndex > oldIndex) newIncompleteIndex--; // undo Flutter's pre-adjustment
+      if (newIncompleteIndex > oldIndex) {
+        newIncompleteIndex--; // undo Flutter's pre-adjustment
+      }
       newIncompleteIndex = newIncompleteIndex.clamp(0, incompleteTodos.length);
       if (oldIncompleteIndex == newIncompleteIndex) return;
 
@@ -83,9 +90,9 @@ class _TodoScreenState extends State<TodoScreen> with SingleTickerProviderStateM
     if (todo.timingType == TimingType.none) {
       context.read<AppProvider>().toggleTodoComplete(todo);
     } else {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => TimerScreen(todo: todo)),
-      );
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => TimerScreen(todo: todo)));
     }
   }
 
@@ -105,7 +112,10 @@ class _TodoScreenState extends State<TodoScreen> with SingleTickerProviderStateM
       duration: const Duration(milliseconds: 200),
       vsync: this,
     );
-    scaleAnim = CurvedAnimation(parent: animController, curve: Curves.easeOutBack);
+    scaleAnim = CurvedAnimation(
+      parent: animController,
+      curve: Curves.easeOutBack,
+    );
 
     void dismiss() {
       _overlayShowing = false;
@@ -156,8 +166,14 @@ class _TodoScreenState extends State<TodoScreen> with SingleTickerProviderStateM
               },
             ),
             ListTile(
-              leading: const Icon(Icons.delete_outline, color: Colors.redAccent),
-              title: Text(s.delete, style: const TextStyle(color: Colors.redAccent)),
+              leading: const Icon(
+                Icons.delete_outline,
+                color: Colors.redAccent,
+              ),
+              title: Text(
+                s.delete,
+                style: const TextStyle(color: Colors.redAccent),
+              ),
               onTap: () {
                 Navigator.pop(ctx);
                 _confirmDelete(item);
@@ -170,6 +186,52 @@ class _TodoScreenState extends State<TodoScreen> with SingleTickerProviderStateM
     );
   }
 
+  Future<void> _showDesktopContextMenu(
+    Object item,
+    TapDownDetails details,
+  ) async {
+    final s = S.of(context.read<AppLocaleProvider>().locale);
+    final overlay =
+        Overlay.of(context).context.findRenderObject()! as RenderBox;
+    final action = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromRect(
+        Rect.fromPoints(details.globalPosition, details.globalPosition),
+        Offset.zero & overlay.size,
+      ),
+      items: [
+        PopupMenuItem(
+          value: 'edit',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.edit_outlined),
+            title: Text(s.edit),
+          ),
+        ),
+        PopupMenuItem(
+          value: 'delete',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.delete_outline, color: Colors.redAccent),
+            title: Text(
+              s.delete,
+              style: const TextStyle(color: Colors.redAccent),
+            ),
+          ),
+        ),
+      ],
+    );
+    if (!mounted || action == null) return;
+    if (action == 'edit') {
+      if (item is Todo) await _openTodoEdit(item);
+      if (item is Habit) await _openHabitEdit(item);
+    } else if (action == 'delete') {
+      await _confirmDelete(item);
+    }
+  }
+
   Future<void> _confirmDelete(Object item) async {
     final s = S.of(context.read<AppLocaleProvider>().locale);
     String title;
@@ -178,7 +240,7 @@ class _TodoScreenState extends State<TodoScreen> with SingleTickerProviderStateM
     } else if (item is Habit) {
       title = item.title;
     } else {
-      title = '此项';
+      title = s.genericItem;
     }
     final confirmed = await showDialog<bool>(
       context: context,
@@ -186,7 +248,10 @@ class _TodoScreenState extends State<TodoScreen> with SingleTickerProviderStateM
         title: Text(s.delete),
         content: Text(s.confirmDelete(title)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(s.cancel)),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(s.cancel),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
@@ -228,7 +293,9 @@ class _TodoScreenState extends State<TodoScreen> with SingleTickerProviderStateM
     if (result == null || !mounted) return;
     final provider = context.read<AppProvider>();
     if (existing == null) {
-      await provider.addHabit(result.copyWith(sortOrder: provider.habits.length));
+      await provider.addHabit(
+        result.copyWith(sortOrder: provider.habits.length),
+      );
     } else {
       await provider.updateHabit(result);
     }
@@ -311,6 +378,8 @@ class _TodoScreenState extends State<TodoScreen> with SingleTickerProviderStateM
                     index: index,
                     onToggle: () => _onTodoTap(context, item),
                     onLongPress: () => _showItemOptions(item),
+                    onSecondaryTapDown: (details) =>
+                        _showDesktopContextMenu(item, details),
                     showDragHandle: !item.isCompleted,
                   );
                 }
@@ -324,6 +393,8 @@ class _TodoScreenState extends State<TodoScreen> with SingleTickerProviderStateM
                     onDecrement: () =>
                         context.read<AppProvider>().decrementHabit(item),
                     onLongPress: () => _showItemOptions(item),
+                    onSecondaryTapDown: (details) =>
+                        _showDesktopContextMenu(item, details),
                   );
                 }
                 return SizedBox.shrink(key: Key('empty_$index'));
@@ -331,7 +402,7 @@ class _TodoScreenState extends State<TodoScreen> with SingleTickerProviderStateM
             ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showAddOverlay,
-        tooltip: '添加',
+        tooltip: s.add,
         child: const Icon(Icons.add),
       ),
     );
@@ -354,44 +425,49 @@ class _AddOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
-
     return Material(
       color: Colors.black54,
       child: GestureDetector(
         onTap: onDismiss,
         behavior: HitTestBehavior.opaque,
-        child: Container(
-          width: screenSize.width,
-          height: screenSize.height,
-          color: Colors.transparent,
-          child: Center(
-            child: GestureDetector(
-              onTap: () {}, // swallow taps on the buttons row
-              child: ScaleTransition(
-                scale: scaleAnim,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // Left button — TODO (25% width, orange)
-                    _BigButton(
-                      label: 'TODO',
-                      color: const Color(0xFFE85D3C),
-                      widthFraction: 0.25,
-                      onTap: onTodo,
+        child: SizedBox.expand(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final diameter = (constraints.maxWidth * 0.22).clamp(
+                112.0,
+                184.0,
+              );
+              return Stack(
+                children: [
+                  Positioned(
+                    left: constraints.maxWidth * 0.25 - diameter / 2,
+                    top: constraints.maxHeight / 2 - diameter / 2,
+                    child: ScaleTransition(
+                      scale: scaleAnim,
+                      child: _BigButton(
+                        label: 'TODO',
+                        color: const Color(0xFFE85D3C),
+                        diameter: diameter,
+                        onTap: onTodo,
+                      ),
                     ),
-                    const SizedBox(width: 16),
-                    // Right button — Habit (75% width, blue)
-                    _BigButton(
-                      label: 'Habit',
-                      color: const Color(0xFF4A90D9),
-                      widthFraction: 0.75,
-                      onTap: onHabit,
+                  ),
+                  Positioned(
+                    left: constraints.maxWidth * 0.75 - diameter / 2,
+                    top: constraints.maxHeight / 2 - diameter / 2,
+                    child: ScaleTransition(
+                      scale: scaleAnim,
+                      child: _BigButton(
+                        label: 'HABIT',
+                        color: const Color(0xFF4A90D9),
+                        diameter: diameter,
+                        onTap: onHabit,
+                      ),
                     ),
-                  ],
-                ),
-              ),
-            ),
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -402,31 +478,26 @@ class _AddOverlay extends StatelessWidget {
 class _BigButton extends StatelessWidget {
   final String label;
   final Color color;
-  final double widthFraction;
+  final double diameter;
   final VoidCallback onTap;
 
   const _BigButton({
     required this.label,
     required this.color,
-    required this.widthFraction,
+    required this.diameter,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final screenW = MediaQuery.of(context).size.width;
-    final btnWidth = screenW * widthFraction;
-    // Keep ~120 tall, but if width fraction is small, use at least 120
-    final btnHeight = 120.0;
-
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: btnWidth,
-        height: btnHeight,
+        width: diameter,
+        height: diameter,
         decoration: BoxDecoration(
           color: color,
-          borderRadius: BorderRadius.circular(20),
+          shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
               color: color.withValues(alpha: 0.4),
@@ -435,16 +506,15 @@ class _BigButton extends StatelessWidget {
             ),
           ],
         ),
-        child: Center(
-          child: Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 1.5,
-              decoration: TextDecoration.none,
-            ),
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 24,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 1.5,
+            decoration: TextDecoration.none,
           ),
         ),
       ),

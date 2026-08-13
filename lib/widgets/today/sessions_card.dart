@@ -39,7 +39,7 @@ class SessionsCard extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 24),
                 child: Center(
                   child: Text(
-                    '还没有${s.pomodoroCount}记录',
+                    s.noPomodoroRecords,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: colorScheme.onSurfaceVariant,
                     ),
@@ -47,8 +47,7 @@ class SessionsCard extends StatelessWidget {
                 ),
               )
             else
-              for (final s in sessions)
-                SessionTile(session: s),
+              for (final s in sessions) SessionTile(session: s),
           ],
         ),
       ),

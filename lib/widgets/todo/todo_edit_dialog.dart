@@ -72,7 +72,9 @@ class _TodoEditDialogState extends State<TodoEditDialog> {
     if (title.isEmpty) {
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         SnackBar(
-          content: Text(S.of(context.read<AppLocaleProvider>().locale).enterTitle),
+          content: Text(
+            S.of(context.read<AppLocaleProvider>().locale).enterTitle,
+          ),
           duration: const Duration(milliseconds: 900),
         ),
       );
@@ -103,7 +105,7 @@ class _TodoEditDialogState extends State<TodoEditDialog> {
     final theme = Theme.of(context);
     final s = S.of(context.read<AppLocaleProvider>().locale);
     return AlertDialog(
-      title: Text(widget.initial == null ? s.addTodo : '编辑待办'),
+      title: Text(widget.initial == null ? s.addTodo : s.editTodo),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -171,7 +173,8 @@ class _TodoEditDialogState extends State<TodoEditDialog> {
                   ChoiceChip(
                     label: Text(s.customMin),
                     selected: _durationChoice == 'custom',
-                    onSelected: (_) => setState(() => _durationChoice = 'custom'),
+                    onSelected: (_) =>
+                        setState(() => _durationChoice = 'custom'),
                   ),
                 ],
               ),

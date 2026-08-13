@@ -18,7 +18,9 @@ class AddCountdownSheet extends StatefulWidget {
 class AddCountdownSheetState extends State<AddCountdownSheet> {
   final _titleController = TextEditingController();
   DateTime _selectedDate = DateTime.now().add(const Duration(hours: 1));
-  TimeOfDay _selectedTime = TimeOfDay.fromDateTime(DateTime.now().add(const Duration(hours: 1)));
+  TimeOfDay _selectedTime = TimeOfDay.fromDateTime(
+    DateTime.now().add(const Duration(hours: 1)),
+  );
   int _selectedColor = 0;
 
   @override
@@ -45,7 +47,9 @@ class AddCountdownSheetState extends State<AddCountdownSheet> {
     final isEditing = widget.existing != null;
     return Padding(
       padding: EdgeInsets.only(
-        left: 24, right: 24, top: 24,
+        left: 24,
+        right: 24,
+        top: 24,
         bottom: MediaQuery.of(context).viewInsets.bottom + 24,
       ),
       child: Column(
@@ -54,7 +58,8 @@ class AddCountdownSheetState extends State<AddCountdownSheet> {
         children: [
           Center(
             child: Container(
-              width: 40, height: 4,
+              width: 40,
+              height: 4,
               decoration: BoxDecoration(
                 color: theme.colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(2),
@@ -62,11 +67,17 @@ class AddCountdownSheetState extends State<AddCountdownSheet> {
             ),
           ),
           const SizedBox(height: 20),
-          Text(isEditing ? '编辑倒计时' : '新建倒计时', style: theme.textTheme.titleLarge),
+          Text(
+            isEditing ? s.editCountdown : s.newCountdown,
+            style: theme.textTheme.titleLarge,
+          ),
           const SizedBox(height: 16),
           TextField(
             controller: _titleController,
-            decoration: InputDecoration(labelText: '标题', hintText: '如：考试、截止日期'),
+            decoration: InputDecoration(
+              labelText: s.title,
+              hintText: s.countdownTitleHint,
+            ),
             autofocus: true,
           ),
           const SizedBox(height: 16),
@@ -76,7 +87,9 @@ class AddCountdownSheetState extends State<AddCountdownSheet> {
                 child: OutlinedButton.icon(
                   onPressed: _pickDate,
                   icon: const Icon(Icons.calendar_today, size: 18),
-                  label: Text('${_selectedDate.year}/${_selectedDate.month}/${_selectedDate.day}'),
+                  label: Text(
+                    '${_selectedDate.year}/${_selectedDate.month}/${_selectedDate.day}',
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -84,13 +97,15 @@ class AddCountdownSheetState extends State<AddCountdownSheet> {
                 child: OutlinedButton.icon(
                   onPressed: _pickTime,
                   icon: const Icon(Icons.access_time, size: 18),
-                  label: Text('${_selectedTime.hour.toString().padLeft(2, '0')}:${_selectedTime.minute.toString().padLeft(2, '0')}'),
+                  label: Text(
+                    '${_selectedTime.hour.toString().padLeft(2, '0')}:${_selectedTime.minute.toString().padLeft(2, '0')}',
+                  ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 16),
-          Text('颜色', style: theme.textTheme.bodyMedium),
+          Text(s.color, style: theme.textTheme.bodyMedium),
           const SizedBox(height: 8),
           Wrap(
             spacing: 12,
@@ -100,16 +115,21 @@ class AddCountdownSheetState extends State<AddCountdownSheet> {
               return GestureDetector(
                 onTap: () => setState(() => _selectedColor = i),
                 child: Container(
-                  width: 36, height: 36,
+                  width: 36,
+                  height: 36,
                   decoration: BoxDecoration(
                     color: color,
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: selected ? theme.colorScheme.onSurface : Colors.transparent,
+                      color: selected
+                          ? theme.colorScheme.onSurface
+                          : Colors.transparent,
                       width: 3,
                     ),
                   ),
-                  child: selected ? const Icon(Icons.check, color: Colors.white, size: 18) : null,
+                  child: selected
+                      ? const Icon(Icons.check, color: Colors.white, size: 18)
+                      : null,
                 ),
               );
             }),
@@ -131,35 +151,52 @@ class AddCountdownSheetState extends State<AddCountdownSheet> {
     final title = _titleController.text.trim();
     if (title.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(S.of(context.read<AppLocaleProvider>().locale).enterTitle), duration: const Duration(milliseconds: 900)),
+        SnackBar(
+          content: Text(
+            S.of(context.read<AppLocaleProvider>().locale).enterTitle,
+          ),
+          duration: const Duration(milliseconds: 900),
+        ),
       );
       return;
     }
     final target = DateTime(
-      _selectedDate.year, _selectedDate.month, _selectedDate.day,
-      _selectedTime.hour, _selectedTime.minute,
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+      _selectedTime.hour,
+      _selectedTime.minute,
     );
     if (!target.isAfter(DateTime.now())) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(S.of(context.read<AppLocaleProvider>().locale).targetMustBeFuture), duration: const Duration(milliseconds: 1200)),
+        SnackBar(
+          content: Text(
+            S.of(context.read<AppLocaleProvider>().locale).targetMustBeFuture,
+          ),
+          duration: const Duration(milliseconds: 1200),
+        ),
       );
       return;
     }
     if (widget.existing != null) {
       // #7: Update in place instead of delete-then-add (no data loss risk)
-      widget.provider.updateCountdown(Countdown(
-        id: widget.existing!.id,
-        title: title,
-        targetDateTime: target,
-        createdDate: widget.existing!.createdDate,
-        colorIndex: _selectedColor,
-      ));
+      widget.provider.updateCountdown(
+        Countdown(
+          id: widget.existing!.id,
+          title: title,
+          targetDateTime: target,
+          createdDate: widget.existing!.createdDate,
+          colorIndex: _selectedColor,
+        ),
+      );
     } else {
-      widget.provider.addCountdown(Countdown.create(
-        title: title,
-        targetDateTime: target,
-        colorIndex: _selectedColor,
-      ));
+      widget.provider.addCountdown(
+        Countdown.create(
+          title: title,
+          targetDateTime: target,
+          colorIndex: _selectedColor,
+        ),
+      );
     }
     Navigator.pop(context);
   }
@@ -167,7 +204,9 @@ class AddCountdownSheetState extends State<AddCountdownSheet> {
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: _selectedDate.isAfter(DateTime.now()) ? _selectedDate : DateTime.now(),
+      initialDate: _selectedDate.isAfter(DateTime.now())
+          ? _selectedDate
+          : DateTime.now(),
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
     );

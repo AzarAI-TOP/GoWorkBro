@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/models.dart';
+import '../../services/app_locale.dart';
+import 'package:provider/provider.dart';
 
 /// TODO item card widget — no circle icon (tap to toggle complete)
 class TodoCard extends StatelessWidget {
@@ -9,6 +11,7 @@ class TodoCard extends StatelessWidget {
   final int index;
   final VoidCallback onToggle;
   final VoidCallback onLongPress;
+  final ValueChanged<TapDownDetails> onSecondaryTapDown;
   final bool showDragHandle;
 
   const TodoCard({
@@ -17,6 +20,7 @@ class TodoCard extends StatelessWidget {
     required this.index,
     required this.onToggle,
     required this.onLongPress,
+    required this.onSecondaryTapDown,
     this.showDragHandle = true,
   });
 
@@ -25,6 +29,7 @@ class TodoCard extends StatelessWidget {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final isDone = todo.isCompleted;
+    final s = S.of(context.read<AppLocaleProvider>().locale);
 
     Color timingColor(TimingType t) {
       switch (t) {
@@ -39,8 +44,15 @@ class TodoCard extends StatelessWidget {
 
     return Card(
       child: InkWell(
-        onTap: () { HapticFeedback.lightImpact(); onToggle(); },
-        onLongPress: () { HapticFeedback.mediumImpact(); onLongPress(); },
+        onTap: () {
+          HapticFeedback.lightImpact();
+          onToggle();
+        },
+        onLongPress: () {
+          HapticFeedback.mediumImpact();
+          onLongPress();
+        },
+        onSecondaryTapDown: onSecondaryTapDown,
         borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -51,8 +63,11 @@ class TodoCard extends StatelessWidget {
                   index: index,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 2),
-                    child: Icon(Icons.drag_indicator,
-                        color: theme.hintColor, size: 22),
+                    child: Icon(
+                      Icons.drag_indicator,
+                      color: theme.hintColor,
+                      size: 22,
+                    ),
                   ),
                 ),
               if (showDragHandle) const SizedBox(width: 6),
@@ -80,14 +95,23 @@ class TodoCard extends StatelessWidget {
                       runSpacing: 4,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        _infoChip(context, todo.timingType.label,
-                            timingColor(todo.timingType)),
+                        _infoChip(
+                          context,
+                          s.timingLabel(todo.timingType.value),
+                          timingColor(todo.timingType),
+                        ),
                         if (todo.timingType == TimingType.backward)
-                          _infoChip(context, '${todo.durationMinutes}min',
-                              cs.primary),
+                          _infoChip(
+                            context,
+                            '${todo.durationMinutes}min',
+                            cs.primary,
+                          ),
                         if (todo.keepTomorrow)
                           _infoChip(
-                              context, '明天继续', const Color(0xFF50C878)),
+                            context,
+                            s.keepTomorrow,
+                            const Color(0xFF50C878),
+                          ),
                       ],
                     ),
                   ],
@@ -114,10 +138,10 @@ Widget _infoChip(BuildContext context, String text, Color color) {
     child: Text(
       text,
       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: color,
-            fontSize: 11,
-            fontWeight: FontWeight.w500,
-          ),
+        color: color,
+        fontSize: 11,
+        fontWeight: FontWeight.w500,
+      ),
     ),
   );
 }

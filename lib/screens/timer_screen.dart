@@ -99,9 +99,11 @@ class _TimerScreenState extends State<TimerScreen> with WidgetsBindingObserver {
       // #9: Show feedback instead of silently popping
       HapticFeedback.heavyImpact();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('尚未开始计时'),
-          duration: Duration(milliseconds: 1200),
+        SnackBar(
+          content: Text(
+            S.of(context.read<AppLocaleProvider>().locale).timerNotStarted,
+          ),
+          duration: const Duration(milliseconds: 1200),
         ),
       );
       return;
@@ -121,15 +123,19 @@ class _TimerScreenState extends State<TimerScreen> with WidgetsBindingObserver {
     final provider = context.read<AppProvider>();
 
     // #10: Use current title from provider if available
-    final currentTodo = provider.todos.where((t) => t.id == widget.todo.id).firstOrNull;
+    final currentTodo = provider.todos
+        .where((t) => t.id == widget.todo.id)
+        .firstOrNull;
     final currentTitle = currentTodo?.title ?? widget.todo.title;
 
-    provider.recordFocusSession(FocusSession.create(
-      todoId: widget.todo.id,
-      sourceType: 'todo',
-      sourceTitle: currentTitle,
-      durationSeconds: _elapsedSeconds,
-    ));
+    provider.recordFocusSession(
+      FocusSession.create(
+        todoId: widget.todo.id,
+        sourceType: 'todo',
+        sourceTitle: currentTitle,
+        durationSeconds: _elapsedSeconds,
+      ),
+    );
 
     provider.completeTodoWithDuration(widget.todo.id, _elapsedSeconds);
   }
@@ -224,19 +230,36 @@ class _TimerScreenState extends State<TimerScreen> with WidgetsBindingObserver {
                                 fontSize: 56,
                                 fontWeight: FontWeight.w700,
                                 color: cs.onSurface,
-                                fontFeatures: const [FontFeature.tabularFigures()],
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
                               ),
                             ),
                             const SizedBox(height: 8),
                             if (isBackward)
                               Text(
                                 _isFinished ? s.done : s.remaining,
-                                style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: cs.onSurfaceVariant,
+                                ),
                               )
                             else if (!isNoTiming)
-                              Text(s.forwardTimer, style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant))
+                              Text(
+                                s.forwardTimer,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              )
                             else
-                              Text(s.noTimer, style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant)),
+                              Text(
+                                s.noTimer,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              ),
                           ],
                         ),
                       ),
@@ -247,14 +270,25 @@ class _TimerScreenState extends State<TimerScreen> with WidgetsBindingObserver {
                 if (_isFinished) ...[
                   Icon(Icons.check_circle, size: 64, color: cs.primary),
                   const SizedBox(height: 16),
-                  Text(s.focusTime(_formatTime(_elapsedSeconds)), style: theme.textTheme.titleMedium),
+                  Text(
+                    s.focusTime(_formatTime(_elapsedSeconds)),
+                    style: theme.textTheme.titleMedium,
+                  ),
                   const SizedBox(height: 8),
-                  Text('${s.todo}${s.done} ✓', style: theme.textTheme.bodyMedium?.copyWith(color: cs.primary)),
+                  Text(
+                    s.todoDone,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: cs.primary,
+                    ),
+                  ),
                   const SizedBox(height: 24),
                   FilledButton(
                     onPressed: () => Navigator.pop(context),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 32,
+                        vertical: 8,
+                      ),
                       child: Text(s.back),
                     ),
                   ),
@@ -263,12 +297,27 @@ class _TimerScreenState extends State<TimerScreen> with WidgetsBindingObserver {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       if (_isRunning)
-                        _controlButton(icon: Icons.pause, label: s.pause, color: cs.primary, onTap: _pause)
+                        _controlButton(
+                          icon: Icons.pause,
+                          label: s.pause,
+                          color: cs.primary,
+                          onTap: _pause,
+                        )
                       else
-                        _controlButton(icon: Icons.play_arrow, label: s.start, color: cs.primary, onTap: _start),
+                        _controlButton(
+                          icon: Icons.play_arrow,
+                          label: s.start,
+                          color: cs.primary,
+                          onTap: _start,
+                        ),
                       const SizedBox(width: 24),
                       if (_elapsedSeconds > 0) ...[
-                        _controlButton(icon: Icons.stop, label: s.stop, color: cs.error, onTap: _finish),
+                        _controlButton(
+                          icon: Icons.stop,
+                          label: s.stop,
+                          color: cs.error,
+                          onTap: _finish,
+                        ),
                         const SizedBox(width: 24),
                       ],
                       _controlButton(
@@ -327,9 +376,11 @@ class _TimerScreenState extends State<TimerScreen> with WidgetsBindingObserver {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(s.exitTimer),
-        content: Text(_elapsedSeconds > 0
-            ? s.recordPrompt(_formatTime(_elapsedSeconds))
-            : '确定退出计时？'),
+        content: Text(
+          _elapsedSeconds > 0
+              ? s.recordPrompt(_formatTime(_elapsedSeconds))
+              : s.confirmExitTimer,
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),

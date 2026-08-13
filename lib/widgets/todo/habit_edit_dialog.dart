@@ -28,8 +28,9 @@ class _HabitEditDialogState extends State<HabitEditDialog> {
   void initState() {
     super.initState();
     _titleCtrl = TextEditingController(text: widget.initial?.title ?? '');
-    _targetCtrl =
-        TextEditingController(text: (widget.initial?.targetCount ?? 1).toString());
+    _targetCtrl = TextEditingController(
+      text: (widget.initial?.targetCount ?? 1).toString(),
+    );
     final u = widget.initial?.unit ?? '次';
     _customUnitCtrl = TextEditingController();
     _loadSavedUnits();
@@ -72,7 +73,9 @@ class _HabitEditDialogState extends State<HabitEditDialog> {
     if (title.isEmpty) {
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         SnackBar(
-          content: Text(S.of(context.read<AppLocaleProvider>().locale).enterTitle),
+          content: Text(
+            S.of(context.read<AppLocaleProvider>().locale).enterTitle,
+          ),
           duration: const Duration(milliseconds: 900),
         ),
       );
@@ -93,7 +96,10 @@ class _HabitEditDialogState extends State<HabitEditDialog> {
       result = Habit.create(title: title, targetCount: target, unit: finalUnit);
     } else {
       result = widget.initial!.copyWith(
-          title: title, targetCount: target, unit: finalUnit);
+        title: title,
+        targetCount: target,
+        unit: finalUnit,
+      );
     }
     Navigator.of(context).pop(result);
   }
@@ -103,7 +109,7 @@ class _HabitEditDialogState extends State<HabitEditDialog> {
     final theme = Theme.of(context);
     final s = S.of(context.read<AppLocaleProvider>().locale);
     return AlertDialog(
-      title: Text(widget.initial == null ? s.addHabit : '编辑习惯'),
+      title: Text(widget.initial == null ? s.addHabit : s.editHabit),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -130,28 +136,32 @@ class _HabitEditDialogState extends State<HabitEditDialog> {
               spacing: 8,
               runSpacing: 6,
               children: [
-                ..._presetUnits.map((u) => ChoiceChip(
-                      label: Text(u),
-                      selected: !_isCustomUnit && _unit == u,
-                      onSelected: (_) {
-                        setState(() {
-                          _unit = u;
-                          _isCustomUnit = false;
-                        });
-                      },
-                    )),
+                ..._presetUnits.map(
+                  (u) => ChoiceChip(
+                    label: Text(s.habitUnitLabel(u)),
+                    selected: !_isCustomUnit && _unit == u,
+                    onSelected: (_) {
+                      setState(() {
+                        _unit = u;
+                        _isCustomUnit = false;
+                      });
+                    },
+                  ),
+                ),
                 ..._savedUnits
                     .where((u) => !_presetUnits.contains(u))
-                    .map((u) => ChoiceChip(
-                          label: Text(u),
-                          selected: !_isCustomUnit && _unit == u,
-                          onSelected: (_) {
-                            setState(() {
-                              _unit = u;
-                              _isCustomUnit = false;
-                            });
-                          },
-                        )),
+                    .map(
+                      (u) => ChoiceChip(
+                        label: Text(u),
+                        selected: !_isCustomUnit && _unit == u,
+                        onSelected: (_) {
+                          setState(() {
+                            _unit = u;
+                            _isCustomUnit = false;
+                          });
+                        },
+                      ),
+                    ),
                 ChoiceChip(
                   label: Text(s.customMin),
                   selected: _isCustomUnit,

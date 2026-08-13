@@ -2,6 +2,9 @@ import 'dart:io';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'app_locale.dart';
+import 'database_service.dart';
+
 /// Manages the system tray icon and window visibility for background mode.
 ///
 /// On Windows desktop, closing the window hides it to the tray instead of
@@ -18,23 +21,23 @@ class TrayService with TrayListener {
     if (_initialized) return;
     if (!Platform.isWindows && !Platform.isLinux && !Platform.isMacOS) return;
 
+    final savedLocale = await DatabaseService.getSetting('locale');
+    final s = S.of(savedLocale == 'en' ? AppLocale.en : AppLocale.zh);
     await trayManager.setIcon(
       Platform.isWindows
           ? 'assets/icons/app_icon.ico'
           : 'assets/icons/app_icon.png',
     );
-    await trayManager.setToolTip('GoWorkBro — 正在后台运行');
-    await trayManager.setContextMenu(Menu(items: [
-      MenuItem(
-        key: 'show',
-        label: '显示主窗口',
+    await trayManager.setToolTip(s.trayRunning);
+    await trayManager.setContextMenu(
+      Menu(
+        items: [
+          MenuItem(key: 'show', label: s.showMainWindow),
+          MenuItem.separator(),
+          MenuItem(key: 'quit', label: s.exitGoWorkBro),
+        ],
       ),
-      MenuItem.separator(),
-      MenuItem(
-        key: 'quit',
-        label: '退出 GoWorkBro',
-      ),
-    ]));
+    );
 
     trayManager.addListener(this);
     _initialized = true;

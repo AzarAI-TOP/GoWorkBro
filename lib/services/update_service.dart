@@ -1,9 +1,13 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:provider/provider.dart';
+
+import 'app_locale.dart';
 
 /// Checks for app updates by comparing the current version with the latest
 /// GitHub release. On Windows, can download and launch the MSI installer.
@@ -16,22 +20,27 @@ class UpdateService {
   static Future<UpdateInfo?> checkForUpdate() async {
     try {
       final packageInfo = await PackageInfo.fromPlatform();
-      final currentVersion = packageInfo.version; // e.g. "1.0.0"
+      final currentVersion = packageInfo.version;
 
-      final res = await http.get(
-        Uri.parse('https://api.github.com/repos/$_owner/$_repo/releases/latest'),
-        headers: {
-          'Accept': 'application/vnd.github.v3+json',
-          // Use gh auth token if available to avoid rate limits
-          if (Platform.environment.containsKey('GH_TOKEN'))
-            'Authorization': 'Bearer ${Platform.environment['GH_TOKEN']}',
-        },
-      ).timeout(const Duration(seconds: 10));
+      final res = await http
+          .get(
+            Uri.parse(
+              'https://api.github.com/repos/$_owner/$_repo/releases/latest',
+            ),
+            headers: {
+              'Accept': 'application/vnd.github.v3+json',
+              // Use gh auth token if available to avoid rate limits
+              if (Platform.environment.containsKey('GH_TOKEN'))
+                'Authorization': 'Bearer ${Platform.environment['GH_TOKEN']}',
+            },
+          )
+          .timeout(const Duration(seconds: 10));
 
       if (res.statusCode != 200) return null;
 
       final data = jsonDecode(res.body) as Map<String, dynamic>;
-      final latestTag = (data['tag_name'] as String?)?.replaceAll('v', '') ?? '';
+      final latestTag =
+          (data['tag_name'] as String?)?.replaceAll('v', '') ?? '';
       final releaseUrl = data['html_url'] as String? ?? '';
       final releaseNotes = data['body'] as String? ?? '';
 
@@ -43,7 +52,10 @@ class UpdateService {
         final assetMap = asset as Map<String, dynamic>;
         final name = (assetMap['name'] as String?) ?? '';
         final url = assetMap['browser_download_url'] as String?;
-        if (name.endsWith('.msi')) msiUrl = url;
+        if (name.endsWith('.msi') ||
+            (name.endsWith('.exe') && name.contains('Setup'))) {
+          msiUrl = url;
+        }
         if (name.endsWith('.apk')) apkUrl = url;
       }
 
@@ -78,7 +90,10 @@ class UpdateService {
   }
 
   /// Download and launch the MSI installer (Windows only).
-  static Future<void> downloadAndInstall(BuildContext context, String msiUrl) async {
+  static Future<void> downloadAndInstall(
+    BuildContext context,
+    String msiUrl,
+  ) async {
     if (!Platform.isWindows) {
       // On non-Windows, just open the release page
       await launchUrl(Uri.parse(msiUrl));
@@ -87,55 +102,69 @@ class UpdateService {
 
     try {
       // Show progress dialog
-      showDialog(
-        // ignore: use_build_context_synchronously
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const _DownloadDialog(),
+      unawaited(
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const _DownloadDialog(),
+        ),
       );
 
       // Download to temp
       final res = await http.get(Uri.parse(msiUrl));
       final tempDir = Directory.systemTemp;
-      final filePath = '${tempDir.path}\\GoWorkBro-Update.msi';
+      final isExe = Uri.parse(msiUrl).path.toLowerCase().endsWith('.exe');
+      final filePath =
+          '${tempDir.path}\\GoWorkBro-Update.${isExe ? 'exe' : 'msi'}';
       final file = File(filePath);
       await file.writeAsBytes(res.bodyBytes);
 
+      if (!context.mounted) return;
       // Close dialog
-      // ignore: use_build_context_synchronously
       Navigator.of(context).pop();
 
       // Launch the MSI installer
-      await Process.start('msiexec', ['/i', filePath], mode: ProcessStartMode.detached);
+      if (isExe) {
+        await Process.start(filePath, const [], mode: ProcessStartMode.detached);
+      } else {
+        await Process.start(
+          'msiexec',
+          ['/i', filePath],
+          mode: ProcessStartMode.detached,
+        );
+      }
     } catch (e) {
-      // ignore: use_build_context_synchronously
+      if (!context.mounted) return;
+      final s = S.of(context.read<AppLocaleProvider>().locale);
       if (Navigator.of(context).canPop()) Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('下载失败: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.downloadFailed(e))));
     }
   }
 
   /// Show update available dialog.
   static void showUpdateDialog(BuildContext context, UpdateInfo info) {
+    final s = S.of(context.read<AppLocaleProvider>().locale);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('发现新版本'),
+        title: Text(s.newVersionAvailable),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('当前版本: v${info.currentVersion}'),
-            Text('最新版本: v${info.latestVersion}'),
+            Text(s.currentVersion(info.currentVersion)),
+            Text(s.latestVersionValue(info.latestVersion)),
             if (info.releaseNotes.isNotEmpty) ...[
               const SizedBox(height: 12),
-              const Text('更新内容:', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text(
+                s.releaseNotes,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 4),
               Flexible(
-                child: SingleChildScrollView(
-                  child: Text(info.releaseNotes),
-                ),
+                child: SingleChildScrollView(child: Text(info.releaseNotes)),
               ),
             ],
           ],
@@ -143,7 +172,7 @@ class UpdateService {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('稍后再说'),
+            child: Text(s.later),
           ),
           if (info.msiUrl != null)
             FilledButton(
@@ -151,7 +180,7 @@ class UpdateService {
                 Navigator.pop(context);
                 downloadAndInstall(context, info.msiUrl!);
               },
-              child: const Text('下载并安装'),
+              child: Text(s.downloadAndInstall),
             )
           else
             FilledButton(
@@ -159,7 +188,7 @@ class UpdateService {
                 Navigator.pop(context);
                 launchUrl(Uri.parse(info.releaseUrl));
               },
-              child: const Text('前往下载'),
+              child: Text(s.goToDownload),
             ),
         ],
       ),
@@ -190,13 +219,14 @@ class _DownloadDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const AlertDialog(
+    final s = S.of(context.watch<AppLocaleProvider>().locale);
+    return AlertDialog(
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 16),
-          Text('正在下载更新...'),
+          const CircularProgressIndicator(),
+          const SizedBox(height: 16),
+          Text(s.downloadingUpdate),
         ],
       ),
     );
