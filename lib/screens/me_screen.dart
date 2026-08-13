@@ -785,6 +785,63 @@ class _MeScreenState extends State<MeScreen>
         ),
         const SizedBox(height: 16),
 
+        // ---- Font selector ----
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.font_download_outlined,
+                      size: 20,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(s.font, style: theme.textTheme.titleMedium),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                SegmentedButton<String>(
+                  segments: [
+                    ButtonSegment(
+                      value: AppTheme.defaultFontFamily,
+                      label: SizedBox(
+                        width: 80,
+                        child: Text(
+                          s.fontSystem,
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                    const ButtonSegment(
+                      value: 'LXGWWenKai',
+                      label: SizedBox(
+                        width: 80,
+                        child: Text('霞鹜文楷', textAlign: TextAlign.center),
+                      ),
+                    ),
+                    const ButtonSegment(
+                      value: 'NotoSansSC',
+                      label: SizedBox(
+                        width: 80,
+                        child: Text('思源黑体', textAlign: TextAlign.center),
+                      ),
+                    ),
+                  ],
+                  showSelectedIcon: false,
+                  selected: {localeProvider.fontFamily},
+                  onSelectionChanged: (set) =>
+                      localeProvider.setFontFamily(set.first),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+
         // ---- Cloud sync status ----
         Card(
           child: Padding(

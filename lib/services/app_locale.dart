@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'database_service.dart';
+import '../theme/app_theme.dart';
 
 /// Single source of truth for locale and theme mode.
 /// Persists to SQLite via DatabaseService (no AppProvider dependency).
@@ -13,18 +14,22 @@ class AppLocaleProvider extends ChangeNotifier {
   AppLocaleProvider.forTesting({
     AppLocale locale = AppLocale.zh,
     ThemeMode themeMode = ThemeMode.system,
+    String fontFamily = AppTheme.defaultFontFamily,
   }) {
     _locale = locale;
     _themeMode = themeMode;
+    _fontFamily = fontFamily;
     _loaded = true;
   }
 
   AppLocale _locale = AppLocale.zh;
   ThemeMode _themeMode = ThemeMode.system;
+  String _fontFamily = AppTheme.defaultFontFamily;
   bool _loaded = false;
 
   AppLocale get locale => _locale;
   ThemeMode get themeMode => _themeMode;
+  String get fontFamily => _fontFamily;
   bool get loaded => _loaded;
   Locale get flutterLocale =>
       _locale == AppLocale.zh ? const Locale('zh') : const Locale('en');
@@ -44,6 +49,11 @@ class AppLocaleProvider extends ChangeNotifier {
         break;
       default:
         _themeMode = ThemeMode.system;
+    }
+
+    final savedFont = await DatabaseService.getSetting('font_family');
+    if (savedFont != null && savedFont.isNotEmpty) {
+      _fontFamily = savedFont;
     }
     _loaded = true;
     notifyListeners();
@@ -74,6 +84,13 @@ class AppLocaleProvider extends ChangeNotifier {
     }
     notifyListeners();
     await DatabaseService.setSetting('theme_mode', value);
+  }
+
+  Future<void> setFontFamily(String family) async {
+    if (family == _fontFamily) return;
+    _fontFamily = family;
+    notifyListeners();
+    await DatabaseService.setSetting('font_family', family);
   }
 
   Future<void> toggle() =>
@@ -347,6 +364,10 @@ class S {
   String get lightMode => locale == AppLocale.zh ? '浅色' : 'Light';
   String get darkMode => locale == AppLocale.zh ? '深色' : 'Dark';
   String get systemMode => locale == AppLocale.zh ? '跟随系统' : 'System';
+  String get font => locale == AppLocale.zh ? '字体' : 'Font';
+  String get fontSystem => locale == AppLocale.zh ? '系统默认' : 'System';
+  String get fontWenKai => locale == AppLocale.zh ? '霞鹜文楷' : 'WenKai';
+  String get fontNoto => locale == AppLocale.zh ? '思源黑体' : 'Noto Sans SC';
   String get deleteData =>
       locale == AppLocale.zh ? '删除所有数据' : 'Delete All Data';
   String get deleteDataConfirm => locale == AppLocale.zh

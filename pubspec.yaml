@@ -77,3 +77,11 @@ flutter:
     - family: LXGWWenKai
       fonts:
         - asset: assets/fonts/LXGWWenKai-Regular.ttf
+    # Noto Sans SC (思源黑体) — variable font, wght 100–900. Registered as
+    # regular + bold so CJK text renders with real weights (no faux bold).
+    - family: NotoSansSC
+      fonts:
+        - asset: assets/fonts/NotoSansSC.ttf
+          weight: 400
+        - asset: assets/fonts/NotoSansSC.ttf
+          weight: 700

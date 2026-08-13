@@ -71,8 +71,8 @@ class GoWorkBroApp extends StatelessWidget {
           return MaterialApp(
             title: 'GoWorkBro',
             debugShowCheckedModeBanner: false,
-            theme: AppTheme.light,
-            darkTheme: AppTheme.dark,
+            theme: AppTheme.light(fontFamily: localeProvider.fontFamily),
+            darkTheme: AppTheme.dark(fontFamily: localeProvider.fontFamily),
             themeMode: localeProvider.themeMode,
             locale: localeProvider.flutterLocale,
             supportedLocales: const [Locale('zh'), Locale('en')],
