@@ -101,6 +101,20 @@ flutter build windows --release --dart-define=SUPABASE_URL=... --dart-define=SUP
 flutter build apk --release --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...
 ```
 
+### Windows 任务栏图标不更新（故障排查）
+
+The app icon is embedded in `goworkbro.exe` (via `windows/runner/Runner.rc` → `resources/app_icon.ico`),
+so the title bar always shows the current icon. If the **taskbar** still shows an old icon after
+upgrading, the Windows icon cache is stale:
+
+1. Refresh the explorer icon cache: run `ie4uinit.exe -show` (the installer does this automatically
+   after install/upgrade)
+2. Or restart Windows Explorer (taskbar/explorer cache)
+3. If the app is **pinned** to the taskbar, unpin and pin it again — pinned entries cache their icon
+
+Verify the exe really embeds the new icon: extract with
+`[System.Drawing.Icon]::ExtractAssociatedIcon($exe)` and compare visually.
+
 ### Tests
 
 ```bash
