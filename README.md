@@ -14,26 +14,40 @@ Built with Flutter for Android and Windows desktop, with Supabase cloud sync.
 
 ## Architecture
 
+Feature-first layout with a layered core. Dependencies point inward:
+UI (`features/`) → state (`providers/`) → domain access (`core/database/repositories/`)
+→ SQLite / Supabase.
+
 ```
 lib/
-├── main.dart                  # App entry, providers, auth gate, navigation shell
-├── models/                    # Data models (Todo, Habit, Countdown, FocusSession, SleepRecord)
+├── main.dart                  # Bootstrap only: window, Supabase, locale init
+├── app/                       # App shell
+│   ├── app.dart               # GoWorkBroApp: providers + MaterialApp
+│   ├── auth_gate.dart         # Auth routing (Supabase session / offline)
+│   └── app_shell.dart         # Responsive navigation shell (rail / bottom bar)
+├── features/                  # Screens grouped by domain, each with widgets/
+│   ├── auth/  todos/  countdowns/  today/  timer/  me/
 ├── providers/
-│   └── app_provider.dart      # Central state (ChangeNotifier), local-first with Supabase sync
-├── services/
-│   ├── app_locale.dart        # i18n provider (zh/en) + S translation class
-│   ├── api_service.dart       # USTC news fetching (cache → Supabase → local vault fallback)
-│   ├── database_service.dart  # SQLite (sqflite_common_ffi) CRUD, migrations, daily rollover
-│   ├── device_identity_service.dart  # Privacy-preserving offline device ID (GWB-…)
-│   ├── sleep_chart_utils.dart # Sleep chart helpers (contiguous runs, overnight duration)
-│   ├── sync_service.dart      # Supabase sync (push/pull/realtime)
-│   ├── supabase_config.dart   # Supabase URL/key via --dart-define
-│   ├── tray_service.dart      # Windows system tray icon
-│   └── update_service.dart    # GitHub release update checker
-├── screens/                   # 6 screens (todo, timer, countdown, today, me, auth)
-├── theme/
-│   └── app_theme.dart         # Light/dark themes, chart colors
-└── widgets/                   # Extracted widgets (cards, dialogs, chart components)
+│   └── app_provider.dart      # App state (ChangeNotifier): caches + orchestration
+│                              # (rollover, sync trigger, cross-domain stats)
+├── core/                      # Infrastructure
+│   ├── database/
+│   │   ├── app_database.dart  # SQLite connection, schema, migrations, reset
+│   │   └── repositories/      # Domain data access (Todo/Habit/Countdown/Focus/
+│   │                          # Sleep/Settings/NewsCache) + remote-upsert mapping
+│   ├── sync/
+│   │   ├── sync_service.dart  # Push/pull/realtime orchestration
+│   │   └── sync_table_registry.dart  # Declarative cloud-table registration
+│   ├── l10n/app_locale.dart   # i18n provider (zh/en) + S translation class
+│   ├── theme/app_theme.dart   # Light/dark themes, CJK fallback chain, chart colors
+│   ├── config/supabase_config.dart  # Supabase URL/key via --dart-define
+│   ├── device/device_identity_service.dart  # Offline device ID (GWB-…)
+│   └── utils/                 # date_utils, sleep_chart_utils
+├── models/                    # Data models (Todo, Habit, Countdown, FocusSession, SleepRecord)
+└── services/                  # Platform/network services
+    ├── api_service.dart       # USTC news fetching (Supabase → Go backend → local vault)
+    ├── tray_service.dart      # Windows system tray icon
+    └── update_service.dart    # GitHub release update checker
 ```
 
 ### Data Flow
@@ -45,6 +59,9 @@ User Action → AppProvider (in-memory update + notifyListeners)
                 ↑
           SyncService.pullAll() ← Supabase Realtime
 ```
+
+Sync tables are declared once in `sync_table_registry.dart`; `pullAll` and the
+realtime subscriptions are single loops over that registry.
 
 ## Getting Started
 
