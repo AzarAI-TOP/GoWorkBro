@@ -65,6 +65,7 @@ create table if not exists public.sleep_records (
   record_date text not null,
   wake_time text,
   sleep_time text,
+  workout_time text,
   note text,
   updated_at timestamptz not null default now()
 );
