@@ -1045,6 +1045,7 @@ class _SleepCharts extends StatelessWidget {
           averageLabel: strings.average,
           spots: duration,
           dates: dates,
+          isDuration: true,
         ),
       ],
     );
@@ -1070,12 +1071,17 @@ class _SleepLineChart extends StatelessWidget {
     required this.averageLabel,
     required this.spots,
     required this.dates,
+    this.isDuration = false,
   });
 
   final String title;
   final String averageLabel;
   final List<FlSpot> spots;
   final List<DateTime> dates;
+
+  /// When true, spot values are hours (e.g. 7.5) and the tooltip shows
+  /// "7h 30m"; otherwise they are clock times and show as HH:MM.
+  final bool isDuration;
 
   @override
   Widget build(BuildContext context) {
@@ -1123,7 +1129,34 @@ class _SleepLineChart extends StatelessWidget {
                         maxY: maxY.toDouble(),
                         gridData: const FlGridData(show: false),
                         borderData: FlBorderData(show: false),
-                        lineTouchData: const LineTouchData(enabled: true),
+                        lineTouchData: LineTouchData(
+                          enabled: true,
+                          touchTooltipData: LineTouchTooltipData(
+                            // Keep the bubble above the dot (fl_chart
+                            // default) and force it to stay inside the
+                            // chart so it never overlaps the card header.
+                            tooltipMargin: 20,
+                            fitInsideVertically: true,
+                            fitInsideHorizontally: true,
+                            getTooltipColor: (spot) =>
+                                theme.colorScheme.inverseSurface,
+                            getTooltipItems: (touchedSpots) => [
+                              for (final spot in touchedSpots)
+                                LineTooltipItem(
+                                  isDuration
+                                      ? _formatDuration(spot.y)
+                                      : _formatHours(spot.y),
+                                  TextStyle(
+                                    color: theme
+                                        .colorScheme
+                                        .onInverseSurface,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
                         extraLinesData: ExtraLinesData(
                           horizontalLines: [
                             HorizontalLine(
@@ -1206,5 +1239,15 @@ class _SleepLineChart extends StatelessWidget {
     final hours = normalized.floor();
     final minutes = ((normalized - hours) * 60).round();
     return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}';
+  }
+
+  /// Format a duration in hours (e.g. 7.5) as "7h 30m".
+  static String _formatDuration(double value) {
+    final totalMinutes = (value * 60).round();
+    final hours = totalMinutes ~/ 60;
+    final minutes = totalMinutes % 60;
+    if (hours == 0) return '${minutes}m';
+    if (minutes == 0) return '${hours}h';
+    return '${hours}h ${minutes}m';
   }
 }
