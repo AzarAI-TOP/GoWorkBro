@@ -42,6 +42,92 @@ List<Object> buildCombinedList(List<Todo> todos, List<Habit> habits) {
   ];
 }
 
+/// Result of mapping a display-space reorder to provider-space indexes.
+class ReorderMapping {
+  const ReorderMapping({
+    required this.kind,
+    required this.oldProviderIndex,
+    required this.newProviderIndex,
+  });
+
+  /// 'habit' or 'todo' — which provider list the indexes refer to.
+  final String kind;
+  final int oldProviderIndex;
+  final int newProviderIndex;
+}
+
+/// Pure mapping from ReorderableListView.onReorderItem arguments to
+/// provider-space reorder indexes (extracted for tests).
+///
+/// `newIndex` follows onReorderItem semantics: the final insertion position
+/// with the dragged item conceptually removed from the list first.
+///
+/// Returns null when the drag is a no-op (dropped at its own position or a
+/// completed item).
+ReorderMapping? mapReorder({
+  required List<Todo> todos,
+  required List<Habit> habits,
+  required int oldIndex,
+  required int newIndex,
+}) {
+  final items = buildCombinedList(todos, habits);
+  if (oldIndex < 0 || oldIndex >= items.length) return null;
+  final oldItem = items[oldIndex];
+
+  final unfinishedHabits = habits.where((h) => !h.isCompleted).toList()
+    ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  final incompleteTodos = todos.where((t) => !t.isCompleted).toList()
+    ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  final uh = unfinishedHabits.length;
+  final it = incompleteTodos.length;
+
+  if (oldItem is Habit) {
+    // Habit drag — confined to the unfinished-habit zone at the top.
+    // Completed habits are not draggable (no drag handle, plus this guard).
+    if (oldItem.isCompleted) return null;
+    final dropAfter = newIndex > oldIndex;
+    final finalPos = newIndex.clamp(0, uh);
+    final oldHabitIndex = habits.indexOf(oldItem);
+    int newHabitIndex;
+    if (finalPos >= uh) {
+      // Dropped at/after the end of the unfinished zone.
+      newHabitIndex = habits.indexOf(unfinishedHabits.last) + 1;
+    } else {
+      newHabitIndex =
+          habits.indexOf(unfinishedHabits[finalPos]) + (dropAfter ? 1 : 0);
+    }
+    if (newHabitIndex == oldHabitIndex || newHabitIndex == oldHabitIndex + 1) {
+      return null;
+    }
+    return ReorderMapping(
+      kind: 'habit',
+      oldProviderIndex: oldHabitIndex,
+      newProviderIndex: newHabitIndex,
+    );
+  }
+
+  if (oldItem is Todo) {
+    // Todo drag — only among incomplete todos.
+    if (oldItem.isCompleted) return null;
+    final dropAfter = newIndex > oldIndex;
+    final finalPos = (newIndex - uh).clamp(0, it);
+    final oldTodoIndex = todos.indexOf(oldItem);
+    final newTodoIndex = finalPos >= it
+        ? todos.length
+        : todos.indexOf(incompleteTodos[finalPos]) + (dropAfter ? 1 : 0);
+    if (newTodoIndex == oldTodoIndex || newTodoIndex == oldTodoIndex + 1) {
+      return null;
+    }
+    return ReorderMapping(
+      kind: 'todo',
+      oldProviderIndex: oldTodoIndex,
+      newProviderIndex: newTodoIndex,
+    );
+  }
+
+  return null;
+}
+
 class TodoScreen extends StatefulWidget {
   const TodoScreen({super.key});
 
@@ -54,57 +140,18 @@ class _TodoScreenState extends State<TodoScreen> with TickerProviderStateMixin {
   List<Object> _combined(AppProvider p) => buildCombinedList(p.todos, p.habits);
 
   void _onReorder(int oldIndex, int newIndex) {
-    // onReorderItem semantics: newIndex is the final insertion position with
-    // the dragged item conceptually removed from the list first.
     final provider = context.read<AppProvider>();
-    final items = _combined(provider);
-    final oldItem = items[oldIndex];
-
-    final unfinishedHabits = provider.habits
-        .where((h) => !h.isCompleted)
-        .toList()
-      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-    final incompleteTodos = provider.todos
-        .where((t) => !t.isCompleted)
-        .toList()
-      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-    final uh = unfinishedHabits.length;
-    final it = incompleteTodos.length;
-
-    if (oldItem is Habit) {
-      // Habit drag — confined to the unfinished-habit zone at the top.
-      // Completed habits are not draggable (no drag handle, plus this guard).
-      if (oldItem.isCompleted) return;
-      final dropAfter = newIndex > oldIndex;
-      final finalPos = newIndex.clamp(0, uh);
-      final oldHabitIndex = provider.habits.indexOf(oldItem);
-      int newHabitIndex;
-      if (finalPos >= uh) {
-        // Dropped at/after the end of the unfinished zone.
-        newHabitIndex = provider.habits.indexOf(unfinishedHabits.last) + 1;
-      } else {
-        newHabitIndex =
-            provider.habits.indexOf(unfinishedHabits[finalPos]) +
-            (dropAfter ? 1 : 0);
-      }
-      if (newHabitIndex == oldHabitIndex || newHabitIndex == oldHabitIndex + 1) {
-        return;
-      }
-      provider.reorderHabits(oldHabitIndex, newHabitIndex);
-    } else if (oldItem is Todo) {
-      // Todo drag — only among incomplete todos.
-      if (oldItem.isCompleted) return;
-      final dropAfter = newIndex > oldIndex;
-      final finalPos = (newIndex - uh).clamp(0, it);
-      final oldTodoIndex = provider.todos.indexOf(oldItem);
-      final newTodoIndex = finalPos >= it
-          ? provider.todos.length
-          : provider.todos.indexOf(incompleteTodos[finalPos]) +
-                (dropAfter ? 1 : 0);
-      if (newTodoIndex == oldTodoIndex || newTodoIndex == oldTodoIndex + 1) {
-        return;
-      }
-      provider.reorderTodos(oldTodoIndex, newTodoIndex);
+    final mapping = mapReorder(
+      todos: provider.todos,
+      habits: provider.habits,
+      oldIndex: oldIndex,
+      newIndex: newIndex,
+    );
+    if (mapping == null) return;
+    if (mapping.kind == 'habit') {
+      provider.reorderHabits(mapping.oldProviderIndex, mapping.newProviderIndex);
+    } else {
+      provider.reorderTodos(mapping.oldProviderIndex, mapping.newProviderIndex);
     }
   }
 
