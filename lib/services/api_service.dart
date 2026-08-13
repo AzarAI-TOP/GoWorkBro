@@ -13,12 +13,22 @@ class ApiService {
   /// 1. Supabase (cloud — works on all platforms without PC)
   /// 2. Local Obsidian vault file (desktop only, fallback)
   static Future<UstcNews?> fetchUstcNews({String? date}) async {
-    // Tier 1: Supabase cloud
-    final cloud = await _fetchUstcNewsFromSupabase(date);
-    if (cloud != null) return cloud;
+    final dateStr = date ?? DateTime.now().toIso8601String().substring(0, 10);
 
-    // Tier 2: Local vault file (desktop only)
-    return _fetchUstcNewsFromLocalVault(date);
+    // Published daily editions are immutable. Prefer the persistent date-keyed
+    // cache so reopening Today does not spend another network request.
+    final cached = await DatabaseService.getCachedUstcNews(dateStr);
+    if (cached != null) return _newsFromCache(cached);
+
+    final cloud = await _fetchUstcNewsFromSupabase(dateStr);
+    if (cloud != null) {
+      await _cacheNews(cloud);
+      return cloud;
+    }
+
+    final local = await _fetchUstcNewsFromLocalVault(dateStr);
+    if (local != null) await _cacheNews(local);
+    return local;
   }
 
   /// Fetch from Supabase ustc_news table (anon RLS allows SELECT)
@@ -52,15 +62,18 @@ class ApiService {
   /// Vault path is read from DB settings; falls back to platform-specific default.
   static Future<UstcNews?> _fetchUstcNewsFromLocalVault(String? date) async {
     try {
-      final dateStr = date ??
-          DateTime.now().toIso8601String().substring(0, 10);
-      final vaultPath = await DatabaseService.getSetting('obsidian_vault_path') ??
+      final dateStr = date ?? DateTime.now().toIso8601String().substring(0, 10);
+      final vaultPath =
+          await DatabaseService.getSetting('obsidian_vault_path') ??
           _defaultVaultPath();
       final file = File('$vaultPath/USTC 每日要闻/$dateStr.md');
       if (await file.exists()) {
         final content = await file.readAsString();
         String? title;
-        final titleMatch = RegExp(r'^#\s+(.+)$', multiLine: true).firstMatch(content);
+        final titleMatch = RegExp(
+          r'^#\s+(.+)$',
+          multiLine: true,
+        ).firstMatch(content);
         if (titleMatch != null) {
           title = titleMatch.group(1)!.trim();
         }
@@ -83,8 +96,9 @@ class ApiService {
     return null;
   }
 
-  /// Fetch latest available USTC news (most recent date in Supabase)
+  /// Fetch latest available USTC news (most recent cached or cloud edition)
   static Future<UstcNews?> fetchLatestUstcNews() async {
+    final cached = await DatabaseService.getLatestCachedUstcNews();
     try {
       if (isSupabaseConfigured) {
         final client = Supabase.instance.client;
@@ -96,20 +110,37 @@ class ApiService {
             .maybeSingle()
             .timeout(const Duration(seconds: 8));
         if (data != null) {
-          return UstcNews(
+          final news = UstcNews(
             date: data['date'] as String,
             title: data['title'] as String,
             markdown: data['content'] as String,
           );
+          await _cacheNews(news);
+          return news;
         }
       }
     } catch (e) {
       debugPrint('Supabase latest news fetch failed: $e');
     }
 
-    // Fallback to local vault
-    return _fetchUstcNewsFromLocalVault(null);
+    if (cached != null) return _newsFromCache(cached);
+    final local = await _fetchUstcNewsFromLocalVault(null);
+    if (local != null) await _cacheNews(local);
+    return local;
   }
+
+  static UstcNews _newsFromCache(Map<String, String> cached) => UstcNews(
+    date: cached['date']!,
+    title: cached['title']!,
+    markdown: cached['markdown']!,
+  );
+
+  static Future<void> _cacheNews(UstcNews news) =>
+      DatabaseService.cacheUstcNews(
+        date: news.date,
+        title: news.title,
+        markdown: news.markdown,
+      );
 
   /// List available USTC news dates from Supabase or local vault
   static Future<List<String>> listUstcNewsDates() async {
@@ -130,7 +161,8 @@ class ApiService {
     }
 
     try {
-      final vaultPath = await DatabaseService.getSetting('obsidian_vault_path') ??
+      final vaultPath =
+          await DatabaseService.getSetting('obsidian_vault_path') ??
           _defaultVaultPath();
       final dir = Directory('$vaultPath/USTC 每日要闻');
       if (!await dir.exists()) return [];
@@ -158,11 +190,7 @@ class UstcNews {
   final String title;
   final String markdown;
 
-  UstcNews({
-    required this.date,
-    required this.title,
-    required this.markdown,
-  });
+  UstcNews({required this.date, required this.title, required this.markdown});
 }
 
 /// Platform-aware default vault path. Only used as a last-resort fallback
@@ -170,9 +198,8 @@ class UstcNews {
 /// (no local vault), so the fallback gracefully does nothing.
 String _defaultVaultPath() {
   // Desktop: ~/Documents/Notes (works for any user)
-  final home = Platform.environment['HOME'] ??
-      Platform.environment['USERPROFILE'] ??
-      '';
+  final home =
+      Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'] ?? '';
   if (home.isEmpty) return '';
   if (Platform.isWindows) {
     return '$home\\Documents\\Notes';

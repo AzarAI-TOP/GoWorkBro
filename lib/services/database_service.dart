@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import '../models/models.dart';
@@ -12,13 +15,17 @@ class DatabaseService {
     sqfliteFfiInit();
     final dbFactory = databaseFactoryFfi;
 
-    final appDir = await getApplicationDocumentsDirectory();
+    final testDataDir = Platform.environment['GOWORKBRO_TEST_DATA_DIR'];
+    final appDir = testDataDir == null
+        ? await getApplicationDocumentsDirectory()
+        : Directory(testDataDir);
+    if (!await appDir.exists()) await appDir.create(recursive: true);
     final dbPath = p.join(appDir.path, 'goworkbro.db');
 
     _db = await dbFactory.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(
-        version: 2,
+        version: 3,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
       ),
@@ -96,16 +103,107 @@ class DatabaseService {
       )
     ''');
 
-    // Insert default settings
-    await db.insert('user_settings', {'key': 'user_name', 'value': 'AzarAI'});
+    await _createNewsCacheTable(db);
+
+    // Insert defaults for a brand-new install. Existing databases are migrated
+    // in-place by _onUpgrade and retain all user data.
+    await db.insert('user_settings', {'key': 'user_name', 'value': '离线用户'});
+    await db.insert('user_settings', {
+      'key': 'first_used_date',
+      'value': DateTime.now().toIso8601String(),
+    });
+    await db.insert('user_settings', {
+      'key': 'lifetime_todos_completed',
+      'value': '0',
+    });
+    await db.insert('user_settings', {
+      'key': 'lifetime_habits_completed',
+      'value': '0',
+    });
+  }
+
+  static Future<void> _createNewsCacheTable(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ustc_news_cache (
+        date TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        markdown TEXT NOT NULL,
+        cached_at TEXT NOT NULL
+      )
+    ''');
   }
 
   /// Handle database schema migrations between versions.
-  static Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    // v1 -> v2: add workout_time column to sleep_records
+  static Future<void> _onUpgrade(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
     if (oldVersion < 2) {
-      await db.execute('ALTER TABLE sleep_records ADD COLUMN workout_time TEXT;');
+      await db.execute(
+        'ALTER TABLE sleep_records ADD COLUMN workout_time TEXT;',
+      );
     }
+    if (oldVersion < 3) {
+      await _createNewsCacheTable(db);
+      final completedTodoRows = await db.rawQuery(
+        'SELECT COUNT(*) AS count FROM todos WHERE is_completed = 1',
+      );
+      final completedTodos = completedTodoRows.first['count'] as int? ?? 0;
+      final completedHabitRows = await db.rawQuery(
+        'SELECT COUNT(*) AS count FROM habits WHERE current_count >= target_count',
+      );
+      final completedHabits = completedHabitRows.first['count'] as int? ?? 0;
+      await db.insert('user_settings', {
+        'key': 'first_used_date',
+        'value': DateTime.now().toIso8601String(),
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      await db.insert('user_settings', {
+        'key': 'lifetime_todos_completed',
+        'value': completedTodos.toString(),
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      await db.insert('user_settings', {
+        'key': 'lifetime_habits_completed',
+        'value': completedHabits.toString(),
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      final completedTodoIds = await db.query(
+        'todos',
+        columns: ['id'],
+        where: 'is_completed = 1',
+      );
+      for (final row in completedTodoIds) {
+        await db.insert('user_settings', {
+          'key': 'completion.todo.${row['id']}',
+          'value': DateTime.now().toIso8601String(),
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      }
+      final completedHabitMarkerRows = await db.query(
+        'habits',
+        columns: ['id', 'last_reset_date'],
+        where: 'current_count >= target_count',
+      );
+      final today = DateTime.now().toIso8601String().substring(0, 10);
+      for (final row in completedHabitMarkerRows) {
+        final completionDate = row['last_reset_date'] as String? ?? today;
+        await db.insert('user_settings', {
+          'key': 'completion.habit.${row['id']}.$completionDate',
+          'value': DateTime.now().toIso8601String(),
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      }
+    }
+  }
+
+  @visibleForTesting
+  static Future<void> migrateForTesting(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) => _onUpgrade(db, oldVersion, newVersion);
+
+  @visibleForTesting
+  static Future<void> closeForTesting() async {
+    await _db?.close();
+    _db = null;
   }
 
   /// Drop all tables and recreate the database from scratch.
@@ -120,8 +218,9 @@ class DatabaseService {
       await txn.execute('DROP TABLE IF EXISTS countdowns');
       await txn.execute('DROP TABLE IF EXISTS sleep_records');
       await txn.execute('DROP TABLE IF EXISTS user_settings');
+      await txn.execute('DROP TABLE IF EXISTS ustc_news_cache');
     });
-    await _onCreate(db, 2);
+    await _onCreate(db, 3);
   }
 
   // ============ TODO CRUD ============
@@ -140,7 +239,12 @@ class DatabaseService {
 
   static Future<void> updateTodo(Todo todo) async {
     final db = await database;
-    await db.update('todos', todo.toMap(), where: 'id = ?', whereArgs: [todo.id]);
+    await db.update(
+      'todos',
+      todo.toMap(),
+      where: 'id = ?',
+      whereArgs: [todo.id],
+    );
   }
 
   static Future<void> deleteTodo(String id) async {
@@ -175,7 +279,12 @@ class DatabaseService {
 
   static Future<void> updateHabit(Habit habit) async {
     final db = await database;
-    await db.update('habits', habit.toMap(), where: 'id = ?', whereArgs: [habit.id]);
+    await db.update(
+      'habits',
+      habit.toMap(),
+      where: 'id = ?',
+      whereArgs: [habit.id],
+    );
   }
 
   static Future<void> deleteHabit(String id) async {
@@ -186,10 +295,12 @@ class DatabaseService {
   /// Reset all habit counts at the start of a new day
   static Future<void> resetHabitsForNewDay(String todayDate) async {
     final db = await database;
-    await db.update('habits',
-        {'current_count': 0, 'last_reset_date': todayDate},
-        where: 'last_reset_date != ? OR last_reset_date IS NULL',
-        whereArgs: [todayDate]);
+    await db.update(
+      'habits',
+      {'current_count': 0, 'last_reset_date': todayDate},
+      where: 'last_reset_date != ? OR last_reset_date IS NULL',
+      whereArgs: [todayDate],
+    );
   }
 
   // ============ FOCUS SESSIONS ============
@@ -202,16 +313,30 @@ class DatabaseService {
 
   static Future<List<FocusSession>> getFocusSessionsByDate(String date) async {
     final db = await database;
-    final maps = await db.query('focus_sessions',
-        where: 'session_date = ?', whereArgs: [date]);
+    final maps = await db.query(
+      'focus_sessions',
+      where: 'session_date = ?',
+      whereArgs: [date],
+    );
     return maps.map((m) => FocusSession.fromMap(m)).toList();
   }
 
-  static Future<List<FocusSession>> getFocusSessionsDateRange(String start, String end) async {
+  static Future<List<FocusSession>> getFocusSessionsDateRange(
+    String start,
+    String end,
+  ) async {
     final db = await database;
-    final maps = await db.query('focus_sessions',
-        where: 'session_date >= ? AND session_date <= ?',
-        whereArgs: [start, end]);
+    final maps = await db.query(
+      'focus_sessions',
+      where: 'session_date >= ? AND session_date <= ?',
+      whereArgs: [start, end],
+    );
+    return maps.map((m) => FocusSession.fromMap(m)).toList();
+  }
+
+  static Future<List<FocusSession>> getAllFocusSessions() async {
+    final db = await database;
+    final maps = await db.query('focus_sessions', orderBy: 'start_time ASC');
     return maps.map((m) => FocusSession.fromMap(m)).toList();
   }
 
@@ -236,7 +361,12 @@ class DatabaseService {
 
   static Future<void> updateCountdown(Countdown countdown) async {
     final db = await database;
-    await db.update('countdowns', countdown.toMap(), where: 'id = ?', whereArgs: [countdown.id]);
+    await db.update(
+      'countdowns',
+      countdown.toMap(),
+      where: 'id = ?',
+      whereArgs: [countdown.id],
+    );
   }
 
   /// Delete countdowns whose target date has passed (next day after target).
@@ -245,9 +375,11 @@ class DatabaseService {
     final db = await database;
     final todayUtc = DateTime.now().toUtc();
     final today = DateTime.utc(todayUtc.year, todayUtc.month, todayUtc.day);
-    await db.delete('countdowns',
-        where: 'date(target_datetime) < date(?)',
-        whereArgs: [today.toIso8601String()]);
+    await db.delete(
+      'countdowns',
+      where: 'date(target_datetime) < date(?)',
+      whereArgs: [today.toIso8601String()],
+    );
   }
 
   // ============ SLEEP RECORDS ============
@@ -264,8 +396,11 @@ class DatabaseService {
   static Future<void> upsertSleepRecord(SleepRecord record) async {
     final db = await database;
     // Check if a record already exists for this date
-    final existing = await db.query('sleep_records',
-        where: 'record_date = ?', whereArgs: [record.recordDate]);
+    final existing = await db.query(
+      'sleep_records',
+      where: 'record_date = ?',
+      whereArgs: [record.recordDate],
+    );
     if (existing.isNotEmpty) {
       // Update existing record (preserve original id)
       final existingId = existing.first['id'] as String;
@@ -277,8 +412,12 @@ class DatabaseService {
         workoutTime: record.workoutTime,
         note: record.note,
       );
-      await db.update('sleep_records', updated.toMap(),
-          where: 'id = ?', whereArgs: [existingId]);
+      await db.update(
+        'sleep_records',
+        updated.toMap(),
+        where: 'id = ?',
+        whereArgs: [existingId],
+      );
     } else {
       await db.insert('sleep_records', record.toMap());
     }
@@ -288,16 +427,127 @@ class DatabaseService {
 
   static Future<String?> getSetting(String key) async {
     final db = await database;
-    final maps = await db.query('user_settings',
-        where: 'key = ?', whereArgs: [key]);
+    final maps = await db.query(
+      'user_settings',
+      where: 'key = ?',
+      whereArgs: [key],
+    );
     if (maps.isEmpty) return null;
     return maps.first['value'] as String;
   }
 
   static Future<void> setSetting(String key, String value) async {
     final db = await database;
-    await db.insert('user_settings', {'key': key, 'value': value},
-        conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.insert('user_settings', {
+      'key': key,
+      'value': value,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<int> incrementSettingCounterOnce({
+    required String counterKey,
+    required String eventKey,
+  }) async => _incrementSettingCounterOnce(
+    await database,
+    counterKey: counterKey,
+    eventKey: eventKey,
+  );
+
+  @visibleForTesting
+  static Future<int> incrementSettingCounterOnceForTesting(
+    Database db, {
+    required String counterKey,
+    required String eventKey,
+  }) => _incrementSettingCounterOnce(
+    db,
+    counterKey: counterKey,
+    eventKey: eventKey,
+  );
+
+  static Future<int> _incrementSettingCounterOnce(
+    Database db, {
+    required String counterKey,
+    required String eventKey,
+  }) async {
+    return db.transaction((txn) async {
+      final marker = await txn.query(
+        'user_settings',
+        columns: ['value'],
+        where: 'key = ?',
+        whereArgs: [eventKey],
+        limit: 1,
+      );
+      final rows = await txn.query(
+        'user_settings',
+        columns: ['value'],
+        where: 'key = ?',
+        whereArgs: [counterKey],
+      );
+      final current = rows.isEmpty
+          ? 0
+          : int.tryParse(rows.first['value'] as String? ?? '') ?? 0;
+      if (marker.isNotEmpty) return current;
+
+      final next = current + 1;
+      await txn.insert('user_settings', {
+        'key': counterKey,
+        'value': '$next',
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      await txn.insert('user_settings', {
+        'key': eventKey,
+        'value': DateTime.now().toIso8601String(),
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      return next;
+    });
+  }
+
+  // ============ USTC NEWS CACHE ============
+
+  static Future<Map<String, String>?> getCachedUstcNews(String date) async {
+    final db = await database;
+    final rows = await db.query(
+      'ustc_news_cache',
+      where: 'date = ?',
+      whereArgs: [date],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    final row = rows.first;
+    return {
+      'date': row['date'] as String,
+      'title': row['title'] as String,
+      'markdown': row['markdown'] as String,
+    };
+  }
+
+  static Future<Map<String, String>?> getLatestCachedUstcNews() async {
+    final db = await database;
+    final rows = await db.query(
+      'ustc_news_cache',
+      orderBy: 'date DESC',
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    final row = rows.first;
+    return {
+      'date': row['date'] as String,
+      'title': row['title'] as String,
+      'markdown': row['markdown'] as String,
+    };
+  }
+
+  static Future<void> cacheUstcNews({
+    required String date,
+    required String title,
+    required String markdown,
+  }) async {
+    final db = await database;
+    await db.insert('ustc_news_cache', {
+      'date': date,
+      'title': title,
+      'markdown': markdown,
+      'cached_at': DateTime.now().toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   // ============ Remote sync helpers ============
@@ -325,7 +575,11 @@ class DatabaseService {
 
   static Future<SleepRecord?> getSleepRecordById(String id) async {
     final db = await database;
-    final maps = await db.query('sleep_records', where: 'id = ?', whereArgs: [id]);
+    final maps = await db.query(
+      'sleep_records',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
     if (maps.isEmpty) return null;
     return SleepRecord.fromMap(maps.first);
   }
@@ -364,7 +618,9 @@ class DatabaseService {
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  static Future<void> upsertCountdownFromRemote(Map<String, dynamic> row) async {
+  static Future<void> upsertCountdownFromRemote(
+    Map<String, dynamic> row,
+  ) async {
     final db = await database;
     await db.insert('countdowns', {
       'id': row['id'],
@@ -387,10 +643,15 @@ class DatabaseService {
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  static Future<void> insertFocusSessionIfNotExists(Map<String, dynamic> row) async {
+  static Future<void> insertFocusSessionIfNotExists(
+    Map<String, dynamic> row,
+  ) async {
     final db = await database;
-    final existing = await db.query('focus_sessions',
-        where: 'id = ?', whereArgs: [row['id']]);
+    final existing = await db.query(
+      'focus_sessions',
+      where: 'id = ?',
+      whereArgs: [row['id']],
+    );
     if (existing.isEmpty) {
       await db.insert('focus_sessions', {
         'id': row['id'],
