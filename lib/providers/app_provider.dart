@@ -101,6 +101,9 @@ class AppProvider extends ChangeNotifier {
         SyncService.onRemoteChanged = () => refreshAll();
         await SyncService.pullAll();
         await refreshAll();
+        // Self-heal legacy avatar rows (issue #12): a device-local
+        // avatar_path is migrated to Storage and pushed as an object path.
+        unawaited(SyncService.pushUserSettings());
         _pushAll();
         // After the pull, derive the profile from the signed-in user
         // (email prefix / user_metadata) when no custom name is set yet.
@@ -181,6 +184,7 @@ class AppProvider extends ChangeNotifier {
       SyncService.onRemoteChanged = () => refreshAll();
       await SyncService.pullAll();
       await refreshAll();
+      unawaited(SyncService.pushUserSettings());
       await applyAuthUser();
     }
   }
