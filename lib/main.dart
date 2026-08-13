@@ -63,12 +63,8 @@ class GoWorkBroApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider<AppLocaleProvider>.value(
-          value: localeProvider,
-        ),
-        ChangeNotifierProvider<AppProvider>(
-          create: (_) => AppProvider(),
-        ),
+        ChangeNotifierProvider<AppLocaleProvider>.value(value: localeProvider),
+        ChangeNotifierProvider<AppProvider>(create: (_) => AppProvider()),
       ],
       child: Consumer<AppLocaleProvider>(
         builder: (context, localeProvider, _) {
@@ -165,13 +161,15 @@ class _AuthGateState extends State<AuthGate> {
     }
 
     if (!_isLoggedIn) {
-      return AuthScreen(onUseOffline: () {
-        // #13: Allow offline mode — init AppProvider without auth
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          context.read<AppProvider>().init();
-        });
-        setState(() => _isLoggedIn = true); // bypass auth
-      });
+      return AuthScreen(
+        onUseOffline: () {
+          // #13: Allow offline mode — init AppProvider without auth
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            context.read<AppProvider>().init();
+          });
+          setState(() => _isLoggedIn = true); // bypass auth
+        },
+      );
     }
 
     return const AppShell();
@@ -217,6 +215,7 @@ class _AppShellState extends State<AppShell> with WindowListener {
     final s = S.of(context.read<AppLocaleProvider>().locale);
     return [s.todo, s.countdown, s.today, s.me];
   }
+
   final _icons = [
     Icons.check_circle_outline,
     Icons.hourglass_empty,
@@ -241,19 +240,15 @@ class _AppShellState extends State<AppShell> with WindowListener {
     }
 
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _screens,
-      ),
+      body: IndexedStack(index: _currentIndex, children: _screens),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (i) => setState(() => _currentIndex = i),
         items: List.generate(
-            4,
-            (i) => BottomNavigationBarItem(
-                  icon: Icon(_icons[i]),
-                  label: _labels[i],
-                )),
+          4,
+          (i) =>
+              BottomNavigationBarItem(icon: Icon(_icons[i]), label: _labels[i]),
+        ),
       ),
     );
   }
@@ -269,7 +264,9 @@ class _AppShellState extends State<AppShell> with WindowListener {
         mainAxisAlignment: MainAxisAlignment.center,
         children: List.generate(4, (i) {
           final selected = _currentIndex == i;
-          final color = selected ? colorScheme.primary : colorScheme.onSurfaceVariant;
+          final color = selected
+              ? colorScheme.primary
+              : colorScheme.onSurfaceVariant;
           return Material(
             color: Colors.transparent,
             child: InkWell(
@@ -277,23 +274,35 @@ class _AppShellState extends State<AppShell> with WindowListener {
               borderRadius: BorderRadius.circular(16),
               child: Container(
                 margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                decoration: BoxDecoration(
-                  color: selected
-                      ? colorScheme.primary.withValues(alpha: 0.12)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(16),
-                ),
+                padding: const EdgeInsets.symmetric(vertical: 10),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(_icons[i], size: selected ? 28 : 24, color: color),
-                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? colorScheme.primary.withValues(alpha: 0.12)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Icon(
+                        _icons[i],
+                        size: selected ? 28 : 24,
+                        color: color,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                     Text(
                       _labels[i],
                       style: TextStyle(
                         fontSize: 13,
-                        fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                        fontWeight: selected
+                            ? FontWeight.w600
+                            : FontWeight.normal,
                         color: color,
                       ),
                     ),
