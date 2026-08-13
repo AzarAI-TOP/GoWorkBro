@@ -707,6 +707,8 @@ class _MeScreenState extends State<MeScreen>
                     ButtonSegment(value: AppLocale.zh, label: Text(s.chinese)),
                     ButtonSegment(value: AppLocale.en, label: Text(s.english)),
                   ],
+                  // Keep width stable (same rationale as theme selector).
+                  showSelectedIcon: false,
                   selected: {localeProvider.locale},
                   onSelectionChanged: (set) =>
                       localeProvider.setLocale(set.first),
@@ -740,17 +742,39 @@ class _MeScreenState extends State<MeScreen>
                   segments: [
                     ButtonSegment(
                       value: ThemeMode.light,
-                      label: Text(s.lightMode),
+                      label: SizedBox(
+                        width: 72,
+                        child: Text(
+                          s.lightMode,
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
                     ),
                     ButtonSegment(
                       value: ThemeMode.dark,
-                      label: Text(s.darkMode),
+                      label: SizedBox(
+                        width: 72,
+                        child: Text(
+                          s.darkMode,
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
                     ),
                     ButtonSegment(
                       value: ThemeMode.system,
-                      label: Text(s.systemMode),
+                      label: SizedBox(
+                        width: 72,
+                        child: Text(
+                          s.systemMode,
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
                     ),
                   ],
+                  // The default check icon widens the selected segment, and
+                  // M3 stretches all segments to the widest one — which made
+                  // the whole control jump when switching options.
+                  showSelectedIcon: false,
                   selected: {localeProvider.themeMode},
                   onSelectionChanged: (set) =>
                       localeProvider.setThemeMode(set.first),
