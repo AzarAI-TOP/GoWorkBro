@@ -313,8 +313,7 @@ class S {
   String get sleepDuration =>
       locale == AppLocale.zh ? '睡眠时长' : 'Sleep Duration';
   String get average => locale == AppLocale.zh ? '平均' : 'Average';
-  String get choosePhoto => locale == AppLocale.zh ? '选择图片' : 'Choose Photo';
-  String get removeAvatar => locale == AppLocale.zh ? '移除头像' : 'Remove Avatar';
+  String get changeAvatar => locale == AppLocale.zh ? '更改' : 'Change';
   String sleepRecordSummary(String wake, String workout, String sleep) =>
       locale == AppLocale.zh
       ? '起床 $wake  ·  健身 $workout  ·  睡觉 $sleep'
@@ -375,10 +374,6 @@ class S {
       : 'Delete all local data? This is irreversible and includes todos, habits, check-in records, etc.';
   String get deleteDataSuccess =>
       locale == AppLocale.zh ? '所有数据已删除' : 'All data deleted';
-  String get avatarUpload => locale == AppLocale.zh ? '更换头像' : 'Change Avatar';
-  String get avatarHint => locale == AppLocale.zh
-      ? '头像上传功能开发中，敬请期待 🚀'
-      : 'Avatar upload coming soon 🚀';
   String get editName => locale == AppLocale.zh ? '编辑昵称' : 'Edit Name';
   String get nameHint => locale == AppLocale.zh ? '输入昵称' : 'Enter name';
 

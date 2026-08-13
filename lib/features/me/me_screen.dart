@@ -96,7 +96,8 @@ class _MeScreenState extends State<MeScreen>
       child: Row(
         children: [
           GestureDetector(
-            onTap: () => _showAvatarPicker(context),
+            key: const ValueKey('profile_avatar'),
+            onTap: () => _showAvatarDialog(context),
             child: Container(
               width: 72,
               height: 72,
@@ -433,45 +434,67 @@ class _MeScreenState extends State<MeScreen>
     return time ?? '—';
   }
 
-  Future<void> _showAvatarPicker(BuildContext context) async {
+  Future<void> _showAvatarDialog(BuildContext context) async {
     final provider = context.read<AppProvider>();
     final s = S.of(context.read<AppLocaleProvider>().locale);
-    final action = await showModalBottomSheet<String>(
+    final theme = Theme.of(context);
+    final avatar = provider.avatarPath;
+    final hasAvatar = avatar != null && File(avatar).existsSync();
+
+    final change = await showDialog<bool>(
       context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Column(
+      builder: (dialogContext) => AlertDialog(
+        content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: Text(s.choosePhoto),
-              onTap: () => Navigator.pop(context, 'choose'),
-            ),
-            if (provider.avatarPath != null)
-              ListTile(
-                leading: const Icon(
-                  Icons.delete_outline,
-                  color: Colors.redAccent,
+            Container(
+              width: 140,
+              height: 140,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [
+                    theme.colorScheme.primary,
+                    theme.colorScheme.secondary,
+                  ],
                 ),
-                title: Text(
-                  s.removeAvatar,
-                  style: const TextStyle(color: Colors.redAccent),
-                ),
-                onTap: () => Navigator.pop(context, 'remove'),
               ),
+              child: hasAvatar
+                  ? ClipOval(
+                      child: Image.file(
+                        File(avatar),
+                        width: 140,
+                        height: 140,
+                        fit: BoxFit.cover,
+                      ),
+                    )
+                  : const Icon(Icons.person, size: 64, color: Colors.white),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                FilledButton(
+                  onPressed: () => Navigator.pop(dialogContext, true),
+                  child: Text(s.changeAvatar),
+                ),
+                const SizedBox(width: 12),
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: Text(s.cancel),
+                ),
+              ],
+            ),
           ],
         ),
       ),
     );
-    if (!mounted || action == null) return;
-    if (action == 'remove') {
-      final old = provider.avatarPath;
-      await provider.setAvatarPath(null);
-      if (old != null) await File(old).delete().catchError((_) => File(old));
-      return;
-    }
+    if (change != true || !mounted) return;
+    await _pickAndSetAvatar();
+  }
 
+  Future<void> _pickAndSetAvatar() async {
+    final provider = context.read<AppProvider>();
     final picked = await ImagePicker().pickImage(
       source: ImageSource.gallery,
       imageQuality: 88,
