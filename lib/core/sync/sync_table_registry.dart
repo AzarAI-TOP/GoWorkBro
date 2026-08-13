@@ -86,25 +86,32 @@ final List<SyncTable> syncTables = [
         return;
       }
 
-      // key == 'avatar_path': the synced value must be a Storage object path.
-      if (value == null || !AvatarSync.isStoragePath(value)) {
-        // Cloud avatar removed (or a legacy local-path value pushed by an
-        // older version) — clear the local cache; a foreign device path
-        // cannot be rendered anyway.
-        await SettingsRepository.delete('avatar_local_path');
-        await SettingsRepository.delete('avatar_path');
-        return;
-      }
-      await SettingsRepository.set('avatar_path', value);
-      try {
-        final local = await AvatarSync.download(
-          Supabase.instance.client,
-          value,
-        );
-        await SettingsRepository.set('avatar_local_path', local);
-      } catch (_) {
-        // Offline or bucket missing — the storage path is kept and the file
-        // is fetched on the next successful pull.
+      // key == 'avatar_path': only a Storage object path is applied. A
+      // non-Storage value is a legacy device-local path pushed by an old
+      // client — ignore it and keep the local avatar (issue #12). Cloud
+      // removal arrives as a realtime DELETE (applyDelete below), and a
+      // null value is treated as an explicit removal.
+      switch (AvatarSync.applyDecision(value)) {
+        case AvatarApplyAction.clear:
+          await SettingsRepository.delete('avatar_local_path');
+          await SettingsRepository.delete('avatar_path');
+        case AvatarApplyAction.ignore:
+          break;
+        case AvatarApplyAction.apply:
+          // applyDecision only returns `apply` for a valid Storage path, so
+          // the value is non-null here.
+          final path = value!;
+          await SettingsRepository.set('avatar_path', path);
+          try {
+            final local = await AvatarSync.download(
+              Supabase.instance.client,
+              path,
+            );
+            await SettingsRepository.set('avatar_local_path', local);
+          } catch (_) {
+            // Offline or bucket missing — the storage path is kept and the
+            // file is fetched on the next successful pull.
+          }
       }
     },
     applyDelete: (oldRow) async {
