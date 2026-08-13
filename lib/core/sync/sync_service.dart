@@ -3,12 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:goworkbro/models/models.dart';
 import 'package:goworkbro/core/config/supabase_config.dart';
-import 'package:goworkbro/core/database/repositories/countdown_repository.dart';
-import 'package:goworkbro/core/database/repositories/focus_repository.dart';
-import 'package:goworkbro/core/database/repositories/habit_repository.dart';
 import 'package:goworkbro/core/database/repositories/settings_repository.dart';
-import 'package:goworkbro/core/database/repositories/sleep_repository.dart';
-import 'package:goworkbro/core/database/repositories/todo_repository.dart';
+import 'package:goworkbro/core/sync/sync_table_registry.dart';
 
 /// Sync service — bridges local SQLite and remote Supabase.
 ///
@@ -18,15 +14,14 @@ import 'package:goworkbro/core/database/repositories/todo_repository.dart';
 /// 2. All writes go to local SQLite first, then push to Supabase in background.
 /// 3. On app startup, pull remote changes and merge (last-write-wins by updated_at).
 /// 4. Realtime subscription keeps local cache fresh while app is running.
+///
+/// Tables participating in sync are declared declaratively in
+/// [syncTables] (sync_table_registry.dart) — pull and realtime here are a
+/// single loop over that registry instead of per-table code.
 class SyncService {
   static SupabaseClient? _client;
   static bool _isSyncing = false;
-  static RealtimeChannel? _todosChannel;
-  static RealtimeChannel? _habitsChannel;
-  static RealtimeChannel? _countdownsChannel;
-  static RealtimeChannel? _sleepChannel;
-  static RealtimeChannel? _focusChannel;
-  static RealtimeChannel? _settingsChannel;
+  static final List<RealtimeChannel> _channels = [];
 
   static bool get isConfigured => isSupabaseConfigured;
   static bool get isInitialized => _client != null;
@@ -46,58 +41,19 @@ class SyncService {
   static String? get currentUserId => _client?.auth.currentUser?.id;
 
   /// Profile keys synced between local SQLite and cloud `user_settings`.
-  /// Other settings (counters, first_used_date, …) stay device-local.
   static const profileKeys = ['user_name', 'avatar_path'];
 
   // ============ Startup Pull ============
 
+  /// Pulls every registered table once (in registry order).
   static Future<void> pullAll() async {
     if (_client == null || _isSyncing) return;
     _isSyncing = true;
 
     try {
-      await _pullTable('todos', (rows) async {
-        for (final row in rows) {
-          await TodoRepository.upsertFromRemote(row);
-        }
-      });
-
-      await _pullTable('habits', (rows) async {
-        for (final row in rows) {
-          await HabitRepository.upsertFromRemote(row);
-        }
-      });
-
-      await _pullTable('countdowns', (rows) async {
-        for (final row in rows) {
-          await CountdownRepository.upsertFromRemote(row);
-        }
-      });
-
-      await _pullTable('sleep_records', (rows) async {
-        for (final row in rows) {
-          await SleepRepository.upsertFromRemote(row);
-        }
-      });
-
-      await _pullTable('focus_sessions', (rows) async {
-        for (final row in rows) {
-          await FocusRepository.insertIfNotExists(row);
-        }
-      });
-
-      // Profile settings (user_name / avatar_path) — cloud wins on startup,
-      // so a name set on another device shows up here too.
-      await _pullTable('user_settings', (rows) async {
-        for (final row in rows) {
-          final key = row['key'] as String?;
-          if (key == null || !profileKeys.contains(key)) continue;
-          final value = row['value'] as String?;
-          if (value != null) {
-            await SettingsRepository.set(key, value);
-          }
-        }
-      });
+      for (final table in syncTables) {
+        await _pullTable(table.name, table.applyRemote);
+      }
     } catch (e) {
       debugPrint('Pull failed: $e');
     } finally {
@@ -107,7 +63,7 @@ class SyncService {
 
   static Future<void> _pullTable(
     String table,
-    Future<void> Function(List<Map<String, dynamic>> rows) handler,
+    Future<void> Function(Map<String, dynamic> row) applyRemote,
   ) async {
     final uid = currentUserId;
     if (uid == null) return;
@@ -115,10 +71,14 @@ class SyncService {
         .from(table)
         .select()
         .eq('user_id', uid);
-    await handler(response);
+    for (final row in response) {
+      await applyRemote(row);
+    }
   }
 
   // ============ Push (per-table) ============
+  // Push stays explicit per table because each row payload is shaped
+  // differently (foreign keys, booleans, timestamp formatting).
 
   static Future<void> pushTodo(Todo todo) async {
     if (_client == null) return;
@@ -272,91 +232,26 @@ class SyncService {
     // Note: Supabase RLS policies filter by user_id automatically.
     // Realtime payloads only contain rows the authenticated user can SELECT.
 
-    _todosChannel = _client!
-        .channel('public:todos')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'todos',
-          callback: (payload) {
-            TodoRepository.upsertFromRemote(payload.newRecord);
-          },
-        )
-        .subscribe();
-
-    _habitsChannel = _client!
-        .channel('public:habits')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'habits',
-          callback: (payload) {
-            HabitRepository.upsertFromRemote(payload.newRecord);
-          },
-        )
-        .subscribe();
-
-    _countdownsChannel = _client!
-        .channel('public:countdowns')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'countdowns',
-          callback: (payload) {
-            CountdownRepository.upsertFromRemote(payload.newRecord);
-          },
-        )
-        .subscribe();
-
-    _sleepChannel = _client!
-        .channel('public:sleep_records')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'sleep_records',
-          callback: (payload) {
-            SleepRepository.upsertFromRemote(payload.newRecord);
-          },
-        )
-        .subscribe();
-
-    _focusChannel = _client!
-        .channel('public:focus_sessions')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.insert,
-          schema: 'public',
-          table: 'focus_sessions',
-          callback: (payload) {
-            FocusRepository.insertIfNotExists(payload.newRecord);
-          },
-        )
-        .subscribe();
-
-    _settingsChannel = _client!
-        .channel('public:user_settings')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'user_settings',
-          callback: (payload) {
-            final row = payload.newRecord;
-            final key = row['key'] as String?;
-            if (key == null || !profileKeys.contains(key)) return;
-            final value = row['value'] as String?;
-            if (value != null) {
-              SettingsRepository.set(key, value);
-            }
-          },
-        )
-        .subscribe();
+    for (final table in syncTables) {
+      final channel = _client!
+          .channel('public:${table.name}')
+          .onPostgresChanges(
+            event: table.event,
+            schema: 'public',
+            table: table.name,
+            callback: (payload) {
+              table.applyRemote(payload.newRecord);
+            },
+          )
+          .subscribe();
+      _channels.add(channel);
+    }
   }
 
   static void dispose() {
-    _todosChannel?.unsubscribe();
-    _habitsChannel?.unsubscribe();
-    _countdownsChannel?.unsubscribe();
-    _sleepChannel?.unsubscribe();
-    _focusChannel?.unsubscribe();
-    _settingsChannel?.unsubscribe();
+    for (final channel in _channels) {
+      channel.unsubscribe();
+    }
+    _channels.clear();
   }
 }

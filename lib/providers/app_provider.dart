@@ -7,6 +7,7 @@ import 'package:goworkbro/models/models.dart';
 import 'package:goworkbro/core/database/app_database.dart';
 import 'package:goworkbro/core/device/device_identity_service.dart';
 import 'package:goworkbro/core/sync/sync_service.dart';
+import 'package:goworkbro/core/utils/date_utils.dart';
 import 'package:goworkbro/core/config/supabase_config.dart';
 import 'package:goworkbro/core/database/repositories/countdown_repository.dart';
 import 'package:goworkbro/core/database/repositories/focus_repository.dart';
@@ -53,10 +54,7 @@ class AppProvider extends ChangeNotifier {
       _allSessions.fold(0, (sum, session) => sum + session.durationSeconds);
   int get lifetimeSessionCount => _allSessions.length;
 
-  String get todayDate {
-    final now = DateTime.now();
-    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-  }
+  String get todayDate => todayDateKey;
 
   Future<void> init() {
     if (_isInitialized) return Future.value();
@@ -216,27 +214,7 @@ class AppProvider extends ChangeNotifier {
     if (i >= 0) _todos[i] = updated;
 
     if (isCompleting && todo.keepTomorrow) {
-      final hasIncompleteCopy = _todos.any(
-        (t) =>
-            t.title == todo.title &&
-            !t.isCompleted &&
-            t.createdDate != todo.createdDate,
-      );
-      if (!hasIncompleteCopy) {
-        final newTodo = Todo(
-          id: _uuid.v4(),
-          title: todo.title,
-          timingType: todo.timingType,
-          durationMinutes: todo.durationMinutes,
-          isCompleted: false,
-          sortOrder: todo.sortOrder,
-          keepTomorrow: true,
-          createdDate: DateTime.now().toIso8601String(),
-        );
-        await TodoRepository.insert(newTodo);
-        _todos.add(newTodo);
-        unawaited(SyncService.pushTodo(newTodo));
-      }
+      await _createTomorrowCopyIfNeeded(todo);
     }
 
     notifyListeners();
@@ -269,31 +247,37 @@ class AppProvider extends ChangeNotifier {
     _todos[i] = updated;
 
     if (current.keepTomorrow && !current.isCompleted) {
-      final hasIncompleteCopy = _todos.any(
-        (t) =>
-            t.title == current.title &&
-            !t.isCompleted &&
-            t.createdDate != current.createdDate,
-      );
-      if (!hasIncompleteCopy) {
-        final newTodo = Todo(
-          id: _uuid.v4(),
-          title: current.title,
-          timingType: current.timingType,
-          durationMinutes: current.durationMinutes,
-          isCompleted: false,
-          sortOrder: current.sortOrder,
-          keepTomorrow: true,
-          createdDate: DateTime.now().toIso8601String(),
-        );
-        await TodoRepository.insert(newTodo);
-        _todos.add(newTodo);
-        unawaited(SyncService.pushTodo(newTodo));
-      }
+      await _createTomorrowCopyIfNeeded(current);
     }
 
     notifyListeners();
     unawaited(SyncService.pushTodo(updated));
+  }
+
+  /// For keepTomorrow todos: create an incomplete copy for the next day
+  /// unless one already exists (idempotent — safe on double-taps).
+  Future<void> _createTomorrowCopyIfNeeded(Todo completed) async {
+    final hasIncompleteCopy = _todos.any(
+      (t) =>
+          t.title == completed.title &&
+          !t.isCompleted &&
+          t.createdDate != completed.createdDate,
+    );
+    if (hasIncompleteCopy) return;
+
+    final newTodo = Todo(
+      id: _uuid.v4(),
+      title: completed.title,
+      timingType: completed.timingType,
+      durationMinutes: completed.durationMinutes,
+      isCompleted: false,
+      sortOrder: completed.sortOrder,
+      keepTomorrow: true,
+      createdDate: DateTime.now().toIso8601String(),
+    );
+    await TodoRepository.insert(newTodo);
+    _todos.add(newTodo);
+    unawaited(SyncService.pushTodo(newTodo));
   }
 
   Future<void> deleteTodo(String id) async {
@@ -423,12 +407,9 @@ class AppProvider extends ChangeNotifier {
     }
     return [
       for (int i = 6; i >= 0; i--)
-        byDate[_dateKey(now.subtract(Duration(days: i)))] ?? 0,
+        byDate[dateKeyOf(now.subtract(Duration(days: i)))] ?? 0,
     ];
   }
-
-  String _dateKey(DateTime date) =>
-      '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
   // ============ Countdown ops ============
 
