@@ -59,6 +59,67 @@ void main() {
       expect(all.map((t) => t.title), ['pending']);
     });
 
+    test('rollOver returns deleted ids so the caller can mirror to cloud', () async {
+      final done = Todo.create(
+        title: 'done',
+        timingType: TimingTypeExtension.fromValue('forward'),
+      ).copyWith(isCompleted: true);
+      final pending = Todo.create(
+        title: 'pending',
+        timingType: TimingTypeExtension.fromValue('forward'),
+      );
+      await TodoRepository.insert(done);
+      await TodoRepository.insert(pending);
+
+      final ids = await TodoRepository.rollOver('2026-08-14');
+      expect(ids, [done.id]);
+    });
+
+    test('upsertFromRemote is last-write-wins by updated_at', () async {
+      final local = Todo.create(
+        title: 'local',
+        timingType: TimingTypeExtension.fromValue('forward'),
+      );
+      await TodoRepository.insert(local);
+      final db = await AppDatabase.database;
+      final rows = await db.query(
+        'todos',
+        columns: ['updated_at'],
+        where: 'id = ?',
+        whereArgs: [local.id],
+      );
+      final localStamp = rows.first['updated_at'] as String;
+      final base = DateTime.parse(localStamp).toUtc();
+
+      Map<String, dynamic> remote(String title, DateTime stamp) => {
+        'id': local.id,
+        'title': title,
+        'timing_type': 'forward',
+        'duration_minutes': 25,
+        'is_completed': false,
+        'sort_order': 0,
+        'keep_tomorrow': true,
+        'created_date': '2026-08-14',
+        'completed_date': null,
+        'actual_duration_seconds': 0,
+        'updated_at': stamp.toIso8601String(),
+      };
+
+      // Older remote row → discarded, local edit survives.
+      await TodoRepository.upsertFromRemote(
+        remote('stale', base.subtract(const Duration(minutes: 5))),
+      );
+      expect((await TodoRepository.getAll()).single.title, 'local');
+
+      // Newer remote row → applied.
+      await TodoRepository.upsertFromRemote(
+        remote('fresh', base.add(const Duration(minutes: 5))),
+      );
+      final after = await TodoRepository.getAll();
+      expect(after.single.title, 'fresh');
+      expect(after.single.updatedAt, isNotNull);
+    });
+
     test('upsertFromRemote normalizes bool and int payloads', () async {
       await TodoRepository.upsertFromRemote({
         'id': 'r1',
@@ -200,6 +261,29 @@ void main() {
       final after = await HabitRepository.getAll();
       expect(after.single.currentCount, 0);
       expect(after.single.lastResetDate, '2026-08-13');
+    });
+
+    test('resetForNewDay stamps updated_at so the reset reaches the cloud', () async {
+      final habit = Habit.create(title: '早起', targetCount: 1);
+      await HabitRepository.insert(habit);
+      final db = await AppDatabase.database;
+      final before = (await db.query(
+        'habits',
+        columns: ['updated_at'],
+        where: 'id = ?',
+        whereArgs: [habit.id],
+      )).first['updated_at'] as String;
+
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+      await HabitRepository.resetForNewDay('2026-08-14');
+      final after = (await db.query(
+        'habits',
+        columns: ['updated_at'],
+        where: 'id = ?',
+        whereArgs: [habit.id],
+      )).first['updated_at'] as String;
+
+      expect(DateTime.parse(after).isAfter(DateTime.parse(before)), isTrue);
     });
   });
 

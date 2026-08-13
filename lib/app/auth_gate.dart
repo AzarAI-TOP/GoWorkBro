@@ -51,11 +51,11 @@ class _AuthGateState extends State<AuthGate> {
 
       if (event == AuthChangeEvent.signedIn && session != null) {
         setState(() => _isLoggedIn = true);
+        // onSignedIn awaits init() first — this fixes the race where
+        // applyAuthUser used to run concurrently with the startup pull and
+        // clobber the cloud profile name with the email-prefix fallback.
         final provider = context.read<AppProvider>();
-        provider.init();
-        // Derive profile (email prefix / metadata) even if init already ran
-        // earlier in offline mode.
-        provider.applyAuthUser();
+        provider.onSignedIn();
       } else if (event == AuthChangeEvent.signedOut) {
         setState(() => _isLoggedIn = false);
       }

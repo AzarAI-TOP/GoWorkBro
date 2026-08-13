@@ -11,7 +11,7 @@ import 'package:path_provider/path_provider.dart';
 /// `repositories/` (TodoRepository, HabitRepository, …) — this class only
 /// knows how to open/upgrade/reset the database file.
 class AppDatabase {
-  static const int schemaVersion = 3;
+  static const int schemaVersion = 4;
 
   static Database? _db;
 
@@ -61,7 +61,8 @@ class AppDatabase {
         keep_tomorrow INTEGER NOT NULL DEFAULT 1,
         created_date TEXT NOT NULL,
         completed_date TEXT,
-        actual_duration_seconds INTEGER NOT NULL DEFAULT 0
+        actual_duration_seconds INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT
       )
     ''');
 
@@ -74,7 +75,8 @@ class AppDatabase {
         sort_order INTEGER NOT NULL DEFAULT 0,
         created_date TEXT NOT NULL,
         current_count INTEGER NOT NULL DEFAULT 0,
-        last_reset_date TEXT
+        last_reset_date TEXT,
+        updated_at TEXT
       )
     ''');
 
@@ -97,7 +99,8 @@ class AppDatabase {
         title TEXT NOT NULL,
         target_datetime TEXT NOT NULL,
         created_date TEXT NOT NULL,
-        color_index INTEGER NOT NULL DEFAULT 0
+        color_index INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT
       )
     ''');
 
@@ -206,6 +209,12 @@ class AppDatabase {
           'value': DateTime.now().toIso8601String(),
         }, conflictAlgorithm: ConflictAlgorithm.ignore);
       }
+    }
+    if (oldVersion < 4) {
+      // v4: last-write-wins sync — updated_at stamps for the mergeable tables.
+      await db.execute('ALTER TABLE todos ADD COLUMN updated_at TEXT;');
+      await db.execute('ALTER TABLE habits ADD COLUMN updated_at TEXT;');
+      await db.execute('ALTER TABLE countdowns ADD COLUMN updated_at TEXT;');
     }
   }
 

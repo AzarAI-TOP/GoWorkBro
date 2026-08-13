@@ -127,3 +127,26 @@ create index if not exists idx_focus_sessions_user_date on public.focus_sessions
 create index if not exists idx_countdowns_user on public.countdowns(user_id);
 create index if not exists idx_sleep_records_user on public.sleep_records(user_id);
 create index if not exists idx_user_settings_user on public.user_settings(user_id);
+
+-- ============================================================
+-- Storage: avatar bucket (added in v1.2.0)
+-- Run this section once in: Supabase Dashboard → SQL Editor
+-- ============================================================
+
+-- Public bucket: avatars are readable without auth; uploads restricted
+-- to the owning user's own folder (<uid>/avatar.ext).
+insert into storage.buckets (id, name, public)
+values ('avatars', 'avatars', true)
+on conflict (id) do nothing;
+
+create policy "avatars upload own"
+  on storage.objects for insert to authenticated
+  with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+
+create policy "avatars update own"
+  on storage.objects for update to authenticated
+  using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+
+create policy "avatars delete own"
+  on storage.objects for delete to authenticated
+  using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);

@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import 'package:goworkbro/models/models.dart';
 import 'package:goworkbro/core/database/app_database.dart';
 import 'package:goworkbro/core/device/device_identity_service.dart';
+import 'package:goworkbro/core/sync/avatar_sync.dart';
 import 'package:goworkbro/core/sync/sync_service.dart';
 import 'package:goworkbro/core/utils/date_utils.dart';
 import 'package:goworkbro/core/config/supabase_config.dart';
@@ -38,6 +39,11 @@ class AppProvider extends ChangeNotifier {
   int _lifetimeHabitsCompleted = 0;
   String _lastRolloverDate = '';
   Timer? _rolloverTimer;
+  Timer? _syncTimer;
+
+  /// How often the background sync pull runs (covers realtime gaps on
+  /// mobile: backgrounded apps, missed events, flaky connections).
+  static const syncInterval = Duration(seconds: 60);
 
   List<Todo> get todos => _todos;
   List<Habit> get habits => _habits;
@@ -64,7 +70,11 @@ class AppProvider extends ChangeNotifier {
   Future<void> _initInternal() async {
     _userName = await SettingsRepository.get('user_name') ?? '离线用户';
     _deviceId = await DeviceIdentityService.getOrCreateDeviceId();
-    _avatarPath = await SettingsRepository.get('avatar_path');
+    // Display path: the device-local cached avatar file first; fall back to
+    // the synced key for legacy installs that stored a local path there.
+    _avatarPath =
+        await SettingsRepository.get('avatar_local_path') ??
+        await SettingsRepository.get('avatar_path');
     _firstUsedDate =
         await SettingsRepository.get('first_used_date') ?? todayDate;
     _lifetimeTodosCompleted =
@@ -86,9 +96,12 @@ class AppProvider extends ChangeNotifier {
     if (isSupabaseConfigured) {
       await SyncService.initialize();
       if (SyncService.isInitialized) {
+        // Realtime writes land in SQLite; refresh the visible state when
+        // they arrive so the UI updates live on both devices.
+        SyncService.onRemoteChanged = () => refreshAll();
         await SyncService.pullAll();
         await refreshAll();
-        _pushAllLocal();
+        _pushAll();
         // After the pull, derive the profile from the signed-in user
         // (email prefix / user_metadata) when no custom name is set yet.
         await applyAuthUser();
@@ -100,6 +113,9 @@ class AppProvider extends ChangeNotifier {
         _performDailyRollover().then((_) => refreshAll());
       }
     });
+    _syncTimer = Timer.periodic(syncInterval, (_) {
+      unawaited(syncNow());
+    });
 
     _isInitialized = true;
     _initializing = null;
@@ -108,10 +124,15 @@ class AppProvider extends ChangeNotifier {
 
   /// Sync the visible profile with the signed-in Supabase user.
   ///
-  /// Called after login / session restore. If the user hasn't set a custom
-  /// name yet (still the default "离线用户"), derive one from the account:
-  /// `user_metadata.user_name` if present, otherwise the email prefix —
-  /// so a logged-in user never sees "离线用户" in the UI.
+  /// Called after login / session restore / pull. If the user hasn't set a
+  /// custom name yet (still the default "离线用户"), derive one from the
+  /// account: `user_metadata.user_name` if present, otherwise the email
+  /// prefix — so a logged-in user never sees "离线用户" in the UI.
+  ///
+  /// Only a name that came from real profile metadata is pushed to the
+  /// cloud. The email-prefix fallback stays device-local so it can never
+  /// race ahead of a pull and clobber a custom name pushed by another
+  /// device (the next pull corrects it anyway).
   Future<void> applyAuthUser() async {
     if (!isSupabaseConfigured) return;
     final client = Supabase.instance.client;
@@ -125,8 +146,9 @@ class AppProvider extends ChangeNotifier {
     final isDefaultName = currentName == null || currentName == '离线用户';
     if (isDefaultName) {
       final metaName = (meta?['user_name'] as String?)?.trim();
+      final fromMeta = metaName != null && metaName.isNotEmpty;
       final displayName =
-          (metaName != null && metaName.isNotEmpty)
+          fromMeta
               ? metaName
               : (email != null && email.isNotEmpty)
               ? email.split('@').first
@@ -134,23 +156,51 @@ class AppProvider extends ChangeNotifier {
       if (displayName != currentName) {
         await SettingsRepository.set('user_name', displayName);
         _userName = displayName;
+        if (fromMeta) {
+          unawaited(SyncService.pushUserSettings());
+        }
       }
     }
 
-    final metaAvatar = (meta?['avatar_path'] as String?)?.trim();
-    final hasLocalAvatar = _avatarPath != null && _avatarPath!.isNotEmpty;
-    if (metaAvatar != null && metaAvatar.isNotEmpty && !hasLocalAvatar) {
-      await SettingsRepository.set('avatar_path', metaAvatar);
-      _avatarPath = metaAvatar;
-    }
-
-    unawaited(SyncService.pushUserSettings());
     notifyListeners();
+  }
+
+  /// Called right after the user signs in (AuthGate).
+  ///
+  /// If the provider was already initialized earlier without a session
+  /// (offline mode), the startup pull never ran — do it now. If init had
+  /// not run yet, `init()` performs the full pull itself and this method
+  /// has nothing left to do.
+  Future<void> onSignedIn() async {
+    final wasInitialized = _isInitialized;
+    await init();
+    if (!isSupabaseConfigured) return;
+    await SyncService.initialize();
+    if (!SyncService.isInitialized) return;
+    if (wasInitialized) {
+      SyncService.onRemoteChanged = () => refreshAll();
+      await SyncService.pullAll();
+      await refreshAll();
+      await applyAuthUser();
+    }
+  }
+
+  /// Pull remote changes and refresh the UI. Used by the periodic sync
+  /// timer and by the app-resume hook (mobile).
+  Future<void> syncNow() async {
+    if (!isSupabaseConfigured) return;
+    await SyncService.initialize();
+    if (!SyncService.isInitialized || SyncService.currentUserId == null) {
+      return;
+    }
+    await SyncService.pullAll();
+    await refreshAll();
   }
 
   @override
   void dispose() {
     _rolloverTimer?.cancel();
+    _syncTimer?.cancel();
     SyncService.dispose();
     super.dispose();
   }
@@ -158,15 +208,33 @@ class AppProvider extends ChangeNotifier {
   Future<void> _performDailyRollover() async {
     if (_lastRolloverDate == todayDate) return;
 
-    await TodoRepository.rollOver(todayDate);
+    final deletedTodoIds = await TodoRepository.rollOver(todayDate);
     await HabitRepository.resetForNewDay(todayDate);
-    await CountdownRepository.cleanupExpired();
+    final deletedCountdownIds = await CountdownRepository.cleanupExpired();
 
     await SettingsRepository.set('last_rollover_date', todayDate);
     _lastRolloverDate = todayDate;
+
+    // Reload before mirroring: _pushAll must not re-push the just-deleted
+    // completed todos / expired countdowns (they would resurrect on the
+    // cloud side).
+    await refreshAll();
+
+    // Mirror the local rollover to the cloud: deleted rows would otherwise
+    // come back on the next pull, and habit resets must reach the other
+    // device.
+    for (final id in deletedTodoIds) {
+      unawaited(SyncService.deleteRemoteTodo(id));
+    }
+    for (final id in deletedCountdownIds) {
+      unawaited(SyncService.deleteRemoteCountdown(id));
+    }
+    _pushAll();
   }
 
-  /// Full reload from DB — used at startup and after sync pull.
+  /// Full reload from DB — used at startup, after sync pull and on realtime
+  /// events. Also refreshes the visible profile (name / avatar), which is
+  /// part of the synced user_settings table.
   Future<void> refreshAll() async {
     _todos = await TodoRepository.getAll();
     _habits = await HabitRepository.getAll();
@@ -174,6 +242,12 @@ class AppProvider extends ChangeNotifier {
     _todaySessions = await FocusRepository.getByDate(todayDate);
     _allSessions = await FocusRepository.getAll();
     _sleepRecords = await SleepRepository.getAll();
+    final name = await SettingsRepository.get('user_name');
+    if (name != null && name.isNotEmpty) _userName = name;
+    final avatar =
+        await SettingsRepository.get('avatar_local_path') ??
+        await SettingsRepository.get('avatar_path');
+    _avatarPath = avatar;
     notifyListeners();
   }
 
@@ -467,16 +541,25 @@ class AppProvider extends ChangeNotifier {
     _avatarPath = path;
     if (path == null || path.isEmpty) {
       final db = await AppDatabase.database;
+      final oldStoragePath = await SettingsRepository.get('avatar_path');
       await db.delete(
         'user_settings',
-        where: 'key = ?',
-        whereArgs: ['avatar_path'],
+        where: 'key IN (?, ?)',
+        whereArgs: ['avatar_path', 'avatar_local_path'],
       );
+      // Remove the cloud copy too — the realtime DELETE propagates to the
+      // other device. A legacy local-path value cannot be a storage path.
+      if (oldStoragePath != null && AvatarSync.isStoragePath(oldStoragePath)) {
+        unawaited(SyncService.removeRemoteAvatar(oldStoragePath));
+      } else {
+        unawaited(SyncService.deleteRemoteUserSetting('avatar_path'));
+      }
     } else {
-      await SettingsRepository.set('avatar_path', path);
+      // Device-local display cache + Storage upload for cross-device sync.
+      await SettingsRepository.set('avatar_local_path', path);
+      unawaited(SyncService.uploadAvatarAndPush(path));
     }
     notifyListeners();
-    unawaited(SyncService.pushUserSettings());
   }
 
   Future<void> deleteAllData() async {
@@ -504,22 +587,16 @@ class AppProvider extends ChangeNotifier {
 
   // ============ Computed stats ============
 
-  void _pushAllLocal() {
-    for (final t in _todos) {
-      unawaited(SyncService.pushTodo(t));
-    }
-    for (final h in _habits) {
-      unawaited(SyncService.pushHabit(h));
-    }
-    for (final c in _countdowns) {
-      unawaited(SyncService.pushCountdown(c));
-    }
-    for (final s in _todaySessions) {
-      unawaited(SyncService.pushFocusSession(s));
-    }
-    for (final r in _sleepRecords) {
-      unawaited(SyncService.pushSleepRecord(r));
-    }
+  void _pushAll() {
+    unawaited(
+      SyncService.pushAll(
+        todos: _todos,
+        habits: _habits,
+        countdowns: _countdowns,
+        sessions: _todaySessions,
+        sleepRecords: _sleepRecords,
+      ),
+    );
   }
 
   int get todayTotalFocusSeconds =>

@@ -11,6 +11,11 @@ abstract final class SleepRepository {
     return maps.map((m) => SleepRecord.fromMap(m)).toList();
   }
 
+  static Future<void> deleteById(String id) async {
+    final db = await AppDatabase.database;
+    await db.delete('sleep_records', where: 'id = ?', whereArgs: [id]);
+  }
+
   static Future<SleepRecord?> getById(String id) async {
     final db = await AppDatabase.database;
     final maps = await db.query(

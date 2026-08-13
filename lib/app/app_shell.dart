@@ -7,9 +7,11 @@ import 'package:goworkbro/features/todos/todo_screen.dart';
 import 'package:goworkbro/features/countdowns/countdown_screen.dart';
 import 'package:goworkbro/features/today/today_screen.dart';
 import 'package:goworkbro/features/me/me_screen.dart';
+import 'package:goworkbro/providers/app_provider.dart';
 
 /// Main navigation shell: side rail on desktop (>= 900px), bottom bar on
-/// mobile. Also intercepts the window close button to hide to tray.
+/// mobile. Also intercepts the window close button to hide to tray, and
+/// pulls cloud changes when the app returns to the foreground (mobile).
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
 
@@ -17,19 +19,31 @@ class AppShell extends StatefulWidget {
   State<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends State<AppShell> with WindowListener {
+class _AppShellState extends State<AppShell>
+    with WindowListener, WidgetsBindingObserver {
   int _currentIndex = 0;
 
   @override
   void initState() {
     super.initState();
     windowManager.addListener(this);
+    WidgetsBinding.instance.addObserver(this);
   }
 
   @override
   void dispose() {
     windowManager.removeListener(this);
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Mobile: realtime dies in the background — pull as soon as the app
+    // comes back so missed changes appear immediately.
+    if (state == AppLifecycleState.resumed) {
+      context.read<AppProvider>().syncNow();
+    }
   }
 
   /// Intercept the window close button — hide to tray instead of quitting.

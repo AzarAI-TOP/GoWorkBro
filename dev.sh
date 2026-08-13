@@ -21,8 +21,10 @@ if [ ! -f "$CONFIG" ]; then
   exit 1
 fi
 
-URL=$(grep 'localSupabaseUrl' "$CONFIG" | sed "s/.*= *'//;s/'.*//")
-KEY=$(grep 'localSupabaseAnonKey' "$CONFIG" | sed "s/.*= *'//;s/'.*//")
+# Parse credential values robustly: they may sit on the same line as the
+# declaration or wrapped onto the next line (dart format moves them there).
+URL=$(grep -A1 'localSupabaseUrl' "$CONFIG" | grep -o "'[^']*'" | head -1 | tr -d "'")
+KEY=$(grep -A1 'localSupabaseAnonKey' "$CONFIG" | grep -o "'[^']*'" | head -1 | tr -d "'")
 
 if [ -z "$URL" ] || [ -z "$KEY" ]; then
   echo "⚠️  Could not parse credentials from $CONFIG"

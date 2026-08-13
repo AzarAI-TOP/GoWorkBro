@@ -12,6 +12,10 @@ class Habit {
   final int currentCount;
   final String? lastResetDate;
 
+  /// Last-write timestamp (UTC ISO-8601), stamped by the repository on local
+  /// writes and taken from cloud rows on remote applies. Used for LWW merge.
+  final String? updatedAt;
+
   Habit({
     required this.id,
     required this.title,
@@ -21,6 +25,7 @@ class Habit {
     required this.createdDate,
     this.currentCount = 0,
     this.lastResetDate,
+    this.updatedAt,
   });
 
   factory Habit.create({
@@ -53,6 +58,7 @@ class Habit {
     int? sortOrder,
     int? currentCount,
     String? lastResetDate,
+    String? updatedAt,
   }) {
     return Habit(
       id: id,
@@ -63,6 +69,7 @@ class Habit {
       createdDate: createdDate,
       currentCount: currentCount ?? this.currentCount,
       lastResetDate: lastResetDate ?? this.lastResetDate,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 
@@ -75,6 +82,7 @@ class Habit {
     'created_date': createdDate,
     'current_count': currentCount,
     'last_reset_date': lastResetDate,
+    'updated_at': updatedAt,
   };
 
   factory Habit.fromMap(Map<String, dynamic> m) => Habit(
@@ -86,5 +94,6 @@ class Habit {
     createdDate: m['created_date'] as String,
     currentCount: m['current_count'] as int,
     lastResetDate: m['last_reset_date'] as String?,
+    updatedAt: m['updated_at'] as String?,
   );
 }

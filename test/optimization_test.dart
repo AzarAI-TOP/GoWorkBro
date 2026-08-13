@@ -96,7 +96,7 @@ void main() {
     expect(secondEvent, 2);
   });
 
-  test('database v2 to v3 migration preserves data and seeds counters', () async {
+  test('database v2 to v4 migration preserves data and seeds counters', () async {
     sqfliteFfiInit();
     final temp = await Directory.systemTemp.createTemp('goworkbro_migration_');
     final path = '${temp.path}${Platform.pathSeparator}legacy.db';
@@ -128,6 +128,15 @@ void main() {
         value TEXT NOT NULL
       )
     ''');
+    await db.execute('''
+      CREATE TABLE countdowns (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        target_datetime TEXT NOT NULL,
+        created_date TEXT NOT NULL,
+        color_index INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
     await db.insert('todos', {
       'id': 't1',
       'title': 'keep me',
@@ -150,7 +159,7 @@ void main() {
       'value': 'Existing User',
     });
 
-    await AppDatabase.migrateForTesting(db, 2, 3);
+    await AppDatabase.migrateForTesting(db, 2, 4);
 
     final todos = await db.query('todos', orderBy: 'id');
     final userName = await db.query(
@@ -196,5 +205,15 @@ void main() {
     expect(todoMarker, hasLength(1));
     expect(yesterdayHabitMarker, hasLength(1));
     expect(todayHabitMarker, isEmpty);
+
+    // v4: updated_at columns added for last-write-wins sync.
+    for (final table in ['todos', 'habits', 'countdowns']) {
+      final columns = await db.rawQuery('PRAGMA table_info($table)');
+      expect(
+        columns.map((c) => c['name']),
+        contains('updated_at'),
+        reason: '$table should gain updated_at in the v4 migration',
+      );
+    }
   });
 }

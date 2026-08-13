@@ -10,6 +10,11 @@ abstract final class FocusRepository {
     return session.id;
   }
 
+  static Future<void> deleteById(String id) async {
+    final db = await AppDatabase.database;
+    await db.delete('focus_sessions', where: 'id = ?', whereArgs: [id]);
+  }
+
   static Future<List<FocusSession>> getByDate(String date) async {
     final db = await AppDatabase.database;
     final maps = await db.query(

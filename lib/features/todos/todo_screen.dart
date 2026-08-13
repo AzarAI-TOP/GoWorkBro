@@ -13,6 +13,35 @@ import 'package:goworkbro/features/todos/widgets/todo_edit_dialog.dart';
 import 'package:goworkbro/features/todos/widgets/habit_edit_dialog.dart';
 import 'package:goworkbro/core/l10n/app_locale.dart';
 
+/// Combined display order (top → bottom):
+/// 1. **unfinished habits** (by sortOrder) — forced above todos;
+/// 2. incomplete todos (by sortOrder);
+/// 3. completed habits (by sortOrder);
+/// 4. completed todos (by completedDate desc) — the bottom "done" zone, so
+///    finishing a todo drops it to the very bottom of the list.
+///
+/// Top-level (not private) so tests can assert the ordering rules directly.
+List<Object> buildCombinedList(List<Todo> todos, List<Habit> habits) {
+  final unfinishedHabits = habits.where((h) => !h.isCompleted).toList()
+    ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  final completedHabits = habits.where((h) => h.isCompleted).toList()
+    ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  final incompleteTodos = todos.where((t) => !t.isCompleted).toList()
+    ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  final completedTodos = todos.where((t) => t.isCompleted).toList()
+    ..sort((a, b) {
+      final ad = a.completedDate ?? '';
+      final bd = b.completedDate ?? '';
+      return bd.compareTo(ad); // desc — most recently completed first
+    });
+  return <Object>[
+    ...unfinishedHabits,
+    ...incompleteTodos,
+    ...completedHabits,
+    ...completedTodos,
+  ];
+}
+
 class TodoScreen extends StatefulWidget {
   const TodoScreen({super.key});
 
@@ -21,63 +50,61 @@ class TodoScreen extends StatefulWidget {
 }
 
 class _TodoScreenState extends State<TodoScreen> with TickerProviderStateMixin {
-  // ---- Combined display list ----
-  // Order: incomplete todos (by sortOrder) → completed todos (by completedDate desc) → habits
-  List<Object> _combined(AppProvider p) {
-    final incompleteTodos = p.todos.where((t) => !t.isCompleted).toList()
-      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-    final completedTodos = p.todos.where((t) => t.isCompleted).toList()
-      ..sort((a, b) {
-        final ad = a.completedDate ?? '';
-        final bd = b.completedDate ?? '';
-        return bd.compareTo(ad); // desc — most recently completed first
-      });
-    return <Object>[...incompleteTodos, ...completedTodos, ...p.habits];
-  }
+  // ---- Combined display list (order rules in buildCombinedList) ----
+  List<Object> _combined(AppProvider p) => buildCombinedList(p.todos, p.habits);
 
   void _onReorder(int oldIndex, int newIndex) {
+    // onReorderItem semantics: newIndex is the final insertion position with
+    // the dragged item conceptually removed from the list first.
     final provider = context.read<AppProvider>();
     final items = _combined(provider);
     final oldItem = items[oldIndex];
 
+    final unfinishedHabits = provider.habits
+        .where((h) => !h.isCompleted)
+        .toList()
+      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    final incompleteTodos = provider.todos
+        .where((t) => !t.isCompleted)
+        .toList()
+      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    final uh = unfinishedHabits.length;
+    final it = incompleteTodos.length;
+
     if (oldItem is Habit) {
-      // Habit drag — find the target habit index.
-      final habits = provider.habits;
-      final oldHabitIndex = habits.indexOf(oldItem);
-      // Count how many habits come before the drop position
-      final habitStartIndex = items.length - habits.length;
-      var newHabitIndex = newIndex - habitStartIndex;
-      if (newHabitIndex < 0) newHabitIndex = 0;
-      if (newHabitIndex > habits.length) newHabitIndex = habits.length;
-      if (oldHabitIndex == newHabitIndex ||
-          newHabitIndex == oldHabitIndex + 1) {
+      // Habit drag — confined to the unfinished-habit zone at the top.
+      // Completed habits are not draggable (no drag handle, plus this guard).
+      if (oldItem.isCompleted) return;
+      final dropAfter = newIndex > oldIndex;
+      final finalPos = newIndex.clamp(0, uh);
+      final oldHabitIndex = provider.habits.indexOf(oldItem);
+      int newHabitIndex;
+      if (finalPos >= uh) {
+        // Dropped at/after the end of the unfinished zone.
+        newHabitIndex = provider.habits.indexOf(unfinishedHabits.last) + 1;
+      } else {
+        newHabitIndex =
+            provider.habits.indexOf(unfinishedHabits[finalPos]) +
+            (dropAfter ? 1 : 0);
+      }
+      if (newHabitIndex == oldHabitIndex || newHabitIndex == oldHabitIndex + 1) {
         return;
       }
       provider.reorderHabits(oldHabitIndex, newHabitIndex);
     } else if (oldItem is Todo) {
-      // Todo drag — only allow reordering among incomplete todos.
+      // Todo drag — only among incomplete todos.
       if (oldItem.isCompleted) return;
-      final incompleteTodos = provider.todos
-          .where((t) => !t.isCompleted)
-          .toList();
-      final oldIncompleteIndex = incompleteTodos.indexOf(oldItem);
-      // Map display index to incomplete-todo index
-      var newIncompleteIndex = newIndex;
-      if (newIncompleteIndex > oldIndex) {
-        newIncompleteIndex--; // undo Flutter's pre-adjustment
+      final dropAfter = newIndex > oldIndex;
+      final finalPos = (newIndex - uh).clamp(0, it);
+      final oldTodoIndex = provider.todos.indexOf(oldItem);
+      final newTodoIndex = finalPos >= it
+          ? provider.todos.length
+          : provider.todos.indexOf(incompleteTodos[finalPos]) +
+                (dropAfter ? 1 : 0);
+      if (newTodoIndex == oldTodoIndex || newTodoIndex == oldTodoIndex + 1) {
+        return;
       }
-      newIncompleteIndex = newIncompleteIndex.clamp(0, incompleteTodos.length);
-      if (oldIncompleteIndex == newIncompleteIndex) return;
-
-      // Find the target position in the full provider.todos list
-      // by counting incomplete todos up to the new position
-      final targetTodo = newIncompleteIndex < incompleteTodos.length
-          ? incompleteTodos[newIncompleteIndex]
-          : null;
-      final newTodoIndex = targetTodo != null
-          ? provider.todos.indexOf(targetTodo)
-          : provider.todos.length;
-      provider.reorderTodos(provider.todos.indexOf(oldItem), newTodoIndex);
+      provider.reorderTodos(oldTodoIndex, newTodoIndex);
     }
   }
 
@@ -358,13 +385,10 @@ class _TodoScreenState extends State<TodoScreen> with TickerProviderStateMixin {
           : ReorderableListView.builder(
               buildDefaultDragHandles: false,
               itemCount: items.length,
-              // onReorderItem delivers a *pre-adjusted* newIndex (the dragged
-              // item is conceptually already removed from oldIndex), whereas
-              // the provider's reorder* methods expect the legacy onReorder
-              // convention (newIndex may point one past the slot). Undo the
-              // adjustment so we can hand the provider the index it expects.
+              // onReorderItem already delivers the final insertion index with
+              // the dragged item conceptually removed — hand it to _onReorder
+              // unchanged (see buildCombinedList for the zone layout).
               onReorderItem: (oldIndex, newIndex) {
-                if (newIndex > oldIndex) newIndex += 1;
                 _onReorder(oldIndex, newIndex);
               },
               proxyDecorator: _proxyDecorator,
@@ -388,6 +412,7 @@ class _TodoScreenState extends State<TodoScreen> with TickerProviderStateMixin {
                     key: Key('habit_${item.id}'),
                     habit: item,
                     index: index,
+                    showDragHandle: !item.isCompleted,
                     onIncrement: () =>
                         context.read<AppProvider>().incrementHabit(item),
                     onDecrement: () =>

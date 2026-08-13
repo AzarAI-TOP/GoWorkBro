@@ -4,6 +4,39 @@ All notable changes to GoWorkBro are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-08-14
+
+### Added
+
+- **头像云端同步**：头像图片上传 Supabase Storage（`avatars` 桶），云端只存
+  对象路径，其他设备拉取时自动下载到本地缓存——Windows 与手机互相可见头像。
+  （需在 Supabase Dashboard 执行 schema.sql 新增的建桶 SQL 一次；未执行时
+  头像保持单机生效，其余同步不受影响。）
+- **同步轮询兜底**：每 60 秒自动拉取云端变更，App 恢复前台立即拉取，
+  弥补手机后台/断线期间 realtime 漏掉的事件。
+- **待办排序规则重构**：未完成 Habit 强制置顶；完成待办落到列表最底部
+  （完成区按完成时间倒序）；完成区不可拖动。
+
+### Fixed
+
+- **用户名跨端同步竞态**：登录时 `applyAuthUser` 曾抢在启动 pull 之前把
+  邮箱前缀推上云，覆盖另一台设备的自定义昵称；现在邮箱前缀仅存本地，且
+  登录流程先等 init/pull 完成。
+- **realtime DELETE 崩溃**：删除事件此前取 `newRecord`（删除时为 null）导致
+  远端删除永远不生效；现按 `eventType` 分发，删除正确落到本地。
+- **每日翻页不删云端**：已完成待办翻页清除后不再在下一次 pull 时复活。
+- **Habit 每日重置不同步**：重置现在带 `updated_at` 戳并推送，另一台设备
+  次日不会残留昨日计数。
+- **realtime 到达后 UI 不刷新**：远端变更写入 SQLite 后现在会刷新界面，
+  两端的列表与资料卡实时更新。
+- **pull 无条件覆盖本地更新**：todos/habits/countdowns 改为
+  last-write-wins（按 `updated_at`），轮询拉取不再回退本机新改动。
+
+### Changed
+
+- 本地数据库 schema v4（todos/habits/countdowns 增加 `updated_at` 列，
+  自动迁移保留数据）。
+
 ## [1.1.0] - 2026-08-13
 
 ### Added

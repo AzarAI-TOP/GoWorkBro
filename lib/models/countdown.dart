@@ -9,12 +9,17 @@ class Countdown {
   final String createdDate;
   final int colorIndex;
 
+  /// Last-write timestamp (UTC ISO-8601), stamped by the repository on local
+  /// writes and taken from cloud rows on remote applies. Used for LWW merge.
+  final String? updatedAt;
+
   Countdown({
     required this.id,
     required this.title,
     required this.targetDateTime,
     required this.createdDate,
     this.colorIndex = 0,
+    this.updatedAt,
   });
 
   factory Countdown.create({
@@ -41,6 +46,7 @@ class Countdown {
     'target_datetime': targetDateTime.toIso8601String(),
     'created_date': createdDate,
     'color_index': colorIndex,
+    'updated_at': updatedAt,
   };
 
   factory Countdown.fromMap(Map<String, dynamic> m) => Countdown(
@@ -49,5 +55,6 @@ class Countdown {
     targetDateTime: DateTime.parse(m['target_datetime'] as String),
     createdDate: m['created_date'] as String,
     colorIndex: m['color_index'] as int,
+    updatedAt: m['updated_at'] as String?,
   );
 }

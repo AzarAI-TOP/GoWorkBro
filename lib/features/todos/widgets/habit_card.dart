@@ -9,6 +9,10 @@ import 'package:provider/provider.dart';
 class HabitCard extends StatelessWidget {
   final Habit habit;
   final int index;
+
+  /// When false the drag handle is hidden (completed habits live in the
+  /// non-draggable "done" zone).
+  final bool showDragHandle;
   final VoidCallback onIncrement;
   final VoidCallback onDecrement;
   final VoidCallback onLongPress;
@@ -18,6 +22,7 @@ class HabitCard extends StatelessWidget {
     super.key,
     required this.habit,
     required this.index,
+    this.showDragHandle = true,
     required this.onIncrement,
     required this.onDecrement,
     required this.onLongPress,
@@ -44,17 +49,19 @@ class HabitCard extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           child: Row(
             children: [
-              ReorderableDragStartListener(
-                index: index,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 2),
-                  child: Icon(
-                    Icons.drag_indicator,
-                    color: theme.hintColor,
-                    size: 22,
+              if (showDragHandle)
+                ReorderableDragStartListener(
+                  index: index,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: Icon(
+                      Icons.drag_indicator,
+                      color: theme.hintColor,
+                      size: 22,
+                    ),
                   ),
                 ),
-              ),
+              if (!showDragHandle) const SizedBox(width: 26),
               const SizedBox(width: 8),
               Expanded(
                 child: Column(

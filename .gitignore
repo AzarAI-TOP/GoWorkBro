@@ -52,3 +52,6 @@ server/goworkbro-server.exe
 # Python cache
 __pycache__/
 *.pyc
+
+# Hermes agent workspace
+.hermes/

@@ -16,6 +16,11 @@ class Todo {
   final String? completedDate;
   final int actualDurationSeconds;
 
+  /// Last-write timestamp (UTC ISO-8601). Stamped by the repository on every
+  /// local write and taken from the cloud row when a remote change is
+  /// applied. Used for last-write-wins merge on pull.
+  final String? updatedAt;
+
   Todo({
     required this.id,
     required this.title,
@@ -27,6 +32,7 @@ class Todo {
     required this.createdDate,
     this.completedDate,
     this.actualDurationSeconds = 0,
+    this.updatedAt,
   });
 
   factory Todo.create({
@@ -56,6 +62,7 @@ class Todo {
     bool? keepTomorrow,
     String? completedDate,
     int? actualDurationSeconds,
+    String? updatedAt,
   }) {
     return Todo(
       id: id,
@@ -68,6 +75,7 @@ class Todo {
       createdDate: createdDate,
       completedDate: completedDate ?? this.completedDate,
       actualDurationSeconds: actualDurationSeconds ?? this.actualDurationSeconds,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 
@@ -82,6 +90,7 @@ class Todo {
     'created_date': createdDate,
     'completed_date': completedDate,
     'actual_duration_seconds': actualDurationSeconds,
+    'updated_at': updatedAt,
   };
 
   factory Todo.fromMap(Map<String, dynamic> m) => Todo(
@@ -95,5 +104,6 @@ class Todo {
     createdDate: m['created_date'] as String,
     completedDate: m['completed_date'] as String?,
     actualDurationSeconds: m['actual_duration_seconds'] as int,
+    updatedAt: m['updated_at'] as String?,
   );
 }

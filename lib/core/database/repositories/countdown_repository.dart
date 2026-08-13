@@ -1,6 +1,7 @@
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../../models/models.dart';
+import '../../sync/sync_compare.dart';
 import '../app_database.dart';
 
 /// Countdowns data access.
@@ -13,7 +14,7 @@ abstract final class CountdownRepository {
 
   static Future<String> insert(Countdown countdown) async {
     final db = await AppDatabase.database;
-    await db.insert('countdowns', countdown.toMap());
+    await db.insert('countdowns', countdown.toMap()..['updated_at'] = nowStamp());
     return countdown.id;
   }
 
@@ -21,7 +22,7 @@ abstract final class CountdownRepository {
     final db = await AppDatabase.database;
     await db.update(
       'countdowns',
-      countdown.toMap(),
+      countdown.toMap()..['updated_at'] = nowStamp(),
       where: 'id = ?',
       whereArgs: [countdown.id],
     );
@@ -41,26 +42,55 @@ abstract final class CountdownRepository {
 
   /// Delete countdowns whose target date has passed (next day after target).
   /// Uses UTC for consistent comparison across timezones.
-  static Future<void> cleanupExpired() async {
+  ///
+  /// Returns the ids of the deleted rows so the caller can mirror the
+  /// deletion to the cloud (otherwise the next pull resurrects them).
+  static Future<List<String>> cleanupExpired() async {
     final db = await AppDatabase.database;
     final todayUtc = DateTime.now().toUtc();
     final today = DateTime.utc(todayUtc.year, todayUtc.month, todayUtc.day);
-    await db.delete(
+    final rows = await db.query(
       'countdowns',
+      columns: ['id'],
       where: 'date(target_datetime) < date(?)',
       whereArgs: [today.toIso8601String()],
     );
+    final ids = rows.map((r) => r['id'] as String).toList();
+    if (ids.isNotEmpty) {
+      await db.delete(
+        'countdowns',
+        where: 'date(target_datetime) < date(?)',
+        whereArgs: [today.toIso8601String()],
+      );
+    }
+    return ids;
   }
 
-  /// Upsert a row pushed by the cloud sync (schema-normalized).
+  /// Upsert a row pushed by the cloud sync (schema-normalized),
+  /// last-write-wins by `updated_at`.
   static Future<void> upsertFromRemote(Map<String, dynamic> row) async {
     final db = await AppDatabase.database;
+    final id = row['id'] as String;
+    final existing = await db.query(
+      'countdowns',
+      columns: ['updated_at'],
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    if (existing.isNotEmpty &&
+        isLocalNewer(
+          existing.first['updated_at'] as String?,
+          row['updated_at'] as String?,
+        )) {
+      return; // local is newer — keep local
+    }
     await db.insert('countdowns', {
-      'id': row['id'],
+      'id': id,
       'title': row['title'],
       'target_datetime': row['target_datetime'],
       'created_date': row['created_date'],
       'color_index': row['color_index'] ?? 0,
+      'updated_at': row['updated_at'],
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 }
