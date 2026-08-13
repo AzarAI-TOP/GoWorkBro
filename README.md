@@ -9,8 +9,8 @@ Built with Flutter for Android and Windows desktop, with Supabase cloud sync.
 |--------|-------------|
 | **待办 (Todo)** | TODO items with forward/backward/no timer, "repeat tomorrow" auto-recreate, habits with daily reset & custom units |
 | **倒计时 (Countdown)** | Create countdown events with color coding, auto-delete next day, live remaining time |
-| **Today** | Focus statistics with pie chart, 7-day bar chart, session list, USTC daily news (Markdown rendered with LXGW WenKai font) |
-| **Me** | Profile, wake/workout/sleep check-in, statistics, settings (language, theme, cloud sync, data management) |
+| **Today** | Focus statistics with pie chart, 7-day bar chart, session list, USTC daily news (Markdown rendered with LXGW WenKai font, date-keyed local cache) |
+| **Me** | Profile & avatar, wake/workout/sleep check-in with trend charts (bedtime/wake time/duration), lifetime statistics, settings (language, theme, cloud sync, data management) |
 
 ## Architecture
 
@@ -22,8 +22,10 @@ lib/
 │   └── app_provider.dart      # Central state (ChangeNotifier), local-first with Supabase sync
 ├── services/
 │   ├── app_locale.dart        # i18n provider (zh/en) + S translation class
-│   ├── api_service.dart       # USTC news fetching (Supabase → local vault fallback)
+│   ├── api_service.dart       # USTC news fetching (cache → Supabase → local vault fallback)
 │   ├── database_service.dart  # SQLite (sqflite_common_ffi) CRUD, migrations, daily rollover
+│   ├── device_identity_service.dart  # Privacy-preserving offline device ID (GWB-…)
+│   ├── sleep_chart_utils.dart # Sleep chart helpers (contiguous runs, overnight duration)
 │   ├── sync_service.dart      # Supabase sync (push/pull/realtime)
 │   ├── supabase_config.dart   # Supabase URL/key via --dart-define
 │   ├── tray_service.dart      # Windows system tray icon
@@ -85,11 +87,26 @@ User Action → AppProvider (in-memory update + notifyListeners)
 ### Build
 
 ```bash
-# Windows release
-flutter build windows --release --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...
+# One-shot release build (validates version consistency, reads credentials
+# from local_config.dart without printing them):
+bash scripts/build_release.sh            # Windows + Android APK
+bash scripts/build_release.sh windows    # Windows only
+bash scripts/build_release.sh apk        # Android only
 
-# Android APK
+# Windows installer (manual step, requires Inno Setup):
+ISCC.exe windows/installer/goworkbro.iss
+
+# Manual build without the script:
+flutter build windows --release --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...
 flutter build apk --release --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...
+```
+
+### Tests
+
+```bash
+flutter test                        # unit tests (migrations, sleep utils, i18n)
+flutter test integration_test/user_flow_test.dart -d windows   # full user flow (local mode)
+flutter test integration_test/auth_test.dart -d windows        # auth screen (offline)
 ```
 
 ## Configuration
@@ -118,7 +135,7 @@ Right-click the tray icon to show the window or quit.
 - **Cloud**: Supabase (Auth, Postgres, Realtime)
 - **Charts**: fl_chart
 - **Markdown**: flutter_markdown
-- **Fonts**: LXGW WenKai (霞鹜文楷)
+- **Fonts**: 0xProto (UI) + LXGW WenKai (霞鹜文楷, news markdown)
 - **Desktop**: window_manager + tray_manager
 
 ## License
