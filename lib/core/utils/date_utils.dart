@@ -26,8 +26,9 @@ double? hoursFromTime(String? value) {
 /// e.g. bedtime "01:30" stored as 25.5 renders as "01:30").
 String formatHours(double value) {
   final normalized = value >= 24 ? value - 24 : value;
-  final hours = normalized.floor();
-  final minutes = ((normalized - hours) * 60).round();
+  final totalMinutes = (normalized * 60).round();
+  final hours = totalMinutes ~/ 60;
+  final minutes = totalMinutes % 60;
   return '${_two(hours)}:${_two(minutes)}';
 }
 

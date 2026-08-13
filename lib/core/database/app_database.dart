@@ -15,13 +15,23 @@ class AppDatabase {
 
   static Database? _db;
 
+  /// Test-only override for the data directory (Platform.environment is
+  /// read-only, so tests cannot set GOWORKBRO_TEST_DATA_DIR at runtime).
+  static String? _overrideDataDir;
+
+  @visibleForTesting
+  static void setDataDirForTesting(String path) {
+    _overrideDataDir = path;
+  }
+
   static Future<Database> get database async {
     if (_db != null) return _db!;
 
     sqfliteFfiInit();
     final dbFactory = databaseFactoryFfi;
 
-    final testDataDir = Platform.environment['GOWORKBRO_TEST_DATA_DIR'];
+    final testDataDir =
+        _overrideDataDir ?? Platform.environment['GOWORKBRO_TEST_DATA_DIR'];
     final appDir = testDataDir == null
         ? await getApplicationDocumentsDirectory()
         : Directory(testDataDir);
