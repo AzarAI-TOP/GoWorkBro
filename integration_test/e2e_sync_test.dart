@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:goworkbro/main.dart';
-import 'package:goworkbro/services/app_locale.dart';
+import 'package:goworkbro/core/l10n/app_locale.dart';
 
 /// End-to-end test: login → pull data from Supabase.
 /// Pre-conditions:

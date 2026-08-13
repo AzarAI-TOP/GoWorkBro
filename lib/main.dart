@@ -4,16 +4,16 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:window_manager/window_manager.dart';
-import 'providers/app_provider.dart';
-import 'services/app_locale.dart';
-import 'services/supabase_config.dart';
-import 'services/tray_service.dart';
-import 'theme/app_theme.dart';
-import 'screens/auth_screen.dart';
-import 'screens/todo_screen.dart';
-import 'screens/countdown_screen.dart';
-import 'screens/today_screen.dart';
-import 'screens/me_screen.dart';
+import 'package:goworkbro/providers/app_provider.dart';
+import 'package:goworkbro/core/l10n/app_locale.dart';
+import 'package:goworkbro/core/config/supabase_config.dart';
+import 'package:goworkbro/services/tray_service.dart';
+import 'package:goworkbro/core/theme/app_theme.dart';
+import 'package:goworkbro/features/auth/auth_screen.dart';
+import 'package:goworkbro/features/todos/todo_screen.dart';
+import 'package:goworkbro/features/countdowns/countdown_screen.dart';
+import 'package:goworkbro/features/today/today_screen.dart';
+import 'package:goworkbro/features/me/me_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

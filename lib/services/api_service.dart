@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'database_service.dart';
-import 'supabase_config.dart';
+import 'package:goworkbro/core/database/app_database.dart';
+import 'package:goworkbro/core/config/supabase_config.dart';
 
 /// API service for USTC news fetching and cloud data access.
 /// Go backend has been removed — everything goes through Supabase.

@@ -3,11 +3,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
-import '../models/models.dart';
-import '../services/database_service.dart';
-import '../services/device_identity_service.dart';
-import '../services/sync_service.dart';
-import '../services/supabase_config.dart';
+import 'package:goworkbro/models/models.dart';
+import 'package:goworkbro/core/database/app_database.dart';
+import 'package:goworkbro/core/device/device_identity_service.dart';
+import 'package:goworkbro/core/sync/sync_service.dart';
+import 'package:goworkbro/core/config/supabase_config.dart';
 
 const _uuid = Uuid();
 

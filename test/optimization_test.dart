@@ -1,9 +1,9 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:goworkbro/services/app_locale.dart';
-import 'package:goworkbro/services/database_service.dart';
-import 'package:goworkbro/services/sleep_chart_utils.dart';
+import 'package:goworkbro/core/l10n/app_locale.dart';
+import 'package:goworkbro/core/database/app_database.dart';
+import 'package:goworkbro/core/utils/sleep_chart_utils.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 

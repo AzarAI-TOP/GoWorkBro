@@ -1,6 +1,6 @@
 import 'package:uuid/uuid.dart';
 
-import 'timing_type.dart';
+import 'package:goworkbro/models/timing_type.dart';
 
 const _uuid = Uuid();
 

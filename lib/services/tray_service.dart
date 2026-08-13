@@ -2,8 +2,8 @@ import 'dart:io';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
-import 'app_locale.dart';
-import 'database_service.dart';
+import 'package:goworkbro/core/l10n/app_locale.dart';
+import 'package:goworkbro/core/database/app_database.dart';
 
 /// Manages the system tray icon and window visibility for background mode.
 ///

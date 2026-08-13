@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:goworkbro/models/models.dart';
-import 'package:goworkbro/services/app_locale.dart';
+import 'package:goworkbro/core/l10n/app_locale.dart';
 
-import 'package:goworkbro/widgets/todo/habit_card.dart';
+import 'package:goworkbro/features/todos/widgets/habit_card.dart';
 import 'package:provider/provider.dart';
 
 void main() {

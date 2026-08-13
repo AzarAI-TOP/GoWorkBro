@@ -7,7 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
-import 'app_locale.dart';
+import 'package:goworkbro/core/l10n/app_locale.dart';
 
 /// Checks for app updates by comparing the current version with the latest
 /// GitHub release. On Windows, can download and launch the MSI installer.
