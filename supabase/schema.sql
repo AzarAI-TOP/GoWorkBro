@@ -129,7 +129,7 @@ create index if not exists idx_sleep_records_user on public.sleep_records(user_i
 create index if not exists idx_user_settings_user on public.user_settings(user_id);
 
 -- ============================================================
--- Storage: avatar bucket (added in v1.2.0)
+-- Storage: avatar bucket (added in v1.1.1)
 -- Run this section once in: Supabase Dashboard → SQL Editor
 -- ============================================================
 
