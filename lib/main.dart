@@ -133,7 +133,11 @@ class _AuthGateState extends State<AuthGate> {
 
       if (event == AuthChangeEvent.signedIn && session != null) {
         setState(() => _isLoggedIn = true);
-        context.read<AppProvider>().init();
+        final provider = context.read<AppProvider>();
+        provider.init();
+        // Derive profile (email prefix / metadata) even if init already ran
+        // earlier in offline mode.
+        provider.applyAuthUser();
       } else if (event == AuthChangeEvent.signedOut) {
         setState(() => _isLoggedIn = false);
       }
