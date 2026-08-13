@@ -37,7 +37,7 @@ CloseApplications=force
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkablealone
 
 [Files]
 Source: "..\..\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -45,7 +45,16 @@ Source: "..\..\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ign
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"
 Name: "{group}\卸载 {#MyAppName}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+; Desktop shortcut goes to the user's desktop (not the public one) so an
+; upgrade overwrites the existing shortcut in place instead of leaving a
+; stale duplicate elsewhere.
+Name: "{userdesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+
+[Registry]
+; One-shot icon-cache purge at next logon — explorer's in-memory cache can
+; keep serving the pre-upgrade icon even after ie4uinit, so clear the cache
+; databases before the shell fully loads next time.
+Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce"; ValueType: string; ValueName: "GoWorkBroIconRefresh"; ValueData: "cmd /c del /f /q ""%localappdata%\IconCache.db"" & del /f /q ""%localappdata%\Microsoft\Windows\Explorer\iconcache_*.db"" 2>nul"; Flags: uninsdeletevalue
 
 [Run]
 ; Refresh the Windows icon cache so the taskbar/explorer show the new
