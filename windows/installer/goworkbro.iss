@@ -1,9 +1,9 @@
 ; GoWorkBro — Inno Setup Script
 ; Build: ISCC.exe goworkbro.iss
-; Output: GoWorkBro-Setup-v1.0.0.exe
+; Output version follows MyAppVersion below.
 
 #define MyAppName "GoWorkBro"
-#define MyAppVersion "1.0.1"
+#define MyAppVersion "1.0.2"
 #define MyAppPublisher "AzarAI"
 #define MyAppURL "https://github.com/AzarAI-TOP/GoWorkBro"
 #define MyAppExeName "goworkbro.exe"
@@ -56,5 +56,4 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}
 Filename: "taskkill"; Parameters: "/F /IM {#MyAppExeName}"; Flags: runhidden; RunOnceId: "KillApp"
 
 [UninstallDelete]
-; Clean up app data directory
-Type: filesandordirs; Name: "{%LOCALAPPDATA}\GoWorkBro"
+; User data is deliberately preserved across upgrades/uninstalls.

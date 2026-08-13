@@ -12,10 +12,10 @@ linter:
     prefer_const_constructors: false
     prefer_const_literals_to_create_immutables: false
     cascade_invocations: false
-    omitted_local_variable_types: false
 
 analyzer:
   exclude:
+    - "build/**"
     - "integration_test/**"
     - "**/*.g.dart"
     - "**/*.freezed.dart"
