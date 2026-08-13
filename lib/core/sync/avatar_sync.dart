@@ -12,6 +12,19 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 /// file path, because a Windows path is meaningless on the phone and vice
 /// versa. The local file cache lives under the app support directory and is
 /// keyed as `avatar_local_path` (device-local, never synced).
+/// What a pulled `user_settings.avatar_path` value should do locally.
+enum AvatarApplyAction {
+  /// Cloud removed the avatar (null value) — clear the local cache.
+  clear,
+
+  /// Legacy device-local path pushed by an old client — meaningless here
+  /// but harmless: keep the local avatar untouched (issue #12).
+  ignore,
+
+  /// Valid Storage object path — download and apply it.
+  apply,
+}
+
 abstract final class AvatarSync {
   static const String bucket = 'avatars';
 
@@ -25,6 +38,17 @@ abstract final class AvatarSync {
   static bool isStoragePath(String? value) {
     if (value == null || value.isEmpty) return false;
     return RegExp(r'^[0-9a-fA-F-]{36}/avatar\.\w+$').hasMatch(value);
+  }
+
+  /// Decides how a pulled `avatar_path` value lands on this device.
+  ///
+  /// Only a Storage object path is applied. Legacy local paths from v1.1.0
+  /// clients are ignored instead of wiping the local avatar — the startup
+  /// push migrates/self-heals the row.
+  static AvatarApplyAction applyDecision(String? value) {
+    if (value == null) return AvatarApplyAction.clear;
+    if (isStoragePath(value)) return AvatarApplyAction.apply;
+    return AvatarApplyAction.ignore;
   }
 
   static String _contentType(String path) =>
