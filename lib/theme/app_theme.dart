@@ -5,6 +5,7 @@ library;
 import 'package:flutter/material.dart';
 
 class AppTheme {
+  static const String fontFamily = '0xProto';
   // Primary palette — warm tomato red (番茄TODO signature)
   static const Color _primaryLight = Color(0xFFE85D3C);
   static const Color _primaryDark = Color(0xFFFF7A5C);
@@ -21,6 +22,7 @@ class AppTheme {
   ];
 
   static ThemeData get light => ThemeData(
+    fontFamily: fontFamily,
     useMaterial3: true,
     brightness: Brightness.light,
     colorScheme: ColorScheme.fromSeed(
@@ -62,23 +64,17 @@ class AppTheme {
         foregroundColor: Colors.white,
         elevation: 0,
         padding: EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
-      style: TextButton.styleFrom(
-        foregroundColor: _primaryLight,
-      ),
+      style: TextButton.styleFrom(foregroundColor: _primaryLight),
     ),
     floatingActionButtonTheme: FloatingActionButtonThemeData(
       backgroundColor: _primaryLight,
       foregroundColor: Colors.white,
       elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
     ),
     bottomNavigationBarTheme: BottomNavigationBarThemeData(
       backgroundColor: Colors.white,
@@ -93,8 +89,15 @@ class AppTheme {
       backgroundColor: Color(0xFFF8F8FA),
       selectedIconTheme: IconThemeData(color: _primaryLight, size: 28),
       unselectedIconTheme: IconThemeData(color: Color(0xFF999999), size: 24),
-      selectedLabelTextStyle: TextStyle(color: _primaryLight, fontSize: 13, fontWeight: FontWeight.w600),
-      unselectedLabelTextStyle: TextStyle(color: Color(0xFF999999), fontSize: 13),
+      selectedLabelTextStyle: TextStyle(
+        color: _primaryLight,
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+      ),
+      unselectedLabelTextStyle: TextStyle(
+        color: Color(0xFF999999),
+        fontSize: 13,
+      ),
       indicatorColor: _primaryLight.withValues(alpha: 0.12),
       minWidth: 80,
     ),
@@ -104,18 +107,40 @@ class AppTheme {
       space: 1,
     ),
     textTheme: const TextTheme(
-      headlineLarge: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: Color(0xFF1A1A1A), letterSpacing: -0.5),
-      headlineMedium: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, color: Color(0xFF1A1A1A)),
-      titleLarge: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Color(0xFF2D2D2D)),
-      titleMedium: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Color(0xFF2D2D2D)),
+      headlineLarge: TextStyle(
+        fontSize: 28,
+        fontWeight: FontWeight.w700,
+        color: Color(0xFF1A1A1A),
+        letterSpacing: -0.5,
+      ),
+      headlineMedium: TextStyle(
+        fontSize: 22,
+        fontWeight: FontWeight.w600,
+        color: Color(0xFF1A1A1A),
+      ),
+      titleLarge: TextStyle(
+        fontSize: 18,
+        fontWeight: FontWeight.w600,
+        color: Color(0xFF2D2D2D),
+      ),
+      titleMedium: TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.w500,
+        color: Color(0xFF2D2D2D),
+      ),
       bodyLarge: TextStyle(fontSize: 15, color: Color(0xFF3D3D3D)),
       bodyMedium: TextStyle(fontSize: 14, color: Color(0xFF5D5D5D)),
       bodySmall: TextStyle(fontSize: 12, color: Color(0xFF999999)),
-      labelLarge: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF2D2D2D)),
+      labelLarge: TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+        color: Color(0xFF2D2D2D),
+      ),
     ),
   );
 
   static ThemeData get dark => ThemeData(
+    fontFamily: fontFamily,
     useMaterial3: true,
     brightness: Brightness.dark,
     colorScheme: ColorScheme.fromSeed(
@@ -157,9 +182,7 @@ class AppTheme {
         foregroundColor: Colors.white,
         elevation: 0,
         padding: EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     ),
     bottomNavigationBarTheme: BottomNavigationBarThemeData(
@@ -173,8 +196,15 @@ class AppTheme {
       backgroundColor: Color(0xFF121214),
       selectedIconTheme: IconThemeData(color: _primaryDark, size: 28),
       unselectedIconTheme: IconThemeData(color: Color(0xFF666666), size: 24),
-      selectedLabelTextStyle: TextStyle(color: _primaryDark, fontSize: 13, fontWeight: FontWeight.w600),
-      unselectedLabelTextStyle: TextStyle(color: Color(0xFF666666), fontSize: 13),
+      selectedLabelTextStyle: TextStyle(
+        color: _primaryDark,
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+      ),
+      unselectedLabelTextStyle: TextStyle(
+        color: Color(0xFF666666),
+        fontSize: 13,
+      ),
       indicatorColor: _primaryDark.withValues(alpha: 0.15),
       minWidth: 80,
     ),
@@ -184,14 +214,35 @@ class AppTheme {
       space: 1,
     ),
     textTheme: const TextTheme(
-      headlineLarge: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: Color(0xFFF0F0F2), letterSpacing: -0.5),
-      headlineMedium: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, color: Color(0xFFF0F0F2)),
-      titleLarge: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Color(0xFFE0E0E2)),
-      titleMedium: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Color(0xFFE0E0E2)),
+      headlineLarge: TextStyle(
+        fontSize: 28,
+        fontWeight: FontWeight.w700,
+        color: Color(0xFFF0F0F2),
+        letterSpacing: -0.5,
+      ),
+      headlineMedium: TextStyle(
+        fontSize: 22,
+        fontWeight: FontWeight.w600,
+        color: Color(0xFFF0F0F2),
+      ),
+      titleLarge: TextStyle(
+        fontSize: 18,
+        fontWeight: FontWeight.w600,
+        color: Color(0xFFE0E0E2),
+      ),
+      titleMedium: TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.w500,
+        color: Color(0xFFE0E0E2),
+      ),
       bodyLarge: TextStyle(fontSize: 15, color: Color(0xFFB0B0B2)),
       bodyMedium: TextStyle(fontSize: 14, color: Color(0xFF909092)),
       bodySmall: TextStyle(fontSize: 12, color: Color(0xFF666666)),
-      labelLarge: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFFE0E0E2)),
+      labelLarge: TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+        color: Color(0xFFE0E0E2),
+      ),
     ),
   );
 }
@@ -210,10 +261,7 @@ class GeometricBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!showPattern) return child;
-    return CustomPaint(
-      painter: _GeometricPainter(),
-      child: child,
-    );
+    return CustomPaint(painter: _GeometricPainter(), child: child);
   }
 }
 
@@ -226,17 +274,9 @@ class _GeometricPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
 
     // Top-right circle
-    canvas.drawCircle(
-      Offset(size.width + 20, -20),
-      80,
-      paint,
-    );
+    canvas.drawCircle(Offset(size.width + 20, -20), 80, paint);
     // Bottom-left circle
-    canvas.drawCircle(
-      Offset(-30, size.height + 30),
-      100,
-      paint,
-    );
+    canvas.drawCircle(Offset(-30, size.height + 30), 100, paint);
   }
 
   @override

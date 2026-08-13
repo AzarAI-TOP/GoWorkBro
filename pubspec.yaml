@@ -68,6 +68,12 @@ flutter:
     - assets/icons/
 
   fonts:
+    - family: 0xProto
+      fonts:
+        - asset: assets/fonts/0xProtoNerdFont-Regular.ttf
+        - asset: assets/fonts/0xProtoNerdFont-Bold.ttf
+          weight: 700
+    # Chinese reading font for USTC news markdown (0xProto has no CJK glyphs)
     - family: LXGWWenKai
       fonts:
         - asset: assets/fonts/LXGWWenKai-Regular.ttf
