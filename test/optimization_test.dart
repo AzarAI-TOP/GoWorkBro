@@ -6,6 +6,7 @@ import 'package:goworkbro/core/database/app_database.dart';
 import 'package:goworkbro/core/utils/sleep_chart_utils.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:goworkbro/core/database/repositories/settings_repository.dart';
 
 void main() {
   test('sleep chart splits observations across missing days', () {
@@ -72,19 +73,19 @@ void main() {
       'value': '0',
     });
 
-    final first = await DatabaseService.incrementSettingCounterOnceForTesting(
+    final first = await SettingsRepository.incrementCounterOnceForTesting(
       db,
       counterKey: 'lifetime_todos_completed',
       eventKey: 'completion.todo.t1',
     );
     final duplicate =
-        await DatabaseService.incrementSettingCounterOnceForTesting(
+        await SettingsRepository.incrementCounterOnceForTesting(
           db,
           counterKey: 'lifetime_todos_completed',
           eventKey: 'completion.todo.t1',
         );
     final secondEvent =
-        await DatabaseService.incrementSettingCounterOnceForTesting(
+        await SettingsRepository.incrementCounterOnceForTesting(
           db,
           counterKey: 'lifetime_todos_completed',
           eventKey: 'completion.todo.t2',
@@ -149,7 +150,7 @@ void main() {
       'value': 'Existing User',
     });
 
-    await DatabaseService.migrateForTesting(db, 2, 3);
+    await AppDatabase.migrateForTesting(db, 2, 3);
 
     final todos = await db.query('todos', orderBy: 'id');
     final userName = await db.query(

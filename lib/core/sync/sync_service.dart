@@ -2,8 +2,13 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:goworkbro/models/models.dart';
-import 'package:goworkbro/core/database/app_database.dart';
 import 'package:goworkbro/core/config/supabase_config.dart';
+import 'package:goworkbro/core/database/repositories/countdown_repository.dart';
+import 'package:goworkbro/core/database/repositories/focus_repository.dart';
+import 'package:goworkbro/core/database/repositories/habit_repository.dart';
+import 'package:goworkbro/core/database/repositories/settings_repository.dart';
+import 'package:goworkbro/core/database/repositories/sleep_repository.dart';
+import 'package:goworkbro/core/database/repositories/todo_repository.dart';
 
 /// Sync service — bridges local SQLite and remote Supabase.
 ///
@@ -53,31 +58,31 @@ class SyncService {
     try {
       await _pullTable('todos', (rows) async {
         for (final row in rows) {
-          await DatabaseService.upsertTodoFromRemote(row);
+          await TodoRepository.upsertFromRemote(row);
         }
       });
 
       await _pullTable('habits', (rows) async {
         for (final row in rows) {
-          await DatabaseService.upsertHabitFromRemote(row);
+          await HabitRepository.upsertFromRemote(row);
         }
       });
 
       await _pullTable('countdowns', (rows) async {
         for (final row in rows) {
-          await DatabaseService.upsertCountdownFromRemote(row);
+          await CountdownRepository.upsertFromRemote(row);
         }
       });
 
       await _pullTable('sleep_records', (rows) async {
         for (final row in rows) {
-          await DatabaseService.upsertSleepFromRemote(row);
+          await SleepRepository.upsertFromRemote(row);
         }
       });
 
       await _pullTable('focus_sessions', (rows) async {
         for (final row in rows) {
-          await DatabaseService.insertFocusSessionIfNotExists(row);
+          await FocusRepository.insertIfNotExists(row);
         }
       });
 
@@ -89,7 +94,7 @@ class SyncService {
           if (key == null || !profileKeys.contains(key)) continue;
           final value = row['value'] as String?;
           if (value != null) {
-            await DatabaseService.setSetting(key, value);
+            await SettingsRepository.set(key, value);
           }
         }
       });
@@ -228,7 +233,7 @@ class SyncService {
     if (uid == null) return;
     try {
       for (final key in profileKeys) {
-        final value = await DatabaseService.getSetting(key);
+        final value = await SettingsRepository.get(key);
         if (value == null) continue;
         await _client!.from('user_settings').upsert({
           'key': key,
@@ -274,7 +279,7 @@ class SyncService {
           schema: 'public',
           table: 'todos',
           callback: (payload) {
-            DatabaseService.upsertTodoFromRemote(payload.newRecord);
+            TodoRepository.upsertFromRemote(payload.newRecord);
           },
         )
         .subscribe();
@@ -286,7 +291,7 @@ class SyncService {
           schema: 'public',
           table: 'habits',
           callback: (payload) {
-            DatabaseService.upsertHabitFromRemote(payload.newRecord);
+            HabitRepository.upsertFromRemote(payload.newRecord);
           },
         )
         .subscribe();
@@ -298,7 +303,7 @@ class SyncService {
           schema: 'public',
           table: 'countdowns',
           callback: (payload) {
-            DatabaseService.upsertCountdownFromRemote(payload.newRecord);
+            CountdownRepository.upsertFromRemote(payload.newRecord);
           },
         )
         .subscribe();
@@ -310,7 +315,7 @@ class SyncService {
           schema: 'public',
           table: 'sleep_records',
           callback: (payload) {
-            DatabaseService.upsertSleepFromRemote(payload.newRecord);
+            SleepRepository.upsertFromRemote(payload.newRecord);
           },
         )
         .subscribe();
@@ -322,7 +327,7 @@ class SyncService {
           schema: 'public',
           table: 'focus_sessions',
           callback: (payload) {
-            DatabaseService.insertFocusSessionIfNotExists(payload.newRecord);
+            FocusRepository.insertIfNotExists(payload.newRecord);
           },
         )
         .subscribe();
@@ -339,7 +344,7 @@ class SyncService {
             if (key == null || !profileKeys.contains(key)) return;
             final value = row['value'] as String?;
             if (value != null) {
-              DatabaseService.setSetting(key, value);
+              SettingsRepository.set(key, value);
             }
           },
         )

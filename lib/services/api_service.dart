@@ -1,8 +1,9 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:goworkbro/core/database/app_database.dart';
 import 'package:goworkbro/core/config/supabase_config.dart';
+import 'package:goworkbro/core/database/repositories/news_cache_repository.dart';
+import 'package:goworkbro/core/database/repositories/settings_repository.dart';
 
 /// API service for USTC news fetching and cloud data access.
 /// Go backend has been removed — everything goes through Supabase.
@@ -17,7 +18,7 @@ class ApiService {
 
     // Published daily editions are immutable. Prefer the persistent date-keyed
     // cache so reopening Today does not spend another network request.
-    final cached = await DatabaseService.getCachedUstcNews(dateStr);
+    final cached = await NewsCacheRepository.getCached(dateStr);
     if (cached != null) return _newsFromCache(cached);
 
     final cloud = await _fetchUstcNewsFromSupabase(dateStr);
@@ -64,7 +65,7 @@ class ApiService {
     try {
       final dateStr = date ?? DateTime.now().toIso8601String().substring(0, 10);
       final vaultPath =
-          await DatabaseService.getSetting('obsidian_vault_path') ??
+          await SettingsRepository.get('obsidian_vault_path') ??
           _defaultVaultPath();
       final file = File('$vaultPath/USTC 每日要闻/$dateStr.md');
       if (await file.exists()) {
@@ -98,7 +99,7 @@ class ApiService {
 
   /// Fetch latest available USTC news (most recent cached or cloud edition)
   static Future<UstcNews?> fetchLatestUstcNews() async {
-    final cached = await DatabaseService.getLatestCachedUstcNews();
+    final cached = await NewsCacheRepository.getLatest();
     try {
       if (isSupabaseConfigured) {
         final client = Supabase.instance.client;
@@ -136,7 +137,7 @@ class ApiService {
   );
 
   static Future<void> _cacheNews(UstcNews news) =>
-      DatabaseService.cacheUstcNews(
+      NewsCacheRepository.cache(
         date: news.date,
         title: news.title,
         markdown: news.markdown,
@@ -162,7 +163,7 @@ class ApiService {
 
     try {
       final vaultPath =
-          await DatabaseService.getSetting('obsidian_vault_path') ??
+          await SettingsRepository.get('obsidian_vault_path') ??
           _defaultVaultPath();
       final dir = Directory('$vaultPath/USTC 每日要闻');
       if (!await dir.exists()) return [];

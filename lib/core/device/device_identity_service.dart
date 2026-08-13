@@ -5,13 +5,13 @@ import 'package:crypto/crypto.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:uuid/uuid.dart';
 
-import 'package:goworkbro/core/database/app_database.dart';
+import 'package:goworkbro/core/database/repositories/settings_repository.dart';
 
 /// Resolves a stable, privacy-preserving identifier for offline profiles.
 /// Platform IDs are persisted on first use so upgrades never change identity.
 class DeviceIdentityService {
   static Future<String> getOrCreateDeviceId() async {
-    final saved = await DatabaseService.getSetting('offline_device_id');
+    final saved = await SettingsRepository.get('offline_device_id');
     if (saved != null && saved.isNotEmpty) {
       if (saved.startsWith('GWB-')) return saved;
       return _persistDerivedId(saved);
@@ -46,7 +46,7 @@ class DeviceIdentityService {
       utf8.encode('GoWorkBro/offline-device/$source'),
     );
     final displayId = 'GWB-${digest.toString().substring(0, 12).toUpperCase()}';
-    await DatabaseService.setSetting('offline_device_id', displayId);
+    await SettingsRepository.set('offline_device_id', displayId);
     return displayId;
   }
 }

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'package:goworkbro/core/database/app_database.dart';
 import 'package:goworkbro/core/theme/app_theme.dart';
+import 'package:goworkbro/core/database/repositories/settings_repository.dart';
 
 /// Single source of truth for locale and theme mode.
 /// Persists to SQLite via DatabaseService (no AppProvider dependency).
@@ -36,10 +36,10 @@ class AppLocaleProvider extends ChangeNotifier {
 
   /// Load persisted values from DB. Call once at startup.
   Future<void> init() async {
-    final savedLocale = await DatabaseService.getSetting('locale');
+    final savedLocale = await SettingsRepository.get('locale');
     _locale = savedLocale == 'en' ? AppLocale.en : AppLocale.zh;
 
-    final savedTheme = await DatabaseService.getSetting('theme_mode');
+    final savedTheme = await SettingsRepository.get('theme_mode');
     switch (savedTheme) {
       case 'light':
         _themeMode = ThemeMode.light;
@@ -51,7 +51,7 @@ class AppLocaleProvider extends ChangeNotifier {
         _themeMode = ThemeMode.system;
     }
 
-    final savedFont = await DatabaseService.getSetting('font_family');
+    final savedFont = await SettingsRepository.get('font_family');
     if (savedFont != null && savedFont.isNotEmpty) {
       _fontFamily = savedFont;
     }
@@ -62,7 +62,7 @@ class AppLocaleProvider extends ChangeNotifier {
   Future<void> setLocale(AppLocale locale) async {
     _locale = locale;
     notifyListeners();
-    await DatabaseService.setSetting(
+    await SettingsRepository.set(
       'locale',
       locale == AppLocale.en ? 'en' : 'zh',
     );
@@ -83,14 +83,14 @@ class AppLocaleProvider extends ChangeNotifier {
         break;
     }
     notifyListeners();
-    await DatabaseService.setSetting('theme_mode', value);
+    await SettingsRepository.set('theme_mode', value);
   }
 
   Future<void> setFontFamily(String family) async {
     if (family == _fontFamily) return;
     _fontFamily = family;
     notifyListeners();
-    await DatabaseService.setSetting('font_family', family);
+    await SettingsRepository.set('font_family', family);
   }
 
   Future<void> toggle() =>

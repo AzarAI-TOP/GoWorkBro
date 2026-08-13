@@ -3,7 +3,7 @@ import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'package:goworkbro/core/l10n/app_locale.dart';
-import 'package:goworkbro/core/database/app_database.dart';
+import 'package:goworkbro/core/database/repositories/settings_repository.dart';
 
 /// Manages the system tray icon and window visibility for background mode.
 ///
@@ -21,7 +21,7 @@ class TrayService with TrayListener {
     if (_initialized) return;
     if (!Platform.isWindows && !Platform.isLinux && !Platform.isMacOS) return;
 
-    final savedLocale = await DatabaseService.getSetting('locale');
+    final savedLocale = await SettingsRepository.get('locale');
     final s = S.of(savedLocale == 'en' ? AppLocale.en : AppLocale.zh);
     await trayManager.setIcon(
       Platform.isWindows
