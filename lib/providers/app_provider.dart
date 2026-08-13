@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
@@ -84,6 +85,9 @@ class AppProvider extends ChangeNotifier {
         await SyncService.pullAll();
         await refreshAll();
         _pushAllLocal();
+        // After the pull, derive the profile from the signed-in user
+        // (email prefix / user_metadata) when no custom name is set yet.
+        await applyAuthUser();
       }
     }
 
@@ -95,6 +99,48 @@ class AppProvider extends ChangeNotifier {
 
     _isInitialized = true;
     _initializing = null;
+    notifyListeners();
+  }
+
+  /// Sync the visible profile with the signed-in Supabase user.
+  ///
+  /// Called after login / session restore. If the user hasn't set a custom
+  /// name yet (still the default "离线用户"), derive one from the account:
+  /// `user_metadata.user_name` if present, otherwise the email prefix —
+  /// so a logged-in user never sees "离线用户" in the UI.
+  Future<void> applyAuthUser() async {
+    if (!isSupabaseConfigured) return;
+    final client = Supabase.instance.client;
+    final user = client.auth.currentUser;
+    if (user == null) return;
+
+    final email = user.email;
+    final meta = user.userMetadata;
+
+    final currentName = await DatabaseService.getSetting('user_name');
+    final isDefaultName = currentName == null || currentName == '离线用户';
+    if (isDefaultName) {
+      final metaName = (meta?['user_name'] as String?)?.trim();
+      final displayName =
+          (metaName != null && metaName.isNotEmpty)
+              ? metaName
+              : (email != null && email.isNotEmpty)
+              ? email.split('@').first
+              : '离线用户';
+      if (displayName != currentName) {
+        await DatabaseService.setSetting('user_name', displayName);
+        _userName = displayName;
+      }
+    }
+
+    final metaAvatar = (meta?['avatar_path'] as String?)?.trim();
+    final hasLocalAvatar = _avatarPath != null && _avatarPath!.isNotEmpty;
+    if (metaAvatar != null && metaAvatar.isNotEmpty && !hasLocalAvatar) {
+      await DatabaseService.setSetting('avatar_path', metaAvatar);
+      _avatarPath = metaAvatar;
+    }
+
+    unawaited(SyncService.pushUserSettings());
     notifyListeners();
   }
 
@@ -427,6 +473,7 @@ class AppProvider extends ChangeNotifier {
     _userName = name;
     await DatabaseService.setSetting('user_name', name);
     notifyListeners();
+    unawaited(SyncService.pushUserSettings());
   }
 
   Future<void> setAvatarPath(String? path) async {
@@ -442,6 +489,7 @@ class AppProvider extends ChangeNotifier {
       await DatabaseService.setSetting('avatar_path', path);
     }
     notifyListeners();
+    unawaited(SyncService.pushUserSettings());
   }
 
   Future<void> deleteAllData() async {

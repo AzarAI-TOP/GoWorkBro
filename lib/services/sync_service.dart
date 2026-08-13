@@ -21,6 +21,7 @@ class SyncService {
   static RealtimeChannel? _countdownsChannel;
   static RealtimeChannel? _sleepChannel;
   static RealtimeChannel? _focusChannel;
+  static RealtimeChannel? _settingsChannel;
 
   static bool get isConfigured => isSupabaseConfigured;
   static bool get isInitialized => _client != null;
@@ -38,6 +39,10 @@ class SyncService {
   }
 
   static String? get currentUserId => _client?.auth.currentUser?.id;
+
+  /// Profile keys synced between local SQLite and cloud `user_settings`.
+  /// Other settings (counters, first_used_date, …) stay device-local.
+  static const profileKeys = ['user_name', 'avatar_path'];
 
   // ============ Startup Pull ============
 
@@ -73,6 +78,19 @@ class SyncService {
       await _pullTable('focus_sessions', (rows) async {
         for (final row in rows) {
           await DatabaseService.insertFocusSessionIfNotExists(row);
+        }
+      });
+
+      // Profile settings (user_name / avatar_path) — cloud wins on startup,
+      // so a name set on another device shows up here too.
+      await _pullTable('user_settings', (rows) async {
+        for (final row in rows) {
+          final key = row['key'] as String?;
+          if (key == null || !profileKeys.contains(key)) continue;
+          final value = row['value'] as String?;
+          if (value != null) {
+            await DatabaseService.setSetting(key, value);
+          }
         }
       });
     } catch (e) {
@@ -203,6 +221,27 @@ class SyncService {
     }
   }
 
+  /// Push the local profile (user_name / avatar_path) to cloud user_settings.
+  static Future<void> pushUserSettings() async {
+    if (_client == null) return;
+    final uid = currentUserId;
+    if (uid == null) return;
+    try {
+      for (final key in profileKeys) {
+        final value = await DatabaseService.getSetting(key);
+        if (value == null) continue;
+        await _client!.from('user_settings').upsert({
+          'key': key,
+          'user_id': uid,
+          'value': value,
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+        });
+      }
+    } catch (e) {
+      debugPrint('Push user settings failed: $e');
+    }
+  }
+
   static Future<void> deleteRemoteTodo(String id) async {
     if (_client == null) return;
     try { await _client!.from('todos').delete().eq('id', id); }
@@ -287,6 +326,24 @@ class SyncService {
           },
         )
         .subscribe();
+
+    _settingsChannel = _client!
+        .channel('public:user_settings')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'user_settings',
+          callback: (payload) {
+            final row = payload.newRecord;
+            final key = row['key'] as String?;
+            if (key == null || !profileKeys.contains(key)) return;
+            final value = row['value'] as String?;
+            if (value != null) {
+              DatabaseService.setSetting(key, value);
+            }
+          },
+        )
+        .subscribe();
   }
 
   static void dispose() {
@@ -295,5 +352,6 @@ class SyncService {
     _countdownsChannel?.unsubscribe();
     _sleepChannel?.unsubscribe();
     _focusChannel?.unsubscribe();
+    _settingsChannel?.unsubscribe();
   }
 }
