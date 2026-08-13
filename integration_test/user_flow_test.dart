@@ -4,6 +4,7 @@ import 'package:integration_test/integration_test.dart';
 import 'package:goworkbro/main.dart';
 import 'package:goworkbro/models/models.dart';
 import 'package:goworkbro/providers/app_provider.dart';
+import 'package:goworkbro/services/app_locale.dart';
 import 'package:provider/provider.dart';
 
 /// Comprehensive integration test simulating real user flows.
@@ -15,6 +16,12 @@ void main() {
   AppProvider getProvider(WidgetTester tester) {
     final ctx = tester.element(find.byType(MaterialApp));
     return Provider.of<AppProvider>(ctx, listen: false);
+  }
+
+  Future<void> pumpApp(WidgetTester tester) async {
+    final localeProvider = AppLocaleProvider();
+    await localeProvider.init();
+    await tester.pumpWidget(GoWorkBroApp(localeProvider: localeProvider));
   }
 
   /// Helper: navigate to a tab by label
@@ -29,8 +36,10 @@ void main() {
   }
 
   group('Cycle 1 — Basic User Flow', () {
-    testWidgets('Add TODO, add habit, record focus, check Today and Me', (tester) async {
-      await tester.pumpWidget(const GoWorkBroApp());
+    testWidgets('Add TODO, add habit, record focus, check Today and Me', (
+      tester,
+    ) async {
+      await pumpApp(tester);
       await tester.pumpAndSettle(const Duration(seconds: 5));
 
       final provider = getProvider(tester);
@@ -53,11 +62,11 @@ void main() {
       // Step 2: Open add sheet
       await tester.tap(find.byType(FloatingActionButton));
       await tester.pumpAndSettle();
-      expect(find.text('新建待办'), findsOneWidget);
+      expect(find.text('TODO'), findsOneWidget);
       print('Step 2: Add sheet opened ✓');
 
       // Step 3: Choose TODO
-      await tester.tap(find.text('新建待办'));
+      await tester.tap(find.text('TODO'));
       await tester.pumpAndSettle();
 
       // Step 4: Enter title
@@ -83,7 +92,7 @@ void main() {
       // Step 8: Add habit
       await tester.tap(find.byType(FloatingActionButton));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('新建习惯'));
+      await tester.tap(find.text('HABIT'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).first, '做俯卧撑');
       await tester.pumpAndSettle();
@@ -95,11 +104,13 @@ void main() {
       print('Step 8: Habit saved ✓');
 
       // Step 9: Record focus session
-      await provider.recordFocusSession(FocusSession.create(
-        sourceType: 'todo',
-        sourceTitle: '复习线性代数',
-        durationSeconds: 40 * 60,
-      ));
+      await provider.recordFocusSession(
+        FocusSession.create(
+          sourceType: 'todo',
+          sourceTitle: '复习线性代数',
+          durationSeconds: 40 * 60,
+        ),
+      );
       await tester.pumpAndSettle();
       print('Step 9: Focus session recorded ✓');
 
@@ -110,7 +121,7 @@ void main() {
 
       // Step 11: Navigate to Me
       await navigateTo(tester, '我的');
-      expect(find.text('AzarAI'), findsAtLeast(1));
+      expect(find.text('离线用户'), findsAtLeast(1));
       expect(find.text('打卡'), findsOneWidget);
       expect(find.text('统计'), findsOneWidget);
       expect(find.text('设置'), findsOneWidget);
@@ -119,15 +130,38 @@ void main() {
       // Step 12: Stats tab
       await tester.tap(find.text('统计'));
       await tester.pumpAndSettle();
-      expect(find.text('今日专注'), findsAtLeast(1));
+      expect(find.text('累计统计'), findsOneWidget);
+      expect(find.text('累计专注'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('今日专注'),
+        300,
+        scrollable: find.byType(Scrollable).last,
+      );
+      expect(find.text('今日专注'), findsOneWidget);
       expect(find.text('今日番茄数'), findsOneWidget);
       print('Step 12: Stats tab shows data ✓');
+
+      // Step 13: Full-app English localization smoke test
+      await tester.tap(find.text('设置'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('英文'));
+      await tester.pumpAndSettle();
+      expect(find.text('Todo'), findsOneWidget);
+      expect(find.text('Countdown'), findsOneWidget);
+      expect(find.text('Today'), findsOneWidget);
+      expect(find.text('Me'), findsOneWidget);
+      expect(find.text('Check for Updates'), findsOneWidget);
+      print('Step 13: English app navigation and settings OK ✓');
+
+      await tester.tap(find.text('Chinese'));
+      await tester.pumpAndSettle();
+      expect(find.text('待办'), findsAtLeast(1));
 
       print('\n=== CYCLE 1 PASSED ===');
     });
 
     testWidgets('Add countdown, verify, delete', (tester) async {
-      await tester.pumpWidget(const GoWorkBroApp());
+      await pumpApp(tester);
       await tester.pumpAndSettle(const Duration(seconds: 5));
 
       final provider = getProvider(tester);
@@ -158,7 +192,7 @@ void main() {
 
   group('Cycle 2 — Edge Cases', () {
     testWidgets('Empty title validation', (tester) async {
-      await tester.pumpWidget(const GoWorkBroApp());
+      await pumpApp(tester);
       await tester.pumpAndSettle(const Duration(seconds: 5));
 
       final provider = getProvider(tester);
@@ -167,7 +201,7 @@ void main() {
 
       await tester.tap(find.byType(FloatingActionButton));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('新建待办'));
+      await tester.tap(find.text('TODO'));
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('保存'));
@@ -184,7 +218,7 @@ void main() {
     });
 
     testWidgets('Habit increment/decrement via provider', (tester) async {
-      await tester.pumpWidget(const GoWorkBroApp());
+      await pumpApp(tester);
       await tester.pumpAndSettle(const Duration(seconds: 5));
 
       final provider = getProvider(tester);
@@ -194,7 +228,9 @@ void main() {
       for (final h in List.of(provider.habits)) {
         await provider.deleteHabit(h.id);
       }
-      await provider.addHabit(Habit.create(title: '喝水', targetCount: 3, unit: '杯'));
+      await provider.addHabit(
+        Habit.create(title: '喝水', targetCount: 3, unit: '杯'),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('喝水'), findsOneWidget);
@@ -220,7 +256,7 @@ void main() {
     });
 
     testWidgets('Sleep check-in', (tester) async {
-      await tester.pumpWidget(const GoWorkBroApp());
+      await pumpApp(tester);
       await tester.pumpAndSettle(const Duration(seconds: 5));
 
       final provider = getProvider(tester);
@@ -234,11 +270,13 @@ void main() {
       print('Sleep check-in UI present ✓');
 
       // Record sleep directly via provider
-      await provider.recordSleep(SleepRecord.create(
-        recordDate: provider.todayDate,
-        wakeTime: '07:30',
-        sleepTime: '23:00',
-      ));
+      await provider.recordSleep(
+        SleepRecord.create(
+          recordDate: provider.todayDate,
+          wakeTime: '07:30',
+          sleepTime: '23:00',
+        ),
+      );
       await tester.pumpAndSettle();
 
       // The times should now be visible (either in buttons or in records)
@@ -248,7 +286,7 @@ void main() {
     });
 
     testWidgets('TODO with "不记时" completes on tap', (tester) async {
-      await tester.pumpWidget(const GoWorkBroApp());
+      await pumpApp(tester);
       await tester.pumpAndSettle(const Duration(seconds: 5));
 
       final provider = getProvider(tester);
@@ -258,10 +296,9 @@ void main() {
         await provider.deleteTodo(t.id);
       }
 
-      await provider.addTodo(Todo.create(
-        title: '不计时任务',
-        timingType: TimingType.none,
-      ));
+      await provider.addTodo(
+        Todo.create(title: '不计时任务', timingType: TimingType.none),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('不计时任务'), findsOneWidget);
@@ -274,8 +311,10 @@ void main() {
       print('No-timing TODO completes on tap ✓');
     });
 
-    testWidgets('TODO with timing opens timer screen, records session', (tester) async {
-      await tester.pumpWidget(const GoWorkBroApp());
+    testWidgets('TODO with timing opens timer screen, records session', (
+      tester,
+    ) async {
+      await pumpApp(tester);
       await tester.pump(const Duration(seconds: 5));
 
       final provider = getProvider(tester);
@@ -285,10 +324,9 @@ void main() {
         await provider.deleteTodo(t.id);
       }
 
-      await provider.addTodo(Todo.create(
-        title: '正向计时任务',
-        timingType: TimingType.forward,
-      ));
+      await provider.addTodo(
+        Todo.create(title: '正向计时任务', timingType: TimingType.forward),
+      );
       await tester.pump(const Duration(milliseconds: 500));
 
       // Tap the TODO — should open timer, NOT complete
@@ -302,7 +340,9 @@ void main() {
 
       // Navigate back via Navigator (CountdownScreen's Timer.periodic
       // prevents pumpAndSettle from ever settling)
-      final navigator = tester.state<NavigatorState>(find.byType(Navigator).first);
+      final navigator = tester.state<NavigatorState>(
+        find.byType(Navigator).first,
+      );
       navigator.pop();
       await tester.pump(const Duration(milliseconds: 500));
 
@@ -310,11 +350,13 @@ void main() {
       print('Timer cancel returns to todo screen ✓');
 
       // Record a focus session directly via provider to verify Today data
-      await provider.recordFocusSession(FocusSession.create(
-        sourceType: 'todo',
-        sourceTitle: '正向计时任务',
-        durationSeconds: 1500,
-      ));
+      await provider.recordFocusSession(
+        FocusSession.create(
+          sourceType: 'todo',
+          sourceTitle: '正向计时任务',
+          durationSeconds: 1500,
+        ),
+      );
       await tester.pump(const Duration(milliseconds: 500));
       expect(provider.todaySessionCount, greaterThan(0));
       print('Focus session recorded via provider ✓');

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:goworkbro/main.dart';
+import 'package:goworkbro/services/app_locale.dart';
 
 /// End-to-end test: login → pull data from Supabase.
 /// Pre-conditions:
@@ -11,7 +12,9 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('Login and pull synced data from Supabase', (tester) async {
-    await tester.pumpWidget(const GoWorkBroApp());
+    final localeProvider = AppLocaleProvider();
+    await localeProvider.init();
+    await tester.pumpWidget(GoWorkBroApp(localeProvider: localeProvider));
     await tester.pump(const Duration(seconds: 5));
 
     // Check if we're on the auth screen
@@ -20,10 +23,14 @@ void main() {
       print('Step 1: Auth screen shown ✓');
 
       // Enter credentials
-      await tester.enterText(find.byType(TextField).at(0),
-        const String.fromEnvironment('TEST_EMAIL', defaultValue: ''));
-      await tester.enterText(find.byType(TextField).at(1),
-        const String.fromEnvironment('TEST_PASSWORD', defaultValue: ''));
+      await tester.enterText(
+        find.byType(TextField).at(0),
+        const String.fromEnvironment('TEST_EMAIL', defaultValue: ''),
+      );
+      await tester.enterText(
+        find.byType(TextField).at(1),
+        const String.fromEnvironment('TEST_PASSWORD', defaultValue: ''),
+      );
       print('Step 2: Entered credentials ✓');
 
       // Tap login button
@@ -47,11 +54,19 @@ void main() {
       if (syncedTodo.evaluate().isNotEmpty) {
         print('Step 5: *** SYNCED TODO PULLED FROM SUPABASE ✓ ***');
       } else {
-        print('Step 5: Synced TODO not visible yet (checking all visible texts...)');
+        print(
+          'Step 5: Synced TODO not visible yet (checking all visible texts...)',
+        );
         // Dump what we can see
-        final texts = find.byType(Text).evaluate().map((e) {
-          return (e.widget as Text).data;
-        }).where((s) => s != null && s!.isNotEmpty).take(20).join(', ');
+        final texts = find
+            .byType(Text)
+            .evaluate()
+            .map((e) {
+              return (e.widget as Text).data;
+            })
+            .where((s) => s != null && s!.isNotEmpty)
+            .take(20)
+            .join(', ');
         print('  Visible texts: $texts');
       }
     } else {
