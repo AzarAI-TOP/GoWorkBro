@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
+import '../services/device_identity_service.dart';
 import '../services/sync_service.dart';
 import '../services/supabase_config.dart';
 
@@ -13,12 +15,19 @@ const _uuid = Uuid();
 class AppProvider extends ChangeNotifier {
   List<Todo> _todos = [];
   bool _isInitialized = false;
+  Future<void>? _initializing;
   bool get isInitialized => _isInitialized;
   List<Habit> _habits = [];
   List<Countdown> _countdowns = [];
   List<FocusSession> _todaySessions = [];
   List<SleepRecord> _sleepRecords = [];
-  String _userName = 'AzarAI';
+  List<FocusSession> _allSessions = [];
+  String _userName = '离线用户';
+  String _deviceId = '';
+  String? _avatarPath;
+  String _firstUsedDate = '';
+  int _lifetimeTodosCompleted = 0;
+  int _lifetimeHabitsCompleted = 0;
   String _lastRolloverDate = '';
   Timer? _rolloverTimer;
 
@@ -28,14 +37,41 @@ class AppProvider extends ChangeNotifier {
   List<FocusSession> get todaySessions => _todaySessions;
   List<SleepRecord> get sleepRecords => _sleepRecords;
   String get userName => _userName;
+  String get deviceId => _deviceId;
+  String? get avatarPath => _avatarPath;
+  String get firstUsedDate => _firstUsedDate;
+  int get lifetimeTodosCompleted => _lifetimeTodosCompleted;
+  int get lifetimeHabitsCompleted => _lifetimeHabitsCompleted;
+  int get lifetimeFocusSeconds =>
+      _allSessions.fold(0, (sum, session) => sum + session.durationSeconds);
+  int get lifetimeSessionCount => _allSessions.length;
 
   String get todayDate {
     final now = DateTime.now();
     return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
   }
 
-  Future<void> init() async {
-    _userName = await DatabaseService.getSetting('user_name') ?? 'AzarAI';
+  Future<void> init() {
+    if (_isInitialized) return Future.value();
+    return _initializing ??= _initInternal();
+  }
+
+  Future<void> _initInternal() async {
+    _userName = await DatabaseService.getSetting('user_name') ?? '离线用户';
+    _deviceId = await DeviceIdentityService.getOrCreateDeviceId();
+    _avatarPath = await DatabaseService.getSetting('avatar_path');
+    _firstUsedDate =
+        await DatabaseService.getSetting('first_used_date') ?? todayDate;
+    _lifetimeTodosCompleted =
+        int.tryParse(
+          await DatabaseService.getSetting('lifetime_todos_completed') ?? '0',
+        ) ??
+        0;
+    _lifetimeHabitsCompleted =
+        int.tryParse(
+          await DatabaseService.getSetting('lifetime_habits_completed') ?? '0',
+        ) ??
+        0;
     _lastRolloverDate =
         await DatabaseService.getSetting('last_rollover_date') ?? '';
 
@@ -58,6 +94,7 @@ class AppProvider extends ChangeNotifier {
     });
 
     _isInitialized = true;
+    _initializing = null;
     notifyListeners();
   }
 
@@ -85,6 +122,7 @@ class AppProvider extends ChangeNotifier {
     _habits = await DatabaseService.getHabits();
     _countdowns = await DatabaseService.getCountdowns();
     _todaySessions = await DatabaseService.getFocusSessionsByDate(todayDate);
+    _allSessions = await DatabaseService.getAllFocusSessions();
     _sleepRecords = await DatabaseService.getSleepRecords();
     notifyListeners();
   }
@@ -95,7 +133,7 @@ class AppProvider extends ChangeNotifier {
     await DatabaseService.insertTodo(todo);
     _todos.add(todo);
     notifyListeners();
-    SyncService.pushTodo(todo);
+    unawaited(SyncService.pushTodo(todo));
   }
 
   Future<void> updateTodo(Todo todo) async {
@@ -103,7 +141,7 @@ class AppProvider extends ChangeNotifier {
     final i = _todos.indexWhere((t) => t.id == todo.id);
     if (i >= 0) _todos[i] = todo;
     notifyListeners();
-    SyncService.pushTodo(todo);
+    unawaited(SyncService.pushTodo(todo));
   }
 
   /// Toggle todo completion. Idempotent for keepTomorrow:
@@ -114,15 +152,24 @@ class AppProvider extends ChangeNotifier {
       isCompleted: isCompleting,
       completedDate: isCompleting ? DateTime.now().toIso8601String() : null,
     );
+    if (isCompleting) {
+      _lifetimeTodosCompleted =
+          await DatabaseService.incrementSettingCounterOnce(
+            counterKey: 'lifetime_todos_completed',
+            eventKey: 'completion.todo.${todo.id}',
+          );
+    }
     await DatabaseService.updateTodo(updated);
     final i = _todos.indexWhere((t) => t.id == todo.id);
     if (i >= 0) _todos[i] = updated;
 
     if (isCompleting && todo.keepTomorrow) {
-      final hasIncompleteCopy = _todos.any((t) =>
-          t.title == todo.title &&
-          !t.isCompleted &&
-          t.createdDate != todo.createdDate);
+      final hasIncompleteCopy = _todos.any(
+        (t) =>
+            t.title == todo.title &&
+            !t.isCompleted &&
+            t.createdDate != todo.createdDate,
+      );
       if (!hasIncompleteCopy) {
         final newTodo = Todo(
           id: _uuid.v4(),
@@ -136,17 +183,20 @@ class AppProvider extends ChangeNotifier {
         );
         await DatabaseService.insertTodo(newTodo);
         _todos.add(newTodo);
-        SyncService.pushTodo(newTodo);
+        unawaited(SyncService.pushTodo(newTodo));
       }
     }
 
     notifyListeners();
-    SyncService.pushTodo(updated);
+    unawaited(SyncService.pushTodo(updated));
   }
 
   /// Mark a todo as completed with accumulated focus duration.
   /// Used by the timer screen. Silently skips if todo was deleted.
-  Future<void> completeTodoWithDuration(String todoId, int additionalSeconds) async {
+  Future<void> completeTodoWithDuration(
+    String todoId,
+    int additionalSeconds,
+  ) async {
     final i = _todos.indexWhere((t) => t.id == todoId);
     if (i < 0) return;
 
@@ -156,14 +206,23 @@ class AppProvider extends ChangeNotifier {
       completedDate: DateTime.now().toIso8601String(),
       actualDurationSeconds: current.actualDurationSeconds + additionalSeconds,
     );
+    if (!current.isCompleted) {
+      _lifetimeTodosCompleted =
+          await DatabaseService.incrementSettingCounterOnce(
+            counterKey: 'lifetime_todos_completed',
+            eventKey: 'completion.todo.${current.id}',
+          );
+    }
     await DatabaseService.updateTodo(updated);
     _todos[i] = updated;
 
     if (current.keepTomorrow && !current.isCompleted) {
-      final hasIncompleteCopy = _todos.any((t) =>
-          t.title == current.title &&
-          !t.isCompleted &&
-          t.createdDate != current.createdDate);
+      final hasIncompleteCopy = _todos.any(
+        (t) =>
+            t.title == current.title &&
+            !t.isCompleted &&
+            t.createdDate != current.createdDate,
+      );
       if (!hasIncompleteCopy) {
         final newTodo = Todo(
           id: _uuid.v4(),
@@ -177,19 +236,19 @@ class AppProvider extends ChangeNotifier {
         );
         await DatabaseService.insertTodo(newTodo);
         _todos.add(newTodo);
-        SyncService.pushTodo(newTodo);
+        unawaited(SyncService.pushTodo(newTodo));
       }
     }
 
     notifyListeners();
-    SyncService.pushTodo(updated);
+    unawaited(SyncService.pushTodo(updated));
   }
 
   Future<void> deleteTodo(String id) async {
     await DatabaseService.deleteTodo(id);
     _todos.removeWhere((t) => t.id == id);
     notifyListeners();
-    SyncService.deleteRemoteTodo(id);
+    unawaited(SyncService.deleteRemoteTodo(id));
   }
 
   Future<void> reorderTodos(int oldIndex, int newIndex) async {
@@ -201,11 +260,18 @@ class AppProvider extends ChangeNotifier {
     await db.transaction((txn) async {
       for (var i = 0; i < _todos.length; i++) {
         _todos[i] = _todos[i].copyWith(sortOrder: i);
-        await txn.update('todos', _todos[i].toMap(), where: 'id = ?', whereArgs: [_todos[i].id]);
+        await txn.update(
+          'todos',
+          _todos[i].toMap(),
+          where: 'id = ?',
+          whereArgs: [_todos[i].id],
+        );
       }
     });
     // Push to Supabase (fire-and-forget)
-    for (final t in _todos) { SyncService.pushTodo(t); }
+    for (final t in _todos) {
+      unawaited(SyncService.pushTodo(t));
+    }
     notifyListeners();
   }
 
@@ -215,7 +281,7 @@ class AppProvider extends ChangeNotifier {
     await DatabaseService.insertHabit(habit);
     _habits.add(habit);
     notifyListeners();
-    SyncService.pushHabit(habit);
+    unawaited(SyncService.pushHabit(habit));
   }
 
   Future<void> updateHabit(Habit habit) async {
@@ -223,17 +289,24 @@ class AppProvider extends ChangeNotifier {
     final i = _habits.indexWhere((h) => h.id == habit.id);
     if (i >= 0) _habits[i] = habit;
     notifyListeners();
-    SyncService.pushHabit(habit);
+    unawaited(SyncService.pushHabit(habit));
   }
 
   Future<void> incrementHabit(Habit habit) async {
     if (habit.currentCount >= habit.targetCount) return;
     final updated = habit.copyWith(currentCount: habit.currentCount + 1);
+    if (!habit.isCompleted && updated.isCompleted) {
+      _lifetimeHabitsCompleted =
+          await DatabaseService.incrementSettingCounterOnce(
+            counterKey: 'lifetime_habits_completed',
+            eventKey: 'completion.habit.${habit.id}.$todayDate',
+          );
+    }
     await DatabaseService.updateHabit(updated);
     final i = _habits.indexWhere((h) => h.id == habit.id);
     if (i >= 0) _habits[i] = updated;
     notifyListeners();
-    SyncService.pushHabit(updated);
+    unawaited(SyncService.pushHabit(updated));
   }
 
   Future<void> decrementHabit(Habit habit) async {
@@ -243,14 +316,14 @@ class AppProvider extends ChangeNotifier {
     final i = _habits.indexWhere((h) => h.id == habit.id);
     if (i >= 0) _habits[i] = updated;
     notifyListeners();
-    SyncService.pushHabit(updated);
+    unawaited(SyncService.pushHabit(updated));
   }
 
   Future<void> deleteHabit(String id) async {
     await DatabaseService.deleteHabit(id);
     _habits.removeWhere((h) => h.id == id);
     notifyListeners();
-    SyncService.deleteRemoteHabit(id);
+    unawaited(SyncService.deleteRemoteHabit(id));
   }
 
   Future<void> reorderHabits(int oldIndex, int newIndex) async {
@@ -261,7 +334,12 @@ class AppProvider extends ChangeNotifier {
     await db.transaction((txn) async {
       for (var i = 0; i < _habits.length; i++) {
         _habits[i] = _habits[i].copyWith(sortOrder: i);
-        await txn.update('habits', _habits[i].toMap(), where: 'id = ?', whereArgs: [_habits[i].id]);
+        await txn.update(
+          'habits',
+          _habits[i].toMap(),
+          where: 'id = ?',
+          whereArgs: [_habits[i].id],
+        );
       }
     });
     notifyListeners();
@@ -272,25 +350,33 @@ class AppProvider extends ChangeNotifier {
   Future<void> recordFocusSession(FocusSession session) async {
     await DatabaseService.insertFocusSession(session);
     _todaySessions.add(session);
+    _allSessions.add(session);
     notifyListeners();
-    SyncService.pushFocusSession(session);
+    unawaited(SyncService.pushFocusSession(session));
   }
 
   /// Single range query instead of 7 sequential queries.
   Future<List<int>> getWeeklyFocusSeconds() async {
     final now = DateTime.now();
     final start = now.subtract(const Duration(days: 6));
-    final startStr = '${start.year}-${start.month.toString().padLeft(2, '0')}-${start.day.toString().padLeft(2, '0')}';
-    final sessions = await DatabaseService.getFocusSessionsDateRange(startStr, todayDate);
+    final startStr =
+        '${start.year}-${start.month.toString().padLeft(2, '0')}-${start.day.toString().padLeft(2, '0')}';
+    final sessions = await DatabaseService.getFocusSessionsDateRange(
+      startStr,
+      todayDate,
+    );
     final byDate = <String, int>{};
     for (final s in sessions) {
       byDate[s.sessionDate] = (byDate[s.sessionDate] ?? 0) + s.durationSeconds;
     }
     return [
       for (int i = 6; i >= 0; i--)
-        byDate['${(now.subtract(Duration(days: i)))..toIso8601String()}'] ?? 0,
+        byDate[_dateKey(now.subtract(Duration(days: i)))] ?? 0,
     ];
   }
+
+  String _dateKey(DateTime date) =>
+      '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
   // ============ Countdown ops ============
 
@@ -299,7 +385,7 @@ class AppProvider extends ChangeNotifier {
     _countdowns.add(countdown);
     _countdowns.sort((a, b) => a.targetDateTime.compareTo(b.targetDateTime));
     notifyListeners();
-    SyncService.pushCountdown(countdown);
+    unawaited(SyncService.pushCountdown(countdown));
   }
 
   Future<void> updateCountdown(Countdown countdown) async {
@@ -308,14 +394,14 @@ class AppProvider extends ChangeNotifier {
     if (i >= 0) _countdowns[i] = countdown;
     _countdowns.sort((a, b) => a.targetDateTime.compareTo(b.targetDateTime));
     notifyListeners();
-    SyncService.pushCountdown(countdown);
+    unawaited(SyncService.pushCountdown(countdown));
   }
 
   Future<void> deleteCountdown(String id) async {
     await DatabaseService.deleteCountdown(id);
     _countdowns.removeWhere((c) => c.id == id);
     notifyListeners();
-    SyncService.deleteRemoteCountdown(id);
+    unawaited(SyncService.deleteRemoteCountdown(id));
   }
 
   // ============ Sleep ============
@@ -323,14 +409,16 @@ class AppProvider extends ChangeNotifier {
   Future<void> recordSleep(SleepRecord record) async {
     await DatabaseService.upsertSleepRecord(record);
     // Update in-memory: replace if same date exists, else add
-    final i = _sleepRecords.indexWhere((r) => r.recordDate == record.recordDate);
+    final i = _sleepRecords.indexWhere(
+      (r) => r.recordDate == record.recordDate,
+    );
     if (i >= 0) {
       _sleepRecords[i] = record;
     } else {
       _sleepRecords.insert(0, record);
     }
     notifyListeners();
-    SyncService.pushSleepRecord(record);
+    unawaited(SyncService.pushSleepRecord(record));
   }
 
   // ============ Settings ============
@@ -341,13 +429,40 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setAvatarPath(String? path) async {
+    _avatarPath = path;
+    if (path == null || path.isEmpty) {
+      final db = await DatabaseService.database;
+      await db.delete(
+        'user_settings',
+        where: 'key = ?',
+        whereArgs: ['avatar_path'],
+      );
+    } else {
+      await DatabaseService.setSetting('avatar_path', path);
+    }
+    notifyListeners();
+  }
+
   Future<void> deleteAllData() async {
+    final oldAvatarPath = _avatarPath;
     await DatabaseService.deleteAllData();
+    if (oldAvatarPath != null) {
+      final avatar = File(oldAvatarPath);
+      if (await avatar.exists()) await avatar.delete();
+    }
     _todos = [];
     _habits = [];
     _countdowns = [];
     _todaySessions = [];
     _sleepRecords = [];
+    _allSessions = [];
+    _userName = '离线用户';
+    _avatarPath = null;
+    _deviceId = await DeviceIdentityService.getOrCreateDeviceId();
+    _firstUsedDate = todayDate;
+    _lifetimeTodosCompleted = 0;
+    _lifetimeHabitsCompleted = 0;
     _lastRolloverDate = '';
     notifyListeners();
   }
@@ -355,11 +470,21 @@ class AppProvider extends ChangeNotifier {
   // ============ Computed stats ============
 
   void _pushAllLocal() {
-    for (final t in _todos) { SyncService.pushTodo(t); }
-    for (final h in _habits) { SyncService.pushHabit(h); }
-    for (final c in _countdowns) { SyncService.pushCountdown(c); }
-    for (final s in _todaySessions) { SyncService.pushFocusSession(s); }
-    for (final r in _sleepRecords) { SyncService.pushSleepRecord(r); }
+    for (final t in _todos) {
+      unawaited(SyncService.pushTodo(t));
+    }
+    for (final h in _habits) {
+      unawaited(SyncService.pushHabit(h));
+    }
+    for (final c in _countdowns) {
+      unawaited(SyncService.pushCountdown(c));
+    }
+    for (final s in _todaySessions) {
+      unawaited(SyncService.pushFocusSession(s));
+    }
+    for (final r in _sleepRecords) {
+      unawaited(SyncService.pushSleepRecord(r));
+    }
   }
 
   int get todayTotalFocusSeconds =>

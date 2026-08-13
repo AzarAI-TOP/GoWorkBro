@@ -1,10 +1,20 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/models.dart';
 import '../providers/app_provider.dart';
 import '../services/app_locale.dart';
 import '../services/sync_service.dart';
+import '../services/supabase_config.dart';
+import '../services/sleep_chart_utils.dart';
 import '../services/update_service.dart';
 import '../theme/app_theme.dart';
 
@@ -15,13 +25,21 @@ class MeScreen extends StatefulWidget {
   State<MeScreen> createState() => _MeScreenState();
 }
 
-class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin {
+class _MeScreenState extends State<MeScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  String _version = '—';
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _loadVersion();
+  }
+
+  Future<void> _loadVersion() async {
+    final info = await PackageInfo.fromPlatform();
+    if (mounted) setState(() => _version = info.version);
   }
 
   @override
@@ -33,6 +51,7 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
+    context.watch<AppLocaleProvider>();
     final theme = Theme.of(context);
     final s = S.of(context.read<AppLocaleProvider>().locale);
 
@@ -67,7 +86,11 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
     );
   }
 
-  Widget _buildProfileHeader(BuildContext context, AppProvider provider, ThemeData theme) {
+  Widget _buildProfileHeader(
+    BuildContext context,
+    AppProvider provider,
+    ThemeData theme,
+  ) {
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
       child: Row(
@@ -86,11 +109,18 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
                   ],
                 ),
               ),
-              child: const Icon(
-                Icons.person,
-                size: 36,
-                color: Colors.white,
-              ),
+              child:
+                  provider.avatarPath != null &&
+                      File(provider.avatarPath!).existsSync()
+                  ? ClipOval(
+                      child: Image.file(
+                        File(provider.avatarPath!),
+                        width: 72,
+                        height: 72,
+                        fit: BoxFit.cover,
+                      ),
+                    )
+                  : const Icon(Icons.person, size: 36, color: Colors.white),
             ),
           ),
           const SizedBox(width: 20),
@@ -108,19 +138,26 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
                         style: theme.textTheme.headlineMedium,
                       ),
                       const SizedBox(width: 8),
-                      Icon(Icons.edit, size: 16, color: theme.colorScheme.primary),
+                      Icon(
+                        Icons.edit,
+                        size: 16,
+                        color: theme.colorScheme.primary,
+                      ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 4),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: theme.colorScheme.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                      'ID: ${provider.userName}',
+                    'ID: ${_profileId(provider)}',
                     style: TextStyle(
                       fontSize: 12,
                       color: theme.colorScheme.primary,
@@ -136,15 +173,40 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
     );
   }
 
+  String _profileId(AppProvider provider) {
+    if (isSupabaseConfigured) {
+      final remoteId = Supabase.instance.client.auth.currentUser?.id;
+      if (remoteId != null) return remoteId;
+    }
+    return provider.deviceId;
+  }
+
   // ============ Sleep / Check-in Tab ============
 
-  Widget _buildSleepTab(BuildContext context, AppProvider provider, ThemeData theme) {
+  Widget _buildSleepTab(
+    BuildContext context,
+    AppProvider provider,
+    ThemeData theme,
+  ) {
     final s = S.of(context.read<AppLocaleProvider>().locale);
     final today = provider.todayDate;
-    final todayRecord = provider.sleepRecords.where((r) => r.recordDate == today).toList();
+    final todayRecord = provider.sleepRecords
+        .where((r) => r.recordDate == today)
+        .toList();
     final wakeTime = todayRecord.isNotEmpty ? todayRecord.first.wakeTime : null;
-    final workoutTime = todayRecord.isNotEmpty ? todayRecord.first.workoutTime : null;
-    final sleepTime = todayRecord.isNotEmpty ? todayRecord.first.sleepTime : null;
+    final workoutTime = todayRecord.isNotEmpty
+        ? todayRecord.first.workoutTime
+        : null;
+    final tomorrowDate = _dateKey(DateTime.now().add(const Duration(days: 1)));
+    final tomorrowRecord = provider.sleepRecords
+        .where((r) => r.recordDate == tomorrowDate)
+        .toList();
+    final sleepTime =
+        todayRecord.isNotEmpty && todayRecord.first.sleepTime != null
+        ? todayRecord.first.sleepTime
+        : tomorrowRecord.isNotEmpty
+        ? tomorrowRecord.first.sleepTime
+        : null;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -199,6 +261,12 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
           ),
         ),
         const SizedBox(height: 16),
+        if (provider.sleepRecords.isNotEmpty) ...[
+          Text(s.sleepTrends, style: theme.textTheme.titleMedium),
+          const SizedBox(height: 8),
+          _SleepCharts(records: provider.sleepRecords, strings: s),
+          const SizedBox(height: 16),
+        ],
         // Sleep history
         Text(s.checkInHistory, style: theme.textTheme.titleMedium),
         const SizedBox(height: 8),
@@ -206,11 +274,16 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
           Center(
             child: Padding(
               padding: const EdgeInsets.all(32),
-              child: Text(s.noCheckInRecords, style: theme.textTheme.bodyMedium),
+              child: Text(
+                s.noCheckInRecords,
+                style: theme.textTheme.bodyMedium,
+              ),
             ),
           )
         else
-          ...provider.sleepRecords.take(10).map((r) => _buildSleepRecordCard(r, theme)),
+          ...provider.sleepRecords
+              .take(10)
+              .map((r) => _buildSleepRecordCard(r, theme)),
       ],
     );
   }
@@ -244,16 +317,28 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
           ),
           child: Column(
             children: [
-              Icon(icon, size: 28, color: hasRecord ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant),
+              Icon(
+                icon,
+                size: 28,
+                color: hasRecord
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.onSurfaceVariant,
+              ),
               const SizedBox(height: 8),
               Text(label, style: theme.textTheme.bodyMedium),
               const SizedBox(height: 4),
               Text(
-                hasRecord ? _formatTime(time) : S.of(context.read<AppLocaleProvider>().locale).notCheckedIn,
+                hasRecord
+                    ? _formatTime(time)
+                    : S
+                          .of(context.read<AppLocaleProvider>().locale)
+                          .notCheckedIn,
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: hasRecord ? FontWeight.w600 : FontWeight.normal,
-                  color: hasRecord ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant,
+                  color: hasRecord
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.onSurfaceVariant,
                 ),
               ),
             ],
@@ -264,6 +349,7 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
   }
 
   Widget _buildSleepRecordCard(SleepRecord record, ThemeData theme) {
+    final s = S.of(context.read<AppLocaleProvider>().locale);
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
@@ -276,23 +362,31 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
           ),
           child: const Icon(Icons.calendar_today, size: 20),
         ),
-        title: Text(record.recordDate, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+        title: Text(
+          record.recordDate,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+        ),
         subtitle: Text(
-          '起床 ${_formatTime(record.wakeTime)}  ·  健身 ${_formatTime(record.workoutTime)}  ·  睡觉 ${_formatTime(record.sleepTime)}',
+          s.sleepRecordSummary(
+            _formatTime(record.wakeTime),
+            _formatTime(record.workoutTime),
+            _formatTime(record.sleepTime),
+          ),
           style: const TextStyle(fontSize: 12),
         ),
       ),
     );
   }
 
-  void _recordTime(BuildContext context, AppProvider provider, String type) async {
+  void _recordTime(
+    BuildContext context,
+    AppProvider provider,
+    String type,
+  ) async {
     final now = TimeOfDay.now();
-    final helpText = switch (type) {
-      'wake' => '选择起床时间',
-      'workout' => '选择健身时间',
-      'sleep' => '选择睡觉时间',
-      _ => '选择时间',
-    };
+    final helpText = S
+        .of(context.read<AppLocaleProvider>().locale)
+        .selectCheckInTime(type);
     final picked = await showTimePicker(
       context: context,
       initialTime: now,
@@ -300,9 +394,14 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
     );
     if (picked == null) return;
 
-    final timeStr = '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
-    final today = provider.todayDate;
-    final existing = provider.sleepRecords.where((r) => r.recordDate == today).toList();
+    final timeStr =
+        '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+    final recordDate = type == 'sleep' && picked.hour >= 12
+        ? _dateKey(DateTime.now().add(const Duration(days: 1)))
+        : provider.todayDate;
+    final existing = provider.sleepRecords
+        .where((r) => r.recordDate == recordDate)
+        .toList();
 
     SleepRecord record;
     if (existing.isNotEmpty) {
@@ -321,7 +420,7 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
       }
     } else {
       record = SleepRecord.create(
-        recordDate: today,
+        recordDate: recordDate,
         wakeTime: type == 'wake' ? timeStr : null,
         workoutTime: type == 'workout' ? timeStr : null,
         sleepTime: type == 'sleep' ? timeStr : null,
@@ -334,33 +433,69 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
     return time ?? '—';
   }
 
-  void _showAvatarPicker(BuildContext context) {
+  String _dateKey(DateTime date) =>
+      '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+  Future<void> _showAvatarPicker(BuildContext context) async {
+    final provider = context.read<AppProvider>();
     final s = S.of(context.read<AppLocaleProvider>().locale);
-    showDialog(
+    final action = await showModalBottomSheet<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(s.avatarUpload),
-        content: Column(
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-              ),
-              child: Icon(Icons.cloud_upload_outlined, size: 36, color: Theme.of(context).colorScheme.primary),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: Text(s.choosePhoto),
+              onTap: () => Navigator.pop(context, 'choose'),
             ),
-            const SizedBox(height: 16),
-            const Text('头像上传功能开发中，敬请期待 🚀'),
+            if (provider.avatarPath != null)
+              ListTile(
+                leading: const Icon(
+                  Icons.delete_outline,
+                  color: Colors.redAccent,
+                ),
+                title: Text(
+                  s.removeAvatar,
+                  style: const TextStyle(color: Colors.redAccent),
+                ),
+                onTap: () => Navigator.pop(context, 'remove'),
+              ),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('好的')),
-        ],
       ),
     );
+    if (!mounted || action == null) return;
+    if (action == 'remove') {
+      final old = provider.avatarPath;
+      await provider.setAvatarPath(null);
+      if (old != null) await File(old).delete().catchError((_) => File(old));
+      return;
+    }
+
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 88,
+      maxWidth: 1024,
+      maxHeight: 1024,
+    );
+    if (picked == null) return;
+    final support = await getApplicationSupportDirectory();
+    final profileDir = Directory(p.join(support.path, 'GoWorkBro', 'profile'));
+    await profileDir.create(recursive: true);
+    final extension = p.extension(picked.path).isEmpty
+        ? '.jpg'
+        : p.extension(picked.path);
+    final destination = p.join(profileDir.path, 'avatar$extension');
+    await File(picked.path).copy(destination);
+    final oldAvatar = provider.avatarPath;
+    await provider.setAvatarPath(destination);
+    if (oldAvatar != null && oldAvatar != destination) {
+      final oldFile = File(oldAvatar);
+      if (await oldFile.exists()) await oldFile.delete();
+    }
   }
 
   void _showEditNameDialog(BuildContext context, AppProvider provider) {
@@ -376,7 +511,10 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
           autofocus: true,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text(s.cancel)),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(s.cancel),
+          ),
           TextButton(
             onPressed: () {
               if (controller.text.trim().isNotEmpty) {
@@ -393,11 +531,61 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
 
   // ============ Stats Tab ============
 
-  Widget _buildStatsTab(BuildContext context, AppProvider provider, ThemeData theme) {
+  Widget _buildStatsTab(
+    BuildContext context,
+    AppProvider provider,
+    ThemeData theme,
+  ) {
     final s = S.of(context.read<AppLocaleProvider>().locale);
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        Text(s.lifetimeStats, style: theme.textTheme.titleLarge),
+        const SizedBox(height: 12),
+        _buildStatCard(
+          theme,
+          title: s.totalFocus,
+          value: _formatDuration(provider.lifetimeFocusSeconds),
+          icon: Icons.all_inclusive,
+          color: AppTheme.chartColors[0],
+        ),
+        const SizedBox(height: 12),
+        _buildStatCard(
+          theme,
+          title: s.totalSessions,
+          value: '${provider.lifetimeSessionCount}',
+          icon: Icons.local_fire_department_outlined,
+          color: AppTheme.chartColors[3],
+        ),
+        const SizedBox(height: 12),
+        _buildStatCard(
+          theme,
+          title: s.totalTodos,
+          value: '${provider.lifetimeTodosCompleted}',
+          icon: Icons.task_alt,
+          color: AppTheme.chartColors[2],
+        ),
+        const SizedBox(height: 12),
+        _buildStatCard(
+          theme,
+          title: s.totalHabits,
+          value: '${provider.lifetimeHabitsCompleted}',
+          icon: Icons.repeat_rounded,
+          color: AppTheme.chartColors[1],
+        ),
+        const SizedBox(height: 12),
+        _buildStatCard(
+          theme,
+          title: s.usingSince,
+          value: provider.firstUsedDate.split('T').first,
+          icon: Icons.calendar_month_outlined,
+          color: AppTheme.chartColors[4],
+        ),
+        const SizedBox(height: 24),
+        Divider(color: theme.dividerColor),
+        const SizedBox(height: 16),
+        Text(s.today, style: theme.textTheme.titleLarge),
+        const SizedBox(height: 12),
         _buildStatCard(
           theme,
           title: s.todayFocus,
@@ -409,7 +597,7 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
         _buildStatCard(
           theme,
           title: s.pomodoroCount,
-          value: '${provider.todaySessionCount} 个',
+          value: s.count(provider.todaySessionCount),
           icon: Icons.local_fire_department_outlined,
           color: AppTheme.chartColors[3],
         ),
@@ -417,7 +605,8 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
         _buildStatCard(
           theme,
           title: s.todoCompleted,
-          value: '${provider.todos.where((t) => t.isCompleted).length} / ${provider.todos.length}',
+          value:
+              '${provider.todos.where((t) => t.isCompleted).length} / ${provider.todos.length}',
           icon: Icons.check_circle_outline,
           color: AppTheme.chartColors[2],
         ),
@@ -425,7 +614,8 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
         _buildStatCard(
           theme,
           title: s.habitCompleted,
-          value: '${provider.habits.where((h) => h.isCompleted).length} / ${provider.habits.length}',
+          value:
+              '${provider.habits.where((h) => h.isCompleted).length} / ${provider.habits.length}',
           icon: Icons.repeat_outlined,
           color: AppTheme.chartColors[1],
         ),
@@ -433,7 +623,7 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
         _buildStatCard(
           theme,
           title: s.activeCountdowns,
-          value: '${provider.countdowns.length} 个',
+          value: s.count(provider.countdowns.length),
           icon: Icons.hourglass_empty,
           color: AppTheme.chartColors[4],
         ),
@@ -441,7 +631,8 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
     );
   }
 
-  Widget _buildStatCard(ThemeData theme, {
+  Widget _buildStatCard(
+    ThemeData theme, {
     required String title,
     required String value,
     required IconData icon,
@@ -462,10 +653,11 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
               child: Icon(icon, color: color, size: 24),
             ),
             const SizedBox(width: 16),
-            Expanded(
-              child: Text(title, style: theme.textTheme.bodyMedium),
+            Expanded(child: Text(title, style: theme.textTheme.bodyMedium)),
+            Text(
+              value,
+              style: theme.textTheme.titleLarge?.copyWith(color: color),
             ),
-            Text(value, style: theme.textTheme.titleLarge?.copyWith(color: color)),
           ],
         ),
       ),
@@ -481,8 +673,13 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
 
   // ============ Settings Tab ============
 
-  Widget _buildSettingsTab(BuildContext context, AppProvider provider, ThemeData theme) {
+  Widget _buildSettingsTab(
+    BuildContext context,
+    AppProvider provider,
+    ThemeData theme,
+  ) {
     final s = S.of(context.read<AppLocaleProvider>().locale);
+    final localeProvider = context.watch<AppLocaleProvider>();
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -495,7 +692,11 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
               children: [
                 Row(
                   children: [
-                    Icon(Icons.language, size: 20, color: theme.colorScheme.primary),
+                    Icon(
+                      Icons.language,
+                      size: 20,
+                      color: theme.colorScheme.primary,
+                    ),
                     const SizedBox(width: 8),
                     Text(s.language, style: theme.textTheme.titleMedium),
                   ],
@@ -506,8 +707,9 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
                     ButtonSegment(value: AppLocale.zh, label: Text(s.chinese)),
                     ButtonSegment(value: AppLocale.en, label: Text(s.english)),
                   ],
-                  selected: {context.read<AppLocaleProvider>().locale},
-                  onSelectionChanged: (set) => context.read<AppLocaleProvider>().setLocale(set.first),
+                  selected: {localeProvider.locale},
+                  onSelectionChanged: (set) =>
+                      localeProvider.setLocale(set.first),
                 ),
               ],
             ),
@@ -524,7 +726,11 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
               children: [
                 Row(
                   children: [
-                    Icon(Icons.palette_outlined, size: 20, color: theme.colorScheme.primary),
+                    Icon(
+                      Icons.palette_outlined,
+                      size: 20,
+                      color: theme.colorScheme.primary,
+                    ),
                     const SizedBox(width: 8),
                     Text(s.theme, style: theme.textTheme.titleMedium),
                   ],
@@ -532,12 +738,22 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
                 const SizedBox(height: 12),
                 SegmentedButton<ThemeMode>(
                   segments: [
-                    ButtonSegment(value: ThemeMode.light, label: Text(s.lightMode)),
-                    ButtonSegment(value: ThemeMode.dark, label: Text(s.darkMode)),
-                    ButtonSegment(value: ThemeMode.system, label: Text(s.systemMode)),
+                    ButtonSegment(
+                      value: ThemeMode.light,
+                      label: Text(s.lightMode),
+                    ),
+                    ButtonSegment(
+                      value: ThemeMode.dark,
+                      label: Text(s.darkMode),
+                    ),
+                    ButtonSegment(
+                      value: ThemeMode.system,
+                      label: Text(s.systemMode),
+                    ),
                   ],
-                  selected: {context.read<AppLocaleProvider>().themeMode},
-                  onSelectionChanged: (set) => context.read<AppLocaleProvider>().setThemeMode(set.first),
+                  selected: {localeProvider.themeMode},
+                  onSelectionChanged: (set) =>
+                      localeProvider.setThemeMode(set.first),
                 ),
               ],
             ),
@@ -554,8 +770,13 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
               children: [
                 Row(
                   children: [
-                    Icon(Icons.cloud_done_outlined, size: 20,
-                        color: SyncService.isInitialized ? Colors.green : Colors.grey),
+                    Icon(
+                      Icons.cloud_done_outlined,
+                      size: 20,
+                      color: SyncService.isInitialized
+                          ? Colors.green
+                          : Colors.grey,
+                    ),
                     const SizedBox(width: 8),
                     Text(s.cloudSync, style: theme.textTheme.titleMedium),
                   ],
@@ -568,12 +789,16 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
                       height: 8,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: SyncService.isInitialized ? Colors.green : Colors.grey,
+                        color: SyncService.isInitialized
+                            ? Colors.green
+                            : Colors.grey,
                       ),
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      SyncService.isInitialized ? s.connectedToSupabase : s.notConnected,
+                      SyncService.isInitialized
+                          ? s.connectedToSupabase
+                          : s.notConnected,
                       style: theme.textTheme.bodyMedium,
                     ),
                   ],
@@ -596,7 +821,7 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
           child: ListTile(
             leading: const Icon(Icons.system_update),
             title: Text(s.checkUpdate),
-            subtitle: const Text('检查是否有新版本可用'),
+            subtitle: Text(s.checkUpdateSubtitle),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => _checkForUpdate(context),
           ),
@@ -608,13 +833,13 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
           child: ListTile(
             leading: const Icon(Icons.info_outline),
             title: Text(s.aboutGoWorkBro),
-            subtitle: Text('${s.version} 1.0.0'),
+            subtitle: Text('${s.version} $_version'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
               showAboutDialog(
                 context: context,
                 applicationName: 'GoWorkBro',
-                applicationVersion: '1.0.0',
+                applicationVersion: _version,
                 applicationLegalese: '© 2026 AzarAI',
                 applicationIcon: Container(
                   width: 48,
@@ -623,7 +848,11 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
                     color: theme.colorScheme.primary,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(Icons.check_circle, color: Colors.white, size: 28),
+                  child: const Icon(
+                    Icons.check_circle,
+                    color: Colors.white,
+                    size: 28,
+                  ),
                 ),
               );
             },
@@ -635,8 +864,11 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
         Card(
           child: ListTile(
             leading: const Icon(Icons.logout, color: Colors.redAccent),
-            title: Text(s.logout, style: const TextStyle(color: Colors.redAccent)),
-            subtitle: const Text('退出后数据保留在本地，重新登录可同步'),
+            title: Text(
+              s.logout,
+              style: const TextStyle(color: Colors.redAccent),
+            ),
+            subtitle: Text(s.signOutSubtitle),
             trailing: const Icon(Icons.chevron_right, color: Colors.redAccent),
             onTap: () => _showLogoutConfirm(context),
           ),
@@ -649,7 +881,10 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
           child: OutlinedButton.icon(
             onPressed: () => _showDeleteDataConfirm(context, provider),
             icon: const Icon(Icons.delete_forever, color: Colors.redAccent),
-            label: Text(s.deleteData, style: const TextStyle(color: Colors.redAccent)),
+            label: Text(
+              s.deleteData,
+              style: const TextStyle(color: Colors.redAccent),
+            ),
             style: OutlinedButton.styleFrom(
               foregroundColor: Colors.redAccent,
               side: const BorderSide(color: Colors.redAccent),
@@ -673,7 +908,10 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
         title: Text(s.logout),
         content: Text(s.logoutConfirm),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text(s.cancel)),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(s.cancel),
+          ),
           TextButton(
             onPressed: () {
               Navigator.pop(context);
@@ -687,7 +925,10 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
     );
   }
 
-  void _showDeleteDataConfirm(BuildContext context, AppProvider provider) async {
+  void _showDeleteDataConfirm(
+    BuildContext context,
+    AppProvider provider,
+  ) async {
     final s = S.of(context.read<AppLocaleProvider>().locale);
     final confirmed = await showDialog<bool>(
       context: context,
@@ -695,7 +936,10 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
         title: Text(s.deleteData),
         content: Text(s.deleteDataConfirm),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(s.cancel)),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(s.cancel),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
@@ -704,42 +948,263 @@ class _MeScreenState extends State<MeScreen> with SingleTickerProviderStateMixin
         ],
       ),
     );
-    if (confirmed != true || !mounted) return;
+    if (confirmed != true || !context.mounted) return;
     await provider.deleteAllData();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(s.deleteDataSuccess)),
-    );
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(s.deleteDataSuccess)));
   }
 
   Future<void> _checkForUpdate(BuildContext context) async {
     final s = S.of(context.read<AppLocaleProvider>().locale);
     // Show loading
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        content: Row(
-          children: [
-            const CircularProgressIndicator(),
-            const SizedBox(width: 16),
-            Text(s.checkingUpdate),
-          ],
+    unawaited(
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          content: Row(
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(width: 16),
+              Text(s.checkingUpdate),
+            ],
+          ),
         ),
       ),
     );
 
     final update = await UpdateService.checkForUpdate();
 
-    if (!mounted) return;
+    if (!context.mounted) return;
     Navigator.of(context).pop(); // Close loading dialog
 
     if (update != null) {
       UpdateService.showUpdateDialog(context, update);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(s.latestVersion)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.latestVersion)));
     }
+  }
+}
+
+class _SleepCharts extends StatelessWidget {
+  const _SleepCharts({required this.records, required this.strings});
+
+  final List<SleepRecord> records;
+  final S strings;
+
+  @override
+  Widget build(BuildContext context) {
+    final byDate = {for (final record in records) record.recordDate: record};
+    final today = DateTime.now();
+    final dates = [
+      for (var i = 6; i >= 0; i--) today.subtract(Duration(days: i)),
+    ];
+    final ordered = [for (final date in dates) byDate[_dateKey(date)]];
+
+    final wake = <FlSpot>[];
+    final bedtime = <FlSpot>[];
+    final duration = <FlSpot>[];
+    for (var i = 0; i < ordered.length; i++) {
+      final record = ordered[i];
+      final wakeHours = _hours(record?.wakeTime);
+      final sleepHours = _hours(record?.sleepTime);
+      if (wakeHours != null) wake.add(FlSpot(i.toDouble(), wakeHours));
+      if (sleepHours != null) {
+        bedtime.add(
+          FlSpot(i.toDouble(), sleepHours < 12 ? sleepHours + 24 : sleepHours),
+        );
+      }
+      if (wakeHours != null && sleepHours != null) {
+        final value = overnightDurationHours(sleepHours, wakeHours);
+        duration.add(FlSpot(i.toDouble(), value));
+      }
+    }
+
+    return Column(
+      children: [
+        _SleepLineChart(
+          title: strings.wakeTime,
+          averageLabel: strings.average,
+          spots: wake,
+          dates: dates,
+        ),
+        const SizedBox(height: 12),
+        _SleepLineChart(
+          title: strings.bedtime,
+          averageLabel: strings.average,
+          spots: bedtime,
+          dates: dates,
+        ),
+        const SizedBox(height: 12),
+        _SleepLineChart(
+          title: strings.sleepDuration,
+          averageLabel: strings.average,
+          spots: duration,
+          dates: dates,
+        ),
+      ],
+    );
+  }
+
+  static String _dateKey(DateTime date) =>
+      '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+  static double? _hours(String? value) {
+    if (value == null) return null;
+    final parts = value.split(':');
+    if (parts.length < 2) return null;
+    final h = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    if (h == null || m == null) return null;
+    return h + m / 60;
+  }
+}
+
+class _SleepLineChart extends StatelessWidget {
+  const _SleepLineChart({
+    required this.title,
+    required this.averageLabel,
+    required this.spots,
+    required this.dates,
+  });
+
+  final String title;
+  final String averageLabel;
+  final List<FlSpot> spots;
+  final List<DateTime> dates;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final average = spots.isEmpty
+        ? 0.0
+        : spots.fold<double>(0, (sum, spot) => sum + spot.y) / spots.length;
+    final ys = spots.map((spot) => spot.y).toList();
+    final minY = ys.isEmpty
+        ? 0.0
+        : (ys.reduce((a, b) => a < b ? a : b) - 1).clamp(0, 30);
+    final maxY = ys.isEmpty
+        ? 24.0
+        : (ys.reduce((a, b) => a > b ? a : b) + 1).clamp(1, 30);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(title, style: theme.textTheme.titleSmall),
+                if (spots.isNotEmpty)
+                  Text(
+                    '$averageLabel ${_formatHours(average)}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: Colors.redAccent,
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 150,
+              child: spots.isEmpty
+                  ? Center(child: Text('—', style: theme.textTheme.bodyLarge))
+                  : LineChart(
+                      LineChartData(
+                        minX: 0,
+                        maxX: 6,
+                        minY: minY.toDouble(),
+                        maxY: maxY.toDouble(),
+                        gridData: const FlGridData(show: false),
+                        borderData: FlBorderData(show: false),
+                        lineTouchData: const LineTouchData(enabled: true),
+                        extraLinesData: ExtraLinesData(
+                          horizontalLines: [
+                            HorizontalLine(
+                              y: average,
+                              color: Colors.redAccent,
+                              strokeWidth: 1.5,
+                              dashArray: [6, 4],
+                            ),
+                          ],
+                        ),
+                        titlesData: FlTitlesData(
+                          topTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                          rightTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                          leftTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              reservedSize: 38,
+                              getTitlesWidget: (value, meta) => Text(
+                                _formatHours(value),
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  fontSize: 9,
+                                ),
+                              ),
+                            ),
+                          ),
+                          bottomTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              interval: 1,
+                              getTitlesWidget: (value, meta) {
+                                final index = value.round();
+                                if (index < 0 || index >= dates.length) {
+                                  return const SizedBox.shrink();
+                                }
+                                final date = dates[index];
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Text(
+                                    '${date.month}/${date.day}',
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      fontSize: 9,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                        lineBarsData: [
+                          for (final run in splitContiguousSleepSpots(spots))
+                            LineChartBarData(
+                              spots: run,
+                              isCurved: true,
+                              color: const Color(0xFFFF8A3D),
+                              barWidth: 3,
+                              dotData: const FlDotData(show: true),
+                              belowBarData: BarAreaData(
+                                show: true,
+                                color: const Color(
+                                  0xFFFF8A3D,
+                                ).withValues(alpha: 0.12),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _formatHours(double value) {
+    final normalized = value >= 24 ? value - 24 : value;
+    final hours = normalized.floor();
+    final minutes = ((normalized - hours) * 60).round();
+    return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}';
   }
 }
