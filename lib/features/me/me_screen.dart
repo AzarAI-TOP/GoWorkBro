@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:image_picker_android/image_picker_android.dart';
+import 'package:image_picker_platform_interface/image_picker_platform_interface.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -495,6 +497,13 @@ class _MeScreenState extends State<MeScreen>
 
   Future<void> _pickAndSetAvatar() async {
     final provider = context.read<AppProvider>();
+    // Android 13+: prefer the system Photo Picker (full Photos/Albums view).
+    // The default (false) uses the legacy GET_CONTENT dialog, which on many
+    // devices only surfaces recent photos (issue #12). No-op on desktop.
+    final platform = ImagePickerPlatform.instance;
+    if (platform is ImagePickerAndroid) {
+      platform.useAndroidPhotoPicker = true;
+    }
     final picked = await ImagePicker().pickImage(
       source: ImageSource.gallery,
       imageQuality: 88,
