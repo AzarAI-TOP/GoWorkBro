@@ -1,7 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
-import 'package:goworkbro/main.dart';
+import 'package:goworkbro/app/app.dart';
+import 'package:goworkbro/core/database/app_database.dart';
 import 'package:goworkbro/models/models.dart';
 import 'package:goworkbro/providers/app_provider.dart';
 import 'package:goworkbro/core/l10n/app_locale.dart';
@@ -11,6 +14,16 @@ import 'package:provider/provider.dart';
 /// Run with: flutter test integration_test/user_flow_test.dart -d windows
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+
+  // Never touch the real app database (Documents/goworkbro.db): the app on
+  // this machine persists real profile data (name, locale, records) that the
+  // assertions below would otherwise clobber or fail against.
+  final testDir = Directory(
+    '${Directory.systemTemp.path}${Platform.pathSeparator}goworkbro_itest',
+  );
+  if (testDir.existsSync()) testDir.deleteSync(recursive: true);
+  testDir.createSync(recursive: true);
+  AppDatabase.setDataDirForTesting(testDir.path);
 
   /// Helper: get the AppProvider from the running app
   AppProvider getProvider(WidgetTester tester) {
@@ -121,11 +134,24 @@ void main() {
 
       // Step 11: Navigate to Me
       await navigateTo(tester, '我的');
-      expect(find.text('离线用户'), findsAtLeast(1));
+      // The display name depends on persisted profile data (default
+      // '离线用户' only on a fresh install), so assert the stable avatar
+      // header instead.
+      expect(find.byKey(const ValueKey('profile_avatar')), findsOneWidget);
       expect(find.text('打卡'), findsOneWidget);
       expect(find.text('统计'), findsOneWidget);
       expect(find.text('设置'), findsOneWidget);
       print('Step 11: Me screen OK ✓');
+
+      // Step 11b: Avatar dialog opens with 更改/取消 and closes on 取消
+      await tester.tap(find.byKey(const ValueKey('profile_avatar')));
+      await tester.pumpAndSettle();
+      expect(find.text('更改'), findsOneWidget);
+      expect(find.text('取消'), findsOneWidget);
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(find.text('更改'), findsNothing);
+      print('Step 11b: Avatar dialog ✓');
 
       // Step 12: Stats tab
       await tester.tap(find.text('统计'));
@@ -150,9 +176,23 @@ void main() {
       expect(find.text('Countdown'), findsOneWidget);
       expect(find.text('Today'), findsOneWidget);
       expect(find.text('Me'), findsOneWidget);
+      // The update section sits at the bottom of the settings list — scroll
+      // it into view before asserting (lazy ListView children).
+      await tester.scrollUntilVisible(
+        find.text('Check for Updates'),
+        300,
+        scrollable: find.byType(Scrollable).last,
+      );
       expect(find.text('Check for Updates'), findsOneWidget);
       print('Step 13: English app navigation and settings OK ✓');
 
+      // Scroll back up: the language selector sits at the top of the
+      // settings list and was unbuilt while scrolling to the update section.
+      await tester.scrollUntilVisible(
+        find.text('Chinese'),
+        -300,
+        scrollable: find.byType(Scrollable).last,
+      );
       await tester.tap(find.text('Chinese'));
       await tester.pumpAndSettle();
       expect(find.text('待办'), findsAtLeast(1));
