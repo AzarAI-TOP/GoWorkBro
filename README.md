@@ -153,6 +153,53 @@ To upload news to Supabase, use the included script:
 python scripts/upload_ustc_news.py YYYY-MM-DD /path/to/news.md
 ```
 
+The script posts through the validated `upsert_ustc_news` RPC (SECURITY
+DEFINER, date/content validation, idempotent per day) using the public anon
+key — **no secret key is required**. Direct anonymous writes to `ustc_news`
+are blocked at both the RLS and grant layers.
+
+### Security (Supabase hardening)
+
+Enforced by schema (`supabase/schema.sql` / migrations):
+
+- RLS on every public table; personal tables allow only `authenticated`
+  access to the owner's own rows.
+- API surface hardening: `anon`/`authenticated` have no blanket grants;
+  privileges follow an explicit grant matrix.
+- `user_settings` last-write-wins trigger at the database boundary.
+- News ingestion only via the validated RPC; anonymous table writes denied.
+
+Dashboard checklist (one-time, cannot be applied via migrations):
+
+1. **Authentication → Sign In / Up → User Signups** → turn OFF
+   **Allow anonymous sign-ins**.
+2. **Authentication → Password Protection** → turn ON
+   **Detect leaked passwords** (if available on your plan).
+3. **Authentication → Password Protection** → set
+   **Minimum password length** to `10` (matches app client validation).
+4. **Authentication → Sessions** → turn ON
+   **Enforce single session per user**.
+5. (Optional) **Authentication → Sign In / Up** → turn ON
+   **Secure email change**.
+
+Verify with:
+```bash
+supabase db advisors --linked --type security --level info --fail-on none
+```
+Anonymous-access and leaked-password warnings should disappear.
+
+Emergency rollback of the API surface hardening (restores blanket grants;
+RLS policies still filter rows):
+
+```sql
+grant all on all tables in schema public to anon, authenticated;
+grant usage on all sequences in schema public to anon, authenticated;
+grant execute on all functions in schema public to anon, authenticated;
+alter default privileges in schema public grant all on tables to anon, authenticated;
+alter default privileges in schema public grant usage on sequences to anon, authenticated;
+alter default privileges in schema public grant execute on functions to anon, authenticated;
+```
+
 ### Windows Tray
 
 On Windows, closing the window hides the app to the system tray.
