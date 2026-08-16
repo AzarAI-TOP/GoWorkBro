@@ -4,8 +4,12 @@
 Usage:
   python upload_ustc_news.py <date> <markdown_file_path>
 
-Reads the markdown file, strips frontmatter, extracts H1 title,
-and upserts into the Supabase ustc_news table.
+Reads the markdown file, strips frontmatter, extracts the H1 title, and
+upserts the daily edition through the validated `upsert_ustc_news` RPC.
+
+The RPC is SECURITY DEFINER and validates the date (ISO format, not in the
+future) and content limits, so the public anon key is sufficient — no secret
+key is ever required for news ingestion.
 
 Environment variables (optional, override defaults):
   SUPABASE_URL       — Supabase project URL
@@ -17,6 +21,7 @@ import re
 import os
 import json
 import urllib.request
+import urllib.error
 
 # ============ Config ============
 
@@ -57,31 +62,34 @@ def extract_title(md: str) -> str:
 
 
 def upload(date_str: str, title: str, content: str) -> bool:
-    """Upsert news into Supabase ustc_news table."""
-    url = f"{SUPABASE_URL}/rest/v1/ustc_news"
+    """Upsert news through the validated Supabase RPC."""
+    url = f"{SUPABASE_URL}/rest/v1/rpc/upsert_ustc_news"
     headers = {
         "apikey": SUPABASE_ANON_KEY,
         "Authorization": f"Bearer {SUPABASE_ANON_KEY}",
         "Content-Type": "application/json",
-        "Prefer": "resolution=merge-duplicates",  # upsert
     }
     payload = json.dumps(
         {
-            "date": date_str,
-            "title": title,
-            "content": content,
+            "p_date": date_str,
+            "p_title": title,
+            "p_content": content,
         }
     ).encode("utf-8")
 
     req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            body = resp.read().decode("utf-8", errors="replace")
             if resp.status in (200, 201):
                 print(f"✅ Uploaded USTC news for {date_str}: {title}")
                 return True
-            else:
-                print(f"❌ Upload failed: HTTP {resp.status}")
-                return False
+            print(f"❌ Upload failed: HTTP {resp.status}: {body[:200]}")
+            return False
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace") if e.fp else ""
+        print(f"❌ Upload error: HTTP {e.code}: {body[:300]}")
+        return False
     except Exception as e:
         print(f"❌ Upload error: {e}")
         return False
