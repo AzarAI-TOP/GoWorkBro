@@ -6,9 +6,14 @@ import 'package:goworkbro/core/l10n/app_locale.dart';
 
 /// 7-day bar chart card showing focus time per day.
 class WeeklyBarCard extends StatelessWidget {
-  const WeeklyBarCard({super.key, required this.weeklySeconds});
+  const WeeklyBarCard({
+    super.key,
+    required this.weeklySeconds,
+    required this.endDate,
+  });
 
   final List<int> weeklySeconds;
+  final String endDate;
 
   @override
   Widget build(BuildContext context) {
@@ -167,10 +172,10 @@ class WeeklyBarCard extends StatelessWidget {
   }
 
   List<String> _last7DayLabels(S s) {
-    final now = DateTime.now();
+    final logicalEndDate = DateTime.parse(endDate);
     final labels = <String>[];
     for (int i = 6; i >= 0; i--) {
-      final d = now.subtract(Duration(days: i));
+      final d = logicalEndDate.subtract(Duration(days: i));
       labels.add(s.weekdayShort(d.weekday));
     }
     return labels;

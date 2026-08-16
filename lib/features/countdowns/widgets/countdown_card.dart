@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:goworkbro/models/models.dart';
 import 'package:goworkbro/core/l10n/app_locale.dart';
@@ -46,7 +47,10 @@ class CountdownCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       child: InkWell(
         onTap: onEdit,
-        onLongPress: () => _showDeleteConfirm(context, onDelete),
+        onLongPress: () {
+          HapticFeedback.mediumImpact();
+          _showActions(context);
+        },
         borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.all(20),
@@ -175,6 +179,44 @@ class CountdownCard extends StatelessWidget {
 
   String _formatDateTime(DateTime dt) {
     return '${dt.month}/${dt.day} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  }
+
+  void _showActions(BuildContext context) {
+    final s = S.of(context.read<AppLocaleProvider>().locale);
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: Text(s.edit),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                onEdit();
+              },
+            ),
+            ListTile(
+              leading: Icon(
+                Icons.delete_outline,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              title: Text(
+                s.delete,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _showDeleteConfirm(context, onDelete);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showDeleteConfirm(BuildContext context, VoidCallback onDelete) {

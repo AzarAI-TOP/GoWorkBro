@@ -128,8 +128,8 @@ class S {
   String get enterEmailPassword =>
       locale == AppLocale.zh ? '请输入邮箱和密码' : 'Enter your email and password';
   String get passwordTooShort => locale == AppLocale.zh
-      ? '密码至少 6 位'
-      : 'Password must be at least 6 characters';
+      ? '密码至少 10 位'
+      : 'Password must be at least 10 characters';
   String get registrationSuccess => locale == AppLocale.zh
       ? '注册成功！请检查邮箱完成验证后登录。'
       : 'Registration successful. Verify your email, then sign in.';
@@ -289,6 +289,32 @@ class S {
   String get wakeUp => locale == AppLocale.zh ? '起床' : 'Wake Up';
   String get sleep => locale == AppLocale.zh ? '睡觉' : 'Sleep';
   String get workout => locale == AppLocale.zh ? '健身' : 'Workout';
+  String get workoutCheckIn => locale == AppLocale.zh ? '记录健身' : 'Log Workout';
+  String get workoutDuration => locale == AppLocale.zh ? '持续时长' : 'Duration';
+  String minutes(int value) =>
+      locale == AppLocale.zh ? '$value 分钟' : '$value min';
+  String get customDuration =>
+      locale == AppLocale.zh ? '自定义时长' : 'Custom duration';
+  String get minuteUnit => locale == AppLocale.zh ? '分钟' : 'min';
+  String get workoutDurationError =>
+      locale == AppLocale.zh ? '请输入 1–1440 分钟' : 'Enter 1–1440 minutes';
+  String get workoutDescription =>
+      locale == AppLocale.zh ? '内容描述（可选）' : 'Description (optional)';
+  String get workoutDescriptionHint => locale == AppLocale.zh
+      ? '如：爬楼梯、力量训练'
+      : 'e.g. Stair climbing or strength training';
+  String get saveWorkoutCheckIn =>
+      locale == AppLocale.zh ? '保存健身记录' : 'Save Workout';
+  String get legacyWorkoutRecord =>
+      locale == AppLocale.zh ? '旧记录' : 'Legacy record';
+  String workoutRecordSummary(int durationMinutes, String? description) {
+    final durationText = minutes(durationMinutes);
+    final detail = description?.trim() ?? '';
+    return detail.isEmpty ? durationText : '$durationText · $detail';
+  }
+
+  String legacyWorkoutAt(String time) =>
+      locale == AppLocale.zh ? '旧记录 $time' : 'Legacy record $time';
   String get notCheckedIn => locale == AppLocale.zh ? '未打卡' : 'Not checked in';
   String get checkInHistory => locale == AppLocale.zh ? '打卡记录' : 'History';
   String get noCheckInRecords =>
@@ -328,6 +354,24 @@ class S {
 
   // ---- Settings ----
   String get cloudSync => locale == AppLocale.zh ? '云端同步' : 'Cloud Sync';
+  String get lateNightMode =>
+      locale == AppLocale.zh ? '熬夜模式' : 'Late-night mode';
+  String get lateNightModeDescription => locale == AppLocale.zh
+      ? '午夜后至睡眠打卡前的活动计入前一天（最晚到中午）'
+      : 'After-midnight activity counts toward yesterday until sleep check-in (no later than noon)';
+  String lateNightModeActive(String date) => locale == AppLocale.zh
+      ? '已开启 · 当前活动计入 $date'
+      : 'On · current activity counts toward $date';
+  String get exportAllData =>
+      locale == AppLocale.zh ? '导出所有数据' : 'Export all data';
+  String get exportAllDataSubtitle => locale == AppLocale.zh
+      ? '保存带版本信息的完整 JSON 备份'
+      : 'Save a complete, versioned JSON backup';
+  String get exportAllDataSuccess =>
+      locale == AppLocale.zh ? '数据已成功导出' : 'Data exported successfully';
+  String get exportAllDataFailed => locale == AppLocale.zh
+      ? '导出失败，请重新选择保存位置'
+      : 'Export failed. Choose another save location.';
   String get connected => locale == AppLocale.zh ? '已连接' : 'Connected';
   String get notConnected => locale == AppLocale.zh ? '未连接' : 'Not Connected';
   String get connectedToSupabase =>

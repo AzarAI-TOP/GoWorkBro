@@ -14,6 +14,109 @@ void main() {
     });
   });
 
+  group('logicalDateKey', () {
+    test(
+      'keeps after-midnight activity on yesterday before sleep check-in',
+      () {
+        expect(
+          logicalDateKey(
+            now: DateTime(2026, 8, 17, 2, 30),
+            lateNightModeEnabled: true,
+            sleepCheckedInForCalendarDate: false,
+            lastRolloverDate: '2026-08-16',
+          ),
+          '2026-08-16',
+        );
+      },
+    );
+
+    test('uses the calendar day when the mode is off', () {
+      expect(
+        logicalDateKey(
+          now: DateTime(2026, 8, 17, 2),
+          lateNightModeEnabled: false,
+          sleepCheckedInForCalendarDate: false,
+          lastRolloverDate: '2026-08-16',
+        ),
+        '2026-08-17',
+      );
+    });
+
+    test('sleep check-in closes carry-over immediately', () {
+      expect(
+        logicalDateKey(
+          now: DateTime(2026, 8, 17, 2),
+          lateNightModeEnabled: true,
+          sleepCheckedInForCalendarDate: true,
+          lastRolloverDate: '2026-08-16',
+        ),
+        '2026-08-17',
+      );
+    });
+
+    test('never moves a day backwards after rollover already happened', () {
+      expect(
+        logicalDateKey(
+          now: DateTime(2026, 8, 17, 2),
+          lateNightModeEnabled: true,
+          sleepCheckedInForCalendarDate: false,
+          lastRolloverDate: '2026-08-17',
+        ),
+        '2026-08-17',
+      );
+    });
+
+    test('ends carry-over at noon if sleep check-in was missed', () {
+      expect(
+        logicalDateKey(
+          now: DateTime(2026, 8, 17, 12),
+          lateNightModeEnabled: true,
+          sleepCheckedInForCalendarDate: false,
+          lastRolloverDate: '2026-08-16',
+        ),
+        '2026-08-17',
+      );
+    });
+  });
+
+  group('sleepRecordDateKey', () {
+    test('keeps after-midnight sleep and wake-up on the same calendar row', () {
+      expect(sleepRecordDateKey(DateTime(2026, 8, 17, 1, 30)), '2026-08-17');
+    });
+
+    test('stores an evening sleep check-in on the following wake-up day', () {
+      expect(sleepRecordDateKey(DateTime(2026, 8, 16, 23, 0)), '2026-08-17');
+    });
+
+    test('uses the wake-up calendar date even before logical-day closure', () {
+      expect(wakeRecordDateKey(DateTime(2026, 8, 17, 8, 0)), '2026-08-17');
+    });
+  });
+
+  group('resolveCheckInDateTime', () {
+    test('keeps a selected earlier time on the current calendar date', () {
+      expect(
+        resolveCheckInDateTime(
+          now: DateTime(2026, 8, 17, 15),
+          hour: 1,
+          minute: 0,
+        ),
+        DateTime(2026, 8, 17, 1),
+      );
+    });
+
+    test('uses the previous day when the selected clock time is still ahead', () {
+      expect(
+        resolveCheckInDateTime(
+          now: DateTime(2026, 8, 17, 8),
+          hour: 23,
+          minute: 0,
+        ),
+        DateTime(2026, 8, 16, 23),
+      );
+    });
+  });
+
   group('hoursFromTime', () {
     test('parses HH:mm to decimal hours', () {
       expect(hoursFromTime('23:29'), closeTo(23.483333, 0.0001));

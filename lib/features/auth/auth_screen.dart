@@ -63,7 +63,7 @@ class _AuthScreenState extends State<AuthScreen> {
       setState(() => _error = _s.enterEmailPassword);
       return;
     }
-    if (password.length < 6) {
+    if (password.length < 10) {
       setState(() => _error = _s.passwordTooShort);
       return;
     }

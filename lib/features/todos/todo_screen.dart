@@ -402,6 +402,44 @@ class _TodoScreenState extends State<TodoScreen> with TickerProviderStateMixin {
     );
   }
 
+  Widget _buildCompletedDivider(int completedCount) {
+    final theme = Theme.of(context);
+    final s = S.of(context.read<AppLocaleProvider>().locale);
+    final accent = theme.colorScheme.primary;
+    return Padding(
+      key: const Key('completed-section-divider'),
+      padding: const EdgeInsets.fromLTRB(4, 16, 4, 12),
+      child: Row(
+        children: [
+          Expanded(child: Divider(color: accent.withValues(alpha: 0.22))),
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.done_all_rounded, size: 16, color: accent),
+                const SizedBox(width: 6),
+                Text(
+                  '${s.completed} · $completedCount',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: accent,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(child: Divider(color: accent.withValues(alpha: 0.22))),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
@@ -409,6 +447,12 @@ class _TodoScreenState extends State<TodoScreen> with TickerProviderStateMixin {
     final items = _combined(provider);
     final doneCount = provider.todos.where((t) => t.isCompleted).length;
     final habitDoneCount = provider.habits.where((h) => h.isCompleted).length;
+    final completedCount = doneCount + habitDoneCount;
+    final firstCompletedIndex = items.indexWhere(
+      (item) =>
+          (item is Todo && item.isCompleted) ||
+          (item is Habit && item.isCompleted),
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -443,8 +487,8 @@ class _TodoScreenState extends State<TodoScreen> with TickerProviderStateMixin {
               itemBuilder: (context, index) {
                 final item = items[index];
                 if (item is Todo) {
-                  return TodoCard(
-                    key: Key('todo_${item.id}'),
+                  final itemKey = Key('todo_${item.id}');
+                  final card = TodoCard(
                     todo: item,
                     index: index,
                     onToggle: () => _onTodoTap(context, item),
@@ -453,10 +497,17 @@ class _TodoScreenState extends State<TodoScreen> with TickerProviderStateMixin {
                         _showDesktopContextMenu(item, details),
                     showDragHandle: !item.isCompleted,
                   );
+                  if (index == firstCompletedIndex) {
+                    return Column(
+                      key: itemKey,
+                      children: [_buildCompletedDivider(completedCount), card],
+                    );
+                  }
+                  return KeyedSubtree(key: itemKey, child: card);
                 }
                 if (item is Habit) {
-                  return HabitCard(
-                    key: Key('habit_${item.id}'),
+                  final itemKey = Key('habit_${item.id}');
+                  final card = HabitCard(
                     habit: item,
                     index: index,
                     showDragHandle: !item.isCompleted,
@@ -468,6 +519,13 @@ class _TodoScreenState extends State<TodoScreen> with TickerProviderStateMixin {
                     onSecondaryTapDown: (details) =>
                         _showDesktopContextMenu(item, details),
                   );
+                  if (index == firstCompletedIndex) {
+                    return Column(
+                      key: itemKey,
+                      children: [_buildCompletedDivider(completedCount), card],
+                    );
+                  }
+                  return KeyedSubtree(key: itemKey, child: card);
                 }
                 return SizedBox.shrink(key: Key('empty_$index'));
               },

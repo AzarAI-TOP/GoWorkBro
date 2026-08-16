@@ -10,9 +10,19 @@ import '../database/repositories/sleep_repository.dart';
 import '../database/repositories/todo_repository.dart';
 import 'avatar_sync.dart';
 
-/// Profile keys synced between local SQLite and cloud `user_settings`.
+/// User-facing settings synced between local SQLite and cloud `user_settings`.
 /// Other settings (counters, first_used_date, …) stay device-local.
-const profileKeys = ['user_name', 'avatar_path'];
+const profileKeys = [
+  'user_name',
+  'avatar_path',
+  'late_night_mode',
+  'late_night_closed_through',
+];
+
+const outboxProtectedProfileKeys = {
+  'late_night_mode',
+  'late_night_closed_through',
+};
 
 /// Declarative description of one cloud table: how it is pulled on startup
 /// and how its realtime events land in the local database.
@@ -58,18 +68,16 @@ final List<SyncTable> syncTables = [
   SyncTable(
     name: 'sleep_records',
     applyRemote: SleepRepository.upsertFromRemote,
-    applyDelete: (oldRow) =>
-        SleepRepository.deleteById(oldRow['id'] as String),
+    applyDelete: (oldRow) => SleepRepository.deleteById(oldRow['id'] as String),
   ),
   SyncTable(
     name: 'focus_sessions',
     event: PostgresChangeEvent.insert,
     applyRemote: FocusRepository.insertIfNotExists,
-    applyDelete: (oldRow) =>
-        FocusRepository.deleteById(oldRow['id'] as String),
+    applyDelete: (oldRow) => FocusRepository.deleteById(oldRow['id'] as String),
   ),
-  // user_settings carries many device-local keys; only the profile keys
-  // (user_name / avatar_path) participate in sync. The avatar value is a
+  // user_settings carries many device-local keys; only user-facing settings
+  // (profile and late-night mode) participate in sync. The avatar value is a
   // Storage object path — it is downloaded into the local profile cache on
   // apply so the UI can render the file.
   SyncTable(
@@ -78,10 +86,36 @@ final List<SyncTable> syncTables = [
       final key = row['key'] as String?;
       if (key == null || !profileKeys.contains(key)) return;
       final value = row['value'] as String?;
+      final updatedAt = row['updated_at'] as String?;
 
       if (key == 'user_name') {
         if (value != null && value.isNotEmpty) {
           await SettingsRepository.set(key, value);
+        }
+        return;
+      }
+
+      if (key == 'late_night_mode') {
+        if (value == 'true' || value == 'false') {
+          await SettingsRepository.applySyncedRemote(
+            key: key,
+            value: value!,
+            updatedAt: updatedAt,
+          );
+        }
+        return;
+      }
+
+      if (key == 'late_night_closed_through') {
+        if (value != null && RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(value)) {
+          final local = await SettingsRepository.get(key);
+          if (local != null && local.compareTo(value) > 0) return;
+          await SettingsRepository.applySyncedRemote(
+            key: key,
+            value: value,
+            updatedAt: updatedAt,
+            preferLexicographicallyGreaterValue: true,
+          );
         }
         return;
       }
@@ -125,6 +159,11 @@ final List<SyncTable> syncTables = [
           if (await file.exists()) {
             await file.delete().catchError((_) => file);
           }
+        }
+      } else if (key == 'late_night_mode' ||
+          key == 'late_night_closed_through') {
+        if (!await SettingsRepository.isSyncDirty(key!)) {
+          await SettingsRepository.deleteSyncedState(key);
         }
       }
     },

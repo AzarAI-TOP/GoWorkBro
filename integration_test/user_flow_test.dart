@@ -170,29 +170,36 @@ void main() {
       // Step 13: Full-app English localization smoke test
       await tester.tap(find.text('设置'));
       await tester.pumpAndSettle();
+      final settingsList = find.byKey(const Key('me-settings-list'));
+      expect(settingsList, findsOneWidget);
+      Future<void> revealSetting(String label, {bool upward = false}) async {
+        for (var attempt = 0; attempt < 8; attempt++) {
+          if (find.text(label).evaluate().isNotEmpty) return;
+          await tester.drag(settingsList, Offset(0, upward ? 300 : -300));
+          await tester.pumpAndSettle();
+        }
+      }
+
+      await revealSetting('熬夜模式');
+      expect(find.text('熬夜模式'), findsOneWidget);
+      await revealSetting('导出所有数据');
+      expect(find.text('导出所有数据'), findsOneWidget);
+      // The update section sits at the bottom of the settings list — scroll
+      // it into view before asserting (lazy ListView children).
+      await revealSetting('检查更新');
+      expect(find.text('检查更新'), findsOneWidget);
+
+      // Scroll back up: the language selector sits at the top of the
+      // settings list and was unbuilt while scrolling to the update section.
+      await revealSetting('中文', upward: true);
       await tester.tap(find.text('英文'));
       await tester.pumpAndSettle();
       expect(find.text('Todo'), findsOneWidget);
       expect(find.text('Countdown'), findsOneWidget);
       expect(find.text('Today'), findsOneWidget);
       expect(find.text('Me'), findsOneWidget);
-      // The update section sits at the bottom of the settings list — scroll
-      // it into view before asserting (lazy ListView children).
-      await tester.scrollUntilVisible(
-        find.text('Check for Updates'),
-        300,
-        scrollable: find.byType(Scrollable).last,
-      );
-      expect(find.text('Check for Updates'), findsOneWidget);
       print('Step 13: English app navigation and settings OK ✓');
 
-      // Scroll back up: the language selector sits at the top of the
-      // settings list and was unbuilt while scrolling to the update section.
-      await tester.scrollUntilVisible(
-        find.text('Chinese'),
-        -300,
-        scrollable: find.byType(Scrollable).last,
-      );
       await tester.tap(find.text('Chinese'));
       await tester.pumpAndSettle();
       expect(find.text('待办'), findsAtLeast(1));
@@ -221,7 +228,15 @@ void main() {
 
       await tester.longPress(find.text('期末考试'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('删除'));
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, '期末考试（修改）');
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+      expect(find.text('期末考试（修改）'), findsOneWidget);
+      print('Countdown edited from long press ✓');
+
+      await provider.deleteCountdown(provider.countdowns.single.id);
       await tester.pumpAndSettle();
       expect(find.text('还没有倒计时'), findsOneWidget);
       print('Countdown deleted ✓');
@@ -306,8 +321,21 @@ void main() {
       await navigateTo(tester, '我的');
 
       expect(find.text('起床'), findsOneWidget);
+      expect(find.text('健身'), findsOneWidget);
       expect(find.text('睡觉'), findsOneWidget);
       print('Sleep check-in UI present ✓');
+
+      await tester.tap(find.text('健身'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('45 分钟'));
+      await tester.enterText(
+        find.byKey(const Key('workout-description')),
+        '爬楼梯',
+      );
+      await tester.tap(find.byKey(const Key('save-workout-checkin')));
+      await tester.pumpAndSettle();
+      expect(find.text('45 分钟'), findsAtLeast(1));
+      print('Workout duration and description saved ✓');
 
       // Record sleep directly via provider
       await provider.recordSleep(

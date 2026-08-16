@@ -1,6 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:file_picker/file_picker.dart' as file_picker;
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image_picker_android/image_picker_android.dart';
@@ -15,10 +19,12 @@ import 'package:goworkbro/providers/app_provider.dart';
 import 'package:goworkbro/core/l10n/app_locale.dart';
 import 'package:goworkbro/core/sync/sync_service.dart';
 import 'package:goworkbro/core/config/supabase_config.dart';
+import 'package:goworkbro/core/export/data_export_service.dart';
 import 'package:goworkbro/services/update_service.dart';
 import 'package:goworkbro/core/theme/app_theme.dart';
 import 'package:goworkbro/core/utils/date_utils.dart';
 import 'package:goworkbro/features/me/widgets/sleep_charts_section.dart';
+import 'package:goworkbro/features/me/widgets/workout_checkin_sheet.dart';
 
 class MeScreen extends StatefulWidget {
   const MeScreen({super.key});
@@ -31,6 +37,7 @@ class _MeScreenState extends State<MeScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   String _version = '—';
+  bool _isExporting = false;
 
   @override
   void initState() {
@@ -192,24 +199,23 @@ class _MeScreenState extends State<MeScreen>
     ThemeData theme,
   ) {
     final s = S.of(context.read<AppLocaleProvider>().locale);
-    final today = provider.todayDate;
-    final todayRecord = provider.sleepRecords
-        .where((r) => r.recordDate == today)
-        .toList();
-    final wakeTime = todayRecord.isNotEmpty ? todayRecord.first.wakeTime : null;
-    final workoutTime = todayRecord.isNotEmpty
-        ? todayRecord.first.workoutTime
+    SleepRecord? recordFor(String date) => provider.sleepRecords
+        .where((record) => record.recordDate == date)
+        .firstOrNull;
+
+    final wakeRecord = recordFor(provider.calendarDate);
+    final workoutRecord = recordFor(provider.todayDate);
+    final sleepRecord = recordFor(sleepRecordDateKey(DateTime.now()));
+    final calendarSleepRecord = recordFor(provider.calendarDate);
+    final wakeTime = wakeRecord?.wakeTime;
+    final workoutValue = workoutRecord == null
+        ? null
+        : workoutRecord.workoutDurationMinutes != null
+        ? s.minutes(workoutRecord.workoutDurationMinutes!)
+        : workoutRecord.workoutTime != null
+        ? s.legacyWorkoutRecord
         : null;
-    final tomorrowDate = dateKeyOf(DateTime.now().add(const Duration(days: 1)));
-    final tomorrowRecord = provider.sleepRecords
-        .where((r) => r.recordDate == tomorrowDate)
-        .toList();
-    final sleepTime =
-        todayRecord.isNotEmpty && todayRecord.first.sleepTime != null
-        ? todayRecord.first.sleepTime
-        : tomorrowRecord.isNotEmpty
-        ? tomorrowRecord.first.sleepTime
-        : null;
+    final sleepTime = sleepRecord?.sleepTime ?? calendarSleepRecord?.sleepTime;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -231,7 +237,7 @@ class _MeScreenState extends State<MeScreen>
                         theme,
                         label: s.wakeUp,
                         icon: Icons.wb_sunny_outlined,
-                        time: wakeTime,
+                        value: wakeTime,
                         onTap: () => _recordTime(context, provider, 'wake'),
                       ),
                     ),
@@ -242,8 +248,8 @@ class _MeScreenState extends State<MeScreen>
                         theme,
                         label: s.workout,
                         icon: Icons.fitness_center_outlined,
-                        time: workoutTime,
-                        onTap: () => _recordTime(context, provider, 'workout'),
+                        value: workoutValue,
+                        onTap: () => _recordWorkout(context, provider),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -253,7 +259,7 @@ class _MeScreenState extends State<MeScreen>
                         theme,
                         label: s.sleep,
                         icon: Icons.bedtime_outlined,
-                        time: sleepTime,
+                        value: sleepTime,
                         onTap: () => _recordTime(context, provider, 'sleep'),
                       ),
                     ),
@@ -296,10 +302,10 @@ class _MeScreenState extends State<MeScreen>
     ThemeData theme, {
     required String label,
     required IconData icon,
-    required String? time,
+    required String? value,
     required VoidCallback onTap,
   }) {
-    final hasRecord = time != null;
+    final hasRecord = value != null;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -332,7 +338,7 @@ class _MeScreenState extends State<MeScreen>
               const SizedBox(height: 4),
               Text(
                 hasRecord
-                    ? _formatTime(time)
+                    ? value
                     : S
                           .of(context.read<AppLocaleProvider>().locale)
                           .notCheckedIn,
@@ -353,6 +359,11 @@ class _MeScreenState extends State<MeScreen>
 
   Widget _buildSleepRecordCard(SleepRecord record, ThemeData theme) {
     final s = S.of(context.read<AppLocaleProvider>().locale);
+    final workoutSummary = record.workoutDurationMinutes != null
+        ? s.workoutRecordSummary(record.workoutDurationMinutes!, record.note)
+        : record.workoutTime != null
+        ? s.legacyWorkoutAt(record.workoutTime!)
+        : '—';
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
@@ -372,7 +383,7 @@ class _MeScreenState extends State<MeScreen>
         subtitle: Text(
           s.sleepRecordSummary(
             _formatTime(record.wakeTime),
-            _formatTime(record.workoutTime),
+            workoutSummary,
             _formatTime(record.sleepTime),
           ),
           style: const TextStyle(fontSize: 12),
@@ -381,27 +392,65 @@ class _MeScreenState extends State<MeScreen>
     );
   }
 
+  Future<void> _recordWorkout(
+    BuildContext context,
+    AppProvider provider,
+  ) async {
+    final initialRecordDate = provider.todayDate;
+    final initialRecord = provider.sleepRecords
+        .where((record) => record.recordDate == initialRecordDate)
+        .firstOrNull;
+    final result = await showModalBottomSheet<WorkoutCheckInResult>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (sheetContext) => WorkoutCheckInSheet(
+        initialDurationMinutes: initialRecord?.workoutDurationMinutes,
+        initialDescription: initialRecord?.note,
+        onSave: (value) => Navigator.pop(sheetContext, value),
+      ),
+    );
+    if (result == null || !mounted) return;
+
+    // Resolve the logical date at save time, then patch only workout-owned
+    // columns so a rollover or remote sleep/wake update while the sheet was
+    // open cannot be overwritten by the stale opening snapshot.
+    await provider.recordWorkout(
+      recordDate: provider.todayDate,
+      durationMinutes: result.durationMinutes,
+      description: result.description,
+    );
+  }
+
   void _recordTime(
     BuildContext context,
     AppProvider provider,
     String type,
   ) async {
-    final now = TimeOfDay.now();
+    final pickerOpenedAt = DateTime.now();
     final helpText = S
         .of(context.read<AppLocaleProvider>().locale)
         .selectCheckInTime(type);
     final picked = await showTimePicker(
       context: context,
-      initialTime: now,
+      initialTime: TimeOfDay.fromDateTime(pickerOpenedAt),
       helpText: helpText,
     );
     if (picked == null) return;
 
     final timeStr =
         '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
-    final recordDate = type == 'sleep' && picked.hour >= 12
-        ? dateKeyOf(DateTime.now().add(const Duration(days: 1)))
-        : provider.todayDate;
+    final selectedAt = resolveCheckInDateTime(
+      now: DateTime.now(),
+      hour: picked.hour,
+      minute: picked.minute,
+    );
+    final recordDate = switch (type) {
+      'sleep' => sleepRecordDateKey(selectedAt),
+      'wake' => wakeRecordDateKey(selectedAt),
+      _ => provider.todayDate,
+    };
     final existing = provider.sleepRecords
         .where((r) => r.recordDate == recordDate)
         .toList();
@@ -411,9 +460,6 @@ class _MeScreenState extends State<MeScreen>
       switch (type) {
         case 'wake':
           record = existing.first.copyWith(wakeTime: timeStr);
-          break;
-        case 'workout':
-          record = existing.first.copyWith(workoutTime: timeStr);
           break;
         case 'sleep':
           record = existing.first.copyWith(sleepTime: timeStr);
@@ -425,11 +471,13 @@ class _MeScreenState extends State<MeScreen>
       record = SleepRecord.create(
         recordDate: recordDate,
         wakeTime: type == 'wake' ? timeStr : null,
-        workoutTime: type == 'workout' ? timeStr : null,
         sleepTime: type == 'sleep' ? timeStr : null,
       );
     }
-    await provider.recordSleep(record);
+    await provider.recordSleep(
+      record,
+      closesLogicalDayThrough: type == 'sleep' ? recordDate : null,
+    );
   }
 
   String _formatTime(String? time) {
@@ -710,6 +758,7 @@ class _MeScreenState extends State<MeScreen>
     final s = S.of(context.read<AppLocaleProvider>().locale);
     final localeProvider = context.watch<AppLocaleProvider>();
     return ListView(
+      key: const Key('me-settings-list'),
       padding: const EdgeInsets.all(16),
       children: [
         // ---- Language selector ----
@@ -871,6 +920,28 @@ class _MeScreenState extends State<MeScreen>
         ),
         const SizedBox(height: 16),
 
+        // ---- Late-night logical day ----
+        Card(
+          child: SwitchListTile(
+            key: const Key('late-night-mode-switch'),
+            secondary: Icon(
+              Icons.nightlight_round,
+              color: provider.lateNightModeEnabled
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurfaceVariant,
+            ),
+            title: Text(s.lateNightMode),
+            subtitle: Text(
+              provider.lateNightModeEnabled
+                  ? s.lateNightModeActive(provider.todayDate)
+                  : s.lateNightModeDescription,
+            ),
+            value: provider.lateNightModeEnabled,
+            onChanged: provider.setLateNightModeEnabled,
+          ),
+        ),
+        const SizedBox(height: 16),
+
         // ---- Cloud sync status ----
         Card(
           child: Padding(
@@ -922,6 +993,24 @@ class _MeScreenState extends State<MeScreen>
                 ],
               ],
             ),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // ---- Portable data export ----
+        Card(
+          child: ListTile(
+            key: const Key('export-all-data'),
+            leading: const Icon(Icons.download_outlined),
+            title: Text(s.exportAllData),
+            subtitle: Text(s.exportAllDataSubtitle),
+            trailing: _isExporting
+                ? const SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.chevron_right),
+            onTap: _isExporting ? null : () => _exportAllData(context),
           ),
         ),
         const SizedBox(height: 16),
@@ -1008,6 +1097,61 @@ class _MeScreenState extends State<MeScreen>
         const SizedBox(height: 24),
       ],
     );
+  }
+
+  Future<void> _exportAllData(BuildContext context) async {
+    final s = S.of(context.read<AppLocaleProvider>().locale);
+    setState(() => _isExporting = true);
+    try {
+      final saved = await DataExportService.exportWith(
+        saver: ({required suggestedName, required content}) async {
+          final bytes = Uint8List.fromList(utf8.encode(content));
+          if (Platform.isAndroid) {
+            final path = await file_picker.FilePicker.saveFile(
+              dialogTitle: s.exportAllData,
+              fileName: suggestedName,
+              type: file_picker.FileType.custom,
+              allowedExtensions: const ['json'],
+              bytes: bytes,
+            );
+            return path != null;
+          }
+
+          final location = await getSaveLocation(
+            suggestedName: suggestedName,
+            acceptedTypeGroups: const [
+              XTypeGroup(
+                label: 'JSON',
+                extensions: ['json'],
+                mimeTypes: ['application/json'],
+              ),
+            ],
+          );
+          if (location == null) return false;
+          final file = XFile.fromData(
+            bytes,
+            mimeType: 'application/json',
+            name: suggestedName,
+          );
+          await file.saveTo(location.path);
+          return true;
+        },
+      );
+      if (saved && mounted) {
+        ScaffoldMessenger.of(
+          this.context,
+        ).showSnackBar(SnackBar(content: Text(s.exportAllDataSuccess)));
+      }
+    } catch (error) {
+      debugPrint('Data export failed: $error');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          this.context,
+        ).showSnackBar(SnackBar(content: Text(s.exportAllDataFailed)));
+      }
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
   }
 
   void _showLogoutConfirm(BuildContext context) {

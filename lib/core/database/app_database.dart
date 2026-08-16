@@ -11,7 +11,7 @@ import 'package:path_provider/path_provider.dart';
 /// `repositories/` (TodoRepository, HabitRepository, …) — this class only
 /// knows how to open/upgrade/reset the database file.
 class AppDatabase {
-  static const int schemaVersion = 4;
+  static const int schemaVersion = 6;
 
   static Database? _db;
 
@@ -111,8 +111,15 @@ class AppDatabase {
         wake_time TEXT,
         sleep_time TEXT,
         workout_time TEXT,
-        note TEXT
+        workout_duration_minutes INTEGER,
+        note TEXT,
+        updated_at TEXT
       )
+    ''');
+
+    await db.execute('''
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_sleep_records_record_date_unique
+      ON sleep_records(record_date)
     ''');
 
     await db.execute('''
@@ -158,12 +165,12 @@ class AppDatabase {
     int oldVersion,
     int newVersion,
   ) async {
-    if (oldVersion < 2) {
+    if (oldVersion < 2 && newVersion >= 2) {
       await db.execute(
         'ALTER TABLE sleep_records ADD COLUMN workout_time TEXT;',
       );
     }
-    if (oldVersion < 3) {
+    if (oldVersion < 3 && newVersion >= 3) {
       await _createNewsCacheTable(db);
       final completedTodoRows = await db.rawQuery(
         'SELECT COUNT(*) AS count FROM todos WHERE is_completed = 1',
@@ -210,11 +217,80 @@ class AppDatabase {
         }, conflictAlgorithm: ConflictAlgorithm.ignore);
       }
     }
-    if (oldVersion < 4) {
+    if (oldVersion < 4 && newVersion >= 4) {
       // v4: last-write-wins sync — updated_at stamps for the mergeable tables.
       await db.execute('ALTER TABLE todos ADD COLUMN updated_at TEXT;');
       await db.execute('ALTER TABLE habits ADD COLUMN updated_at TEXT;');
       await db.execute('ALTER TABLE countdowns ADD COLUMN updated_at TEXT;');
+    }
+    if (oldVersion < 5 && newVersion >= 5) {
+      // v5: workouts are described by duration + text, not a clock time.
+      // Keep workout_time so legacy records remain losslessly exportable.
+      await db.execute(
+        'ALTER TABLE sleep_records ADD COLUMN workout_duration_minutes INTEGER;',
+      );
+    }
+    if (oldVersion < 6 && newVersion >= 6) {
+      // v6: sleep rows participate in last-write-wins cloud sync.
+      // Legacy rows keep a null stamp (unknown age): an existing cloud row
+      // must win, while pushAll separately uploads dates missing in cloud.
+      await db.execute('ALTER TABLE sleep_records ADD COLUMN updated_at TEXT;');
+      await _deduplicateSleepRecords(db);
+      await db.execute('''
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_sleep_records_record_date_unique
+        ON sleep_records(record_date)
+      ''');
+    }
+  }
+
+  static Future<void> _deduplicateSleepRecords(
+    DatabaseExecutor db,
+  ) async {
+    final dates = await db.rawQuery('''
+      SELECT record_date
+      FROM sleep_records
+      GROUP BY record_date
+      HAVING COUNT(*) > 1
+    ''');
+    const mergeColumns = [
+      'wake_time',
+      'sleep_time',
+      'workout_time',
+      'workout_duration_minutes',
+      'note',
+      'updated_at',
+    ];
+    for (final duplicate in dates) {
+      final recordDate = duplicate['record_date'] as String;
+      final rows = await db.query(
+        'sleep_records',
+        where: 'record_date = ?',
+        whereArgs: [recordDate],
+        orderBy: 'rowid ASC',
+      );
+      final keeperId = rows.first['id'] as String;
+      final merged = <String, Object?>{};
+      for (final column in mergeColumns) {
+        for (final row in rows.reversed) {
+          if (row[column] != null) {
+            merged[column] = row[column];
+            break;
+          }
+        }
+      }
+      if (merged.isNotEmpty) {
+        await db.update(
+          'sleep_records',
+          merged,
+          where: 'id = ?',
+          whereArgs: [keeperId],
+        );
+      }
+      await db.delete(
+        'sleep_records',
+        where: 'record_date = ? AND id <> ?',
+        whereArgs: [recordDate, keeperId],
+      );
     }
   }
 

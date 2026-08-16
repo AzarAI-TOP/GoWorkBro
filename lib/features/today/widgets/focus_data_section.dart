@@ -30,7 +30,10 @@ class FocusDataSection extends StatelessWidget {
         const SizedBox(height: 16),
         SourcePieCard(bySource: bySource),
         const SizedBox(height: 16),
-        WeeklyBarCard(weeklySeconds: weeklySeconds),
+        WeeklyBarCard(
+          weeklySeconds: weeklySeconds,
+          endDate: provider.todayDate,
+        ),
         const SizedBox(height: 16),
         SessionsCard(sessions: sessions),
       ],

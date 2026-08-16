@@ -7,8 +7,12 @@ class SleepRecord {
   final String recordDate;
   final String? wakeTime;
   final String? sleepTime;
+
+  /// Legacy clock-time field retained for lossless migration/export.
   final String? workoutTime;
+  final int? workoutDurationMinutes;
   final String? note;
+  final String? updatedAt;
 
   SleepRecord({
     required this.id,
@@ -16,7 +20,9 @@ class SleepRecord {
     this.wakeTime,
     this.sleepTime,
     this.workoutTime,
+    this.workoutDurationMinutes,
     this.note,
+    this.updatedAt,
   });
 
   factory SleepRecord.create({
@@ -24,7 +30,9 @@ class SleepRecord {
     String? wakeTime,
     String? sleepTime,
     String? workoutTime,
+    int? workoutDurationMinutes,
     String? note,
+    String? updatedAt,
   }) {
     return SleepRecord(
       id: _uuid.v4(),
@@ -32,7 +40,9 @@ class SleepRecord {
       wakeTime: wakeTime,
       sleepTime: sleepTime,
       workoutTime: workoutTime,
+      workoutDurationMinutes: workoutDurationMinutes,
       note: note,
+      updatedAt: updatedAt,
     );
   }
 
@@ -40,7 +50,9 @@ class SleepRecord {
     String? wakeTime,
     String? sleepTime,
     String? workoutTime,
+    int? workoutDurationMinutes,
     String? note,
+    String? updatedAt,
   }) {
     return SleepRecord(
       id: id,
@@ -48,7 +60,10 @@ class SleepRecord {
       wakeTime: wakeTime ?? this.wakeTime,
       sleepTime: sleepTime ?? this.sleepTime,
       workoutTime: workoutTime ?? this.workoutTime,
+      workoutDurationMinutes:
+          workoutDurationMinutes ?? this.workoutDurationMinutes,
       note: note ?? this.note,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 
@@ -58,7 +73,9 @@ class SleepRecord {
     'wake_time': wakeTime,
     'sleep_time': sleepTime,
     'workout_time': workoutTime,
+    'workout_duration_minutes': workoutDurationMinutes,
     'note': note,
+    'updated_at': updatedAt,
   };
 
   factory SleepRecord.fromMap(Map<String, dynamic> m) => SleepRecord(
@@ -67,6 +84,8 @@ class SleepRecord {
     wakeTime: m['wake_time'] as String?,
     sleepTime: m['sleep_time'] as String?,
     workoutTime: m['workout_time'] as String?,
+    workoutDurationMinutes: m['workout_duration_minutes'] as int?,
     note: m['note'] as String?,
+    updatedAt: m['updated_at'] as String?,
   );
 }

@@ -22,6 +22,9 @@ const _uuid = Uuid();
 /// Central app state — manages all data and daily rollover logic.
 /// Locale and theme mode live in AppLocaleProvider (single source of truth).
 class AppProvider extends ChangeNotifier {
+  AppProvider({DateTime Function()? now}) : _now = now ?? DateTime.now;
+
+  final DateTime Function() _now;
   List<Todo> _todos = [];
   bool _isInitialized = false;
   Future<void>? _initializing;
@@ -38,6 +41,9 @@ class AppProvider extends ChangeNotifier {
   int _lifetimeTodosCompleted = 0;
   int _lifetimeHabitsCompleted = 0;
   String _lastRolloverDate = '';
+  bool _lateNightModeEnabled = false;
+  String _lateNightClosedThrough = '';
+  Future<void>? _rolloverFuture;
   Timer? _rolloverTimer;
   Timer? _syncTimer;
 
@@ -49,6 +55,8 @@ class AppProvider extends ChangeNotifier {
   List<Habit> get habits => _habits;
   List<Countdown> get countdowns => _countdowns;
   List<FocusSession> get todaySessions => _todaySessions;
+  List<FocusSession> get syncSessionInventory =>
+      List.unmodifiable(_allSessions);
   List<SleepRecord> get sleepRecords => _sleepRecords;
   String get userName => _userName;
   String get deviceId => _deviceId;
@@ -59,8 +67,22 @@ class AppProvider extends ChangeNotifier {
   int get lifetimeFocusSeconds =>
       _allSessions.fold(0, (sum, session) => sum + session.durationSeconds);
   int get lifetimeSessionCount => _allSessions.length;
+  bool get lateNightModeEnabled => _lateNightModeEnabled;
 
-  String get todayDate => todayDateKey;
+  String get calendarDate => dateKeyOf(_now());
+
+  String get todayDate {
+    final now = _now();
+    final calendar = dateKeyOf(now);
+    return logicalDateKey(
+      now: now,
+      lateNightModeEnabled: _lateNightModeEnabled,
+      sleepCheckedInForCalendarDate: _lateNightClosedThrough == calendar,
+      lastRolloverDate: _lastRolloverDate,
+    );
+  }
+
+  bool get isLateNightCarryoverActive => todayDate != calendarDate;
 
   Future<void> init() {
     if (_isInitialized) return Future.value();
@@ -75,8 +97,6 @@ class AppProvider extends ChangeNotifier {
     _avatarPath =
         await SettingsRepository.get('avatar_local_path') ??
         await SettingsRepository.get('avatar_path');
-    _firstUsedDate =
-        await SettingsRepository.get('first_used_date') ?? todayDate;
     _lifetimeTodosCompleted =
         int.tryParse(
           await SettingsRepository.get('lifetime_todos_completed') ?? '0',
@@ -89,26 +109,42 @@ class AppProvider extends ChangeNotifier {
         0;
     _lastRolloverDate =
         await SettingsRepository.get('last_rollover_date') ?? '';
+    _lateNightModeEnabled =
+        await SettingsRepository.get('late_night_mode') == 'true';
+    _lateNightClosedThrough =
+        await SettingsRepository.get('late_night_closed_through') ?? '';
+    // The sleep boundary participates in logical-day calculation, so it must
+    // be loaded before the first rollover decision.
+    _sleepRecords = await SleepRepository.getAll();
+    _firstUsedDate =
+        await SettingsRepository.get('first_used_date') ?? todayDate;
+
+    var syncReady = false;
+    if (isSupabaseConfigured) {
+      await SyncService.initialize();
+      syncReady =
+          SyncService.isInitialized && SyncService.currentUserId != null;
+      if (syncReady) {
+        // Realtime writes land in SQLite; refresh the visible state when
+        // they arrive so the UI updates live on both devices.
+        SyncService.onRemoteChanged = _onRemoteChanged;
+        await SyncService.pullAll();
+        // Load the complete synced logical-day pair before any destructive
+        // rollover decision is made.
+        await refreshAll(notify: false);
+      }
+    }
 
     await _performDailyRollover();
     await refreshAll();
 
-    if (isSupabaseConfigured) {
-      await SyncService.initialize();
-      if (SyncService.isInitialized) {
-        // Realtime writes land in SQLite; refresh the visible state when
-        // they arrive so the UI updates live on both devices.
-        SyncService.onRemoteChanged = () => refreshAll();
-        await SyncService.pullAll();
-        await refreshAll();
-        // Self-heal legacy avatar rows (issue #12): a device-local
-        // avatar_path is migrated to Storage and pushed as an object path.
-        unawaited(SyncService.pushUserSettings());
-        _pushAll();
-        // After the pull, derive the profile from the signed-in user
-        // (email prefix / user_metadata) when no custom name is set yet.
-        await applyAuthUser();
-      }
+    if (syncReady) {
+      // Self-heal legacy avatar rows (issue #12): a device-local avatar_path
+      // is migrated to Storage and pushed as an object path.
+      unawaited(SyncService.pushUserSettings());
+      _pushAll();
+      // Derive the profile after the remote profile has been applied.
+      await applyAuthUser();
     }
 
     _rolloverTimer = Timer.periodic(const Duration(minutes: 1), (_) {
@@ -150,12 +186,11 @@ class AppProvider extends ChangeNotifier {
     if (isDefaultName) {
       final metaName = (meta?['user_name'] as String?)?.trim();
       final fromMeta = metaName != null && metaName.isNotEmpty;
-      final displayName =
-          fromMeta
-              ? metaName
-              : (email != null && email.isNotEmpty)
-              ? email.split('@').first
-              : '离线用户';
+      final displayName = fromMeta
+          ? metaName
+          : (email != null && email.isNotEmpty)
+          ? email.split('@').first
+          : '离线用户';
       if (displayName != currentName) {
         await SettingsRepository.set('user_name', displayName);
         _userName = displayName;
@@ -181,10 +216,11 @@ class AppProvider extends ChangeNotifier {
     await SyncService.initialize();
     if (!SyncService.isInitialized) return;
     if (wasInitialized) {
-      SyncService.onRemoteChanged = () => refreshAll();
+      SyncService.onRemoteChanged = _onRemoteChanged;
       await SyncService.pullAll();
-      await refreshAll();
+      await _refreshAfterRemoteChange();
       unawaited(SyncService.pushUserSettings());
+      _pushAll();
       await applyAuthUser();
     }
   }
@@ -198,8 +234,30 @@ class AppProvider extends ChangeNotifier {
       return;
     }
     await SyncService.pullAll();
-    await refreshAll();
+    await _refreshAfterRemoteChange();
+    await SyncService.pushUserSettings(onlyDirty: true);
+    _pushAll();
   }
+
+  void _onRemoteChanged() {
+    // Re-pull the committed server snapshot instead of trusting that every
+    // row in a bulk settings update has already reached this device's
+    // realtime callback queue.
+    unawaited(syncNow());
+  }
+
+  Future<void> _refreshAfterRemoteChange() async {
+    await refreshAll(notify: false);
+    if (_lastRolloverDate != todayDate) {
+      await _performDailyRollover();
+    } else {
+      notifyListeners();
+    }
+  }
+
+  @visibleForTesting
+  Future<void> refreshAfterRemoteChangeForTesting() =>
+      _refreshAfterRemoteChange();
 
   @override
   void dispose() {
@@ -210,14 +268,35 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<void> _performDailyRollover() async {
-    if (_lastRolloverDate == todayDate) return;
+    while (true) {
+      final active = _rolloverFuture;
+      if (active != null) {
+        await active;
+        if (_lastRolloverDate == todayDate) return;
+        continue;
+      }
 
-    final deletedTodoIds = await TodoRepository.rollOver(todayDate);
-    await HabitRepository.resetForNewDay(todayDate);
+      final targetDate = todayDate;
+      final operation = _performDailyRolloverInternal(targetDate);
+      _rolloverFuture = operation;
+      try {
+        await operation;
+      } finally {
+        if (identical(_rolloverFuture, operation)) _rolloverFuture = null;
+      }
+      return;
+    }
+  }
+
+  Future<void> _performDailyRolloverInternal(String targetDate) async {
+    if (_lastRolloverDate == targetDate) return;
+
+    final deletedTodoIds = await TodoRepository.rollOver(targetDate);
+    await HabitRepository.resetForNewDay(targetDate);
     final deletedCountdownIds = await CountdownRepository.cleanupExpired();
 
-    await SettingsRepository.set('last_rollover_date', todayDate);
-    _lastRolloverDate = todayDate;
+    await SettingsRepository.set('last_rollover_date', targetDate);
+    _lastRolloverDate = targetDate;
 
     // Reload before mirroring: _pushAll must not re-push the just-deleted
     // completed todos / expired countdowns (they would resurrect on the
@@ -239,20 +318,24 @@ class AppProvider extends ChangeNotifier {
   /// Full reload from DB — used at startup, after sync pull and on realtime
   /// events. Also refreshes the visible profile (name / avatar), which is
   /// part of the synced user_settings table.
-  Future<void> refreshAll() async {
+  Future<void> refreshAll({bool notify = true}) async {
     _todos = await TodoRepository.getAll();
     _habits = await HabitRepository.getAll();
     _countdowns = await CountdownRepository.getAll();
+    _sleepRecords = await SleepRepository.getAll();
+    _lateNightModeEnabled =
+        await SettingsRepository.get('late_night_mode') == 'true';
+    _lateNightClosedThrough =
+        await SettingsRepository.get('late_night_closed_through') ?? '';
     _todaySessions = await FocusRepository.getByDate(todayDate);
     _allSessions = await FocusRepository.getAll();
-    _sleepRecords = await SleepRepository.getAll();
     final name = await SettingsRepository.get('user_name');
     if (name != null && name.isNotEmpty) _userName = name;
     final avatar =
         await SettingsRepository.get('avatar_local_path') ??
         await SettingsRepository.get('avatar_path');
     _avatarPath = avatar;
-    notifyListeners();
+    if (notify) notifyListeners();
   }
 
   // ============ TODO ops ============
@@ -281,11 +364,10 @@ class AppProvider extends ChangeNotifier {
       completedDate: isCompleting ? DateTime.now().toIso8601String() : null,
     );
     if (isCompleting) {
-      _lifetimeTodosCompleted =
-          await SettingsRepository.incrementCounterOnce(
-            counterKey: 'lifetime_todos_completed',
-            eventKey: 'completion.todo.${todo.id}',
-          );
+      _lifetimeTodosCompleted = await SettingsRepository.incrementCounterOnce(
+        counterKey: 'lifetime_todos_completed',
+        eventKey: 'completion.todo.${todo.id}',
+      );
     }
     await TodoRepository.update(updated);
     final i = _todos.indexWhere((t) => t.id == todo.id);
@@ -315,11 +397,10 @@ class AppProvider extends ChangeNotifier {
       actualDurationSeconds: current.actualDurationSeconds + additionalSeconds,
     );
     if (!current.isCompleted) {
-      _lifetimeTodosCompleted =
-          await SettingsRepository.incrementCounterOnce(
-            counterKey: 'lifetime_todos_completed',
-            eventKey: 'completion.todo.${current.id}',
-          );
+      _lifetimeTodosCompleted = await SettingsRepository.incrementCounterOnce(
+        counterKey: 'lifetime_todos_completed',
+        eventKey: 'completion.todo.${current.id}',
+      );
     }
     await TodoRepository.update(updated);
     _todos[i] = updated;
@@ -410,11 +491,10 @@ class AppProvider extends ChangeNotifier {
     if (habit.currentCount >= habit.targetCount) return;
     final updated = habit.copyWith(currentCount: habit.currentCount + 1);
     if (!habit.isCompleted && updated.isCompleted) {
-      _lifetimeHabitsCompleted =
-          await SettingsRepository.incrementCounterOnce(
-            counterKey: 'lifetime_habits_completed',
-            eventKey: 'completion.habit.${habit.id}.$todayDate',
-          );
+      _lifetimeHabitsCompleted = await SettingsRepository.incrementCounterOnce(
+        counterKey: 'lifetime_habits_completed',
+        eventKey: 'completion.habit.${habit.id}.$todayDate',
+      );
     }
     await HabitRepository.update(updated);
     final i = _habits.indexWhere((h) => h.id == habit.id);
@@ -462,30 +542,39 @@ class AppProvider extends ChangeNotifier {
   // ============ Focus Session ============
 
   Future<void> recordFocusSession(FocusSession session) async {
-    await FocusRepository.insert(session);
-    _todaySessions.add(session);
-    _allSessions.add(session);
+    // The provider owns day-bucketing so every recording path follows the
+    // same calendar/late-night rule instead of trusting individual callers.
+    final normalized = FocusSession(
+      id: session.id,
+      todoId: session.todoId,
+      sourceType: session.sourceType,
+      sourceTitle: session.sourceTitle,
+      startTime: session.startTime,
+      endTime: session.endTime,
+      durationSeconds: session.durationSeconds,
+      sessionDate: todayDate,
+    );
+    await FocusRepository.insert(normalized);
+    _todaySessions.add(normalized);
+    _allSessions.add(normalized);
     notifyListeners();
-    unawaited(SyncService.pushFocusSession(session));
+    unawaited(SyncService.pushFocusSession(normalized));
   }
 
   /// Single range query instead of 7 sequential queries.
   Future<List<int>> getWeeklyFocusSeconds() async {
-    final now = DateTime.now();
-    final start = now.subtract(const Duration(days: 6));
+    final logicalToday = DateTime.parse(todayDate);
+    final start = logicalToday.subtract(const Duration(days: 6));
     final startStr =
         '${start.year}-${start.month.toString().padLeft(2, '0')}-${start.day.toString().padLeft(2, '0')}';
-    final sessions = await FocusRepository.getDateRange(
-      startStr,
-      todayDate,
-    );
+    final sessions = await FocusRepository.getDateRange(startStr, todayDate);
     final byDate = <String, int>{};
     for (final s in sessions) {
       byDate[s.sessionDate] = (byDate[s.sessionDate] ?? 0) + s.durationSeconds;
     }
     return [
       for (int i = 6; i >= 0; i--)
-        byDate[dateKeyOf(now.subtract(Duration(days: i)))] ?? 0,
+        byDate[dateKeyOf(logicalToday.subtract(Duration(days: i)))] ?? 0,
     ];
   }
 
@@ -517,19 +606,62 @@ class AppProvider extends ChangeNotifier {
 
   // ============ Sleep ============
 
-  Future<void> recordSleep(SleepRecord record) async {
-    await SleepRepository.upsert(record);
-    // Update in-memory: replace if same date exists, else add
+  Future<void> recordWorkout({
+    required String recordDate,
+    required int durationMinutes,
+    required String description,
+  }) async {
+    final persisted = await SleepRepository.upsertWorkout(
+      recordDate: recordDate,
+      durationMinutes: durationMinutes,
+      description: description,
+    );
     final i = _sleepRecords.indexWhere(
-      (r) => r.recordDate == record.recordDate,
+      (record) => record.recordDate == persisted.recordDate,
     );
     if (i >= 0) {
-      _sleepRecords[i] = record;
+      _sleepRecords[i] = persisted;
     } else {
-      _sleepRecords.insert(0, record);
+      _sleepRecords.add(persisted);
     }
+    _sleepRecords.sort((a, b) => b.recordDate.compareTo(a.recordDate));
     notifyListeners();
-    unawaited(SyncService.pushSleepRecord(record));
+    unawaited(SyncService.pushSleepRecord(persisted));
+  }
+
+  Future<void> recordSleep(
+    SleepRecord record, {
+    String? closesLogicalDayThrough,
+  }) async {
+    final previousLogicalDate = todayDate;
+    final persisted = await SleepRepository.upsert(record);
+    // Update in-memory: replace if same date exists, else add
+    final i = _sleepRecords.indexWhere(
+      (r) => r.recordDate == persisted.recordDate,
+    );
+    if (i >= 0) {
+      _sleepRecords[i] = persisted;
+    } else {
+      _sleepRecords.insert(0, persisted);
+    }
+    _sleepRecords.sort((a, b) => b.recordDate.compareTo(a.recordDate));
+    if (closesLogicalDayThrough != null) {
+      if (_lateNightClosedThrough.isEmpty ||
+          _lateNightClosedThrough.compareTo(closesLogicalDayThrough) < 0) {
+        _lateNightClosedThrough = closesLogicalDayThrough;
+        await SettingsRepository.setSyncedLocal(
+          'late_night_closed_through',
+          _lateNightClosedThrough,
+        );
+      }
+      unawaited(SyncService.pushUserSettings(onlyDirty: true));
+    }
+    if (previousLogicalDate != todayDate) {
+      await _performDailyRollover();
+    } else {
+      notifyListeners();
+    }
+    unawaited(SyncService.pushSleepRecord(persisted));
   }
 
   // ============ Settings ============
@@ -539,6 +671,22 @@ class AppProvider extends ChangeNotifier {
     await SettingsRepository.set('user_name', name);
     notifyListeners();
     unawaited(SyncService.pushUserSettings());
+  }
+
+  Future<void> setLateNightModeEnabled(bool enabled) async {
+    if (_lateNightModeEnabled == enabled) return;
+    final previousLogicalDate = todayDate;
+    _lateNightModeEnabled = enabled;
+    await SettingsRepository.setSyncedLocal(
+      'late_night_mode',
+      enabled.toString(),
+    );
+    if (previousLogicalDate != todayDate) {
+      await _performDailyRollover();
+    } else {
+      notifyListeners();
+    }
+    unawaited(SyncService.pushUserSettings(onlyDirty: true));
   }
 
   Future<void> setAvatarPath(String? path) async {
@@ -586,6 +734,8 @@ class AppProvider extends ChangeNotifier {
     _lifetimeTodosCompleted = 0;
     _lifetimeHabitsCompleted = 0;
     _lastRolloverDate = '';
+    _lateNightModeEnabled = false;
+    _lateNightClosedThrough = '';
     notifyListeners();
   }
 
@@ -597,7 +747,7 @@ class AppProvider extends ChangeNotifier {
         todos: _todos,
         habits: _habits,
         countdowns: _countdowns,
-        sessions: _todaySessions,
+        sessions: syncSessionInventory,
         sleepRecords: _sleepRecords,
       ),
     );

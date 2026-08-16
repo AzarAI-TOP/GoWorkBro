@@ -68,7 +68,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, '登录'));
     await tester.pump();
 
-    expect(find.text('密码至少 6 位'), findsOneWidget);
+    expect(find.text('密码至少 10 位'), findsOneWidget);
     print('Short password validation ✓');
   });
 

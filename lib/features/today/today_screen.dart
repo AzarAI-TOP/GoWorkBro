@@ -29,23 +29,25 @@ class _TodayScreenState extends State<TodayScreen> {
   String? _newsError;
   List<int> _weeklySeconds = [];
   int _lastSessionCount = 0;
+  String _lastLogicalDate = '';
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _fetchNews();
-      _fetchWeeklyData();
     });
   }
 
-  // #2: Only refresh weekly data on session count change, NOT news
+  // Refresh chart data when sessions or the logical day changes, not news.
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final provider = context.read<AppProvider>();
-    if (provider.todaySessionCount != _lastSessionCount) {
+    final provider = context.watch<AppProvider>();
+    if (provider.todaySessionCount != _lastSessionCount ||
+        provider.todayDate != _lastLogicalDate) {
       _lastSessionCount = provider.todaySessionCount;
+      _lastLogicalDate = provider.todayDate;
       _fetchWeeklyData();
     }
   }

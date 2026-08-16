@@ -216,4 +216,100 @@ void main() {
       );
     }
   });
+
+  test('database v4 to v5 migration preserves workout time and adds duration', () async {
+    sqfliteFfiInit();
+    final temp = await Directory.systemTemp.createTemp(
+      'goworkbro_workout_migration_',
+    );
+    final path = '${temp.path}${Platform.pathSeparator}legacy.db';
+    final db = await databaseFactoryFfi.openDatabase(path);
+    addTearDown(() async {
+      await db.close();
+      await temp.delete(recursive: true);
+    });
+
+    await db.execute('''
+      CREATE TABLE sleep_records (
+        id TEXT PRIMARY KEY,
+        record_date TEXT NOT NULL,
+        wake_time TEXT,
+        sleep_time TEXT,
+        workout_time TEXT,
+        note TEXT
+      )
+    ''');
+    await db.insert('sleep_records', {
+      'id': 's1',
+      'record_date': '2026-08-16',
+      'workout_time': '23:30',
+      'note': '爬楼梯',
+    });
+
+    await AppDatabase.migrateForTesting(db, 4, 5);
+
+    final columns = await db.rawQuery('PRAGMA table_info(sleep_records)');
+    expect(
+      columns.map((column) => column['name']),
+      contains('workout_duration_minutes'),
+    );
+    final row = (await db.query('sleep_records')).single;
+    expect(row['workout_time'], '23:30');
+    expect(row['note'], '爬楼梯');
+    expect(row['workout_duration_minutes'], isNull);
+  });
+
+  test('database v5 to v6 migration adds sleep sync timestamps', () async {
+    sqfliteFfiInit();
+    final temp = await Directory.systemTemp.createTemp(
+      'goworkbro_sleep_sync_migration_',
+    );
+    final path = '${temp.path}${Platform.pathSeparator}legacy.db';
+    final db = await databaseFactoryFfi.openDatabase(path);
+    addTearDown(() async {
+      await db.close();
+      await temp.delete(recursive: true);
+    });
+    await db.execute('''
+      CREATE TABLE sleep_records (
+        id TEXT PRIMARY KEY,
+        record_date TEXT NOT NULL,
+        wake_time TEXT,
+        sleep_time TEXT,
+        workout_time TEXT,
+        workout_duration_minutes INTEGER,
+        note TEXT
+      )
+    ''');
+    await db.insert('sleep_records', {
+      'id': 'legacy-sleep',
+      'record_date': '2026-08-18',
+      'wake_time': '08:00',
+    });
+    await db.insert('sleep_records', {
+      'id': 'legacy-sleep-duplicate',
+      'record_date': '2026-08-18',
+      'sleep_time': '23:30',
+    });
+
+    await AppDatabase.migrateForTesting(db, 5, 6);
+
+    final columns = await db.rawQuery('PRAGMA table_info(sleep_records)');
+    expect(columns.map((column) => column['name']), contains('updated_at'));
+    final rows = await db.query('sleep_records');
+    expect(rows, hasLength(1));
+    final row = rows.single;
+    expect(row['wake_time'], '08:00');
+    expect(row['sleep_time'], '23:30');
+    expect(row['updated_at'], isNull);
+    final indexes = await db.rawQuery('PRAGMA index_list(sleep_records)');
+    expect(
+      indexes.any(
+        (index) =>
+            index['name'] == 'idx_sleep_records_record_date_unique' &&
+            index['unique'] == 1,
+      ),
+      isTrue,
+    );
+  });
 }

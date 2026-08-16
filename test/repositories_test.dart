@@ -8,6 +8,7 @@ import 'package:goworkbro/core/database/repositories/habit_repository.dart';
 import 'package:goworkbro/core/database/repositories/settings_repository.dart';
 import 'package:goworkbro/core/database/repositories/sleep_repository.dart';
 import 'package:goworkbro/core/database/repositories/todo_repository.dart';
+import 'package:goworkbro/core/sync/sync_service.dart';
 import 'package:goworkbro/core/sync/sync_table_registry.dart';
 import 'package:goworkbro/models/models.dart';
 
@@ -47,19 +48,6 @@ void main() {
     });
 
     test('rollOver removes completed todos, keeps incomplete', () async {
-      final done = Todo.create(title: 'done', timingType: TimingTypeExtension.fromValue('forward'))
-          .copyWith(isCompleted: true);
-      final pending = Todo.create(title: 'pending', timingType: TimingTypeExtension.fromValue('forward'));
-      await TodoRepository.insert(done);
-      await TodoRepository.insert(pending);
-
-      await TodoRepository.rollOver('2026-08-13');
-
-      final all = await TodoRepository.getAll();
-      expect(all.map((t) => t.title), ['pending']);
-    });
-
-    test('rollOver returns deleted ids so the caller can mirror to cloud', () async {
       final done = Todo.create(
         title: 'done',
         timingType: TimingTypeExtension.fromValue('forward'),
@@ -71,9 +59,30 @@ void main() {
       await TodoRepository.insert(done);
       await TodoRepository.insert(pending);
 
-      final ids = await TodoRepository.rollOver('2026-08-14');
-      expect(ids, [done.id]);
+      await TodoRepository.rollOver('2026-08-13');
+
+      final all = await TodoRepository.getAll();
+      expect(all.map((t) => t.title), ['pending']);
     });
+
+    test(
+      'rollOver returns deleted ids so the caller can mirror to cloud',
+      () async {
+        final done = Todo.create(
+          title: 'done',
+          timingType: TimingTypeExtension.fromValue('forward'),
+        ).copyWith(isCompleted: true);
+        final pending = Todo.create(
+          title: 'pending',
+          timingType: TimingTypeExtension.fromValue('forward'),
+        );
+        await TodoRepository.insert(done);
+        await TodoRepository.insert(pending);
+
+        final ids = await TodoRepository.rollOver('2026-08-14');
+        expect(ids, [done.id]);
+      },
+    );
 
     test('upsertFromRemote is last-write-wins by updated_at', () async {
       final local = Todo.create(
@@ -161,6 +170,151 @@ void main() {
       await SettingsRepository.delete('theme_mode');
       expect(await SettingsRepository.get('theme_mode'), isNull);
     });
+
+    test(
+      'dirty synced setting rejects older remote and accepts newer remote',
+      () async {
+        await SettingsRepository.setSyncedLocal(
+          'late_night_mode',
+          'true',
+          updatedAt: '2026-08-17T10:00:00.000Z',
+        );
+        expect(await SettingsRepository.isSyncDirty('late_night_mode'), isTrue);
+
+        final appliedOlder = await SettingsRepository.applySyncedRemote(
+          key: 'late_night_mode',
+          value: 'false',
+          updatedAt: '2026-08-17T09:00:00.000Z',
+        );
+        expect(appliedOlder, isFalse);
+        expect(await SettingsRepository.get('late_night_mode'), 'true');
+        expect(await SettingsRepository.isSyncDirty('late_night_mode'), isTrue);
+
+        final appliedNewer = await SettingsRepository.applySyncedRemote(
+          key: 'late_night_mode',
+          value: 'false',
+          updatedAt: '2026-08-17T11:00:00.000Z',
+        );
+        expect(appliedNewer, isTrue);
+        expect(await SettingsRepository.get('late_night_mode'), 'false');
+        expect(
+          await SettingsRepository.isSyncDirty('late_night_mode'),
+          isFalse,
+        );
+      },
+    );
+
+    test('successful push clears dirty only for the pushed snapshot', () async {
+      await SettingsRepository.setSyncedLocal(
+        'late_night_mode',
+        'true',
+        updatedAt: '2026-08-17T10:00:00.000Z',
+      );
+      await SettingsRepository.markSyncComplete(
+        'late_night_mode',
+        expectedUpdatedAt: '2026-08-17T09:00:00.000Z',
+      );
+      expect(await SettingsRepository.isSyncDirty('late_night_mode'), isTrue);
+
+      await SettingsRepository.markSyncComplete(
+        'late_night_mode',
+        expectedUpdatedAt: '2026-08-17T10:00:00.000Z',
+      );
+      expect(await SettingsRepository.isSyncDirty('late_night_mode'), isFalse);
+    });
+
+    test('default pushes skip clean logical-day settings', () {
+      expect(
+        SyncService.shouldPushUserSetting(
+          key: 'late_night_mode',
+          isDirty: false,
+          onlyDirty: false,
+        ),
+        isFalse,
+      );
+      expect(
+        SyncService.shouldPushUserSetting(
+          key: 'late_night_closed_through',
+          isDirty: true,
+          onlyDirty: false,
+          localValue: '2026-08-18',
+          remoteValue: '2026-08-17',
+          localUpdatedAt: '2026-08-17T08:00:00.000Z',
+          remoteUpdatedAt: '2026-08-17T09:00:00.000Z',
+          remoteInventoryAvailable: true,
+        ),
+        isTrue,
+      );
+      expect(
+        SyncService.shouldPushUserSetting(
+          key: 'late_night_closed_through',
+          isDirty: true,
+          onlyDirty: false,
+          localValue: '2026-08-17',
+          remoteValue: '2026-08-18',
+          localUpdatedAt: '2026-08-17T10:00:00.000Z',
+          remoteUpdatedAt: '2026-08-17T09:00:00.000Z',
+          remoteInventoryAvailable: true,
+        ),
+        isFalse,
+      );
+      expect(
+        SyncService.shouldPushUserSetting(
+          key: 'late_night_mode',
+          isDirty: true,
+          onlyDirty: false,
+          localUpdatedAt: '2026-08-17T10:00:00.000Z',
+          remoteUpdatedAt: '2026-08-17T11:00:00.000Z',
+          remoteInventoryAvailable: true,
+        ),
+        isFalse,
+      );
+      expect(
+        SyncService.shouldPushUserSetting(
+          key: 'late_night_mode',
+          isDirty: true,
+          onlyDirty: false,
+          localUpdatedAt: '2026-08-17T10:00:00.000Z',
+          remoteUpdatedAt: null,
+          remoteInventoryAvailable: false,
+        ),
+        isFalse,
+      );
+      expect(
+        SyncService.shouldPushUserSetting(
+          key: 'user_name',
+          isDirty: false,
+          onlyDirty: false,
+        ),
+        isTrue,
+      );
+      expect(
+        SyncService.shouldPushUserSetting(
+          key: 'user_name',
+          isDirty: false,
+          onlyDirty: true,
+        ),
+        isFalse,
+      );
+      expect(
+        SyncService.didServerAcceptUserSetting(
+          sentValue: 'true',
+          sentUpdatedAt: '2026-08-17T10:00:00.000Z',
+          returnedValue: 'true',
+          returnedUpdatedAt: '2026-08-17T10:00:00+00:00',
+        ),
+        isTrue,
+      );
+      expect(
+        SyncService.didServerAcceptUserSetting(
+          sentValue: 'true',
+          sentUpdatedAt: '2026-08-17T10:00:00.000Z',
+          returnedValue: 'false',
+          returnedUpdatedAt: '2026-08-17T11:00:00+00:00',
+        ),
+        isFalse,
+      );
+    });
   });
 
   group('sync table registry', () {
@@ -178,7 +332,9 @@ void main() {
     });
 
     test('user_settings applyRemote skips non-profile keys', () async {
-      final settingsTable = syncTables.firstWhere((t) => t.name == 'user_settings');
+      final settingsTable = syncTables.firstWhere(
+        (t) => t.name == 'user_settings',
+      );
       await settingsTable.applyRemote({'key': 'locale', 'value': 'en'});
       await settingsTable.applyRemote({'key': 'user_name', 'value': 'AzarAI'});
 
@@ -186,8 +342,67 @@ void main() {
       expect(await SettingsRepository.get('user_name'), 'AzarAI');
     });
 
+    test(
+      'remote closing boundary never moves a newer local boundary backward',
+      () async {
+        final settingsTable = syncTables.firstWhere(
+          (t) => t.name == 'user_settings',
+        );
+        await SettingsRepository.set('late_night_closed_through', '2026-08-18');
+
+        await settingsTable.applyRemote({
+          'key': 'late_night_closed_through',
+          'value': '2026-08-17',
+        });
+        expect(
+          await SettingsRepository.get('late_night_closed_through'),
+          '2026-08-18',
+        );
+
+        await settingsTable.applyRemote({
+          'key': 'late_night_closed_through',
+          'value': '2026-08-19',
+        });
+        expect(
+          await SettingsRepository.get('late_night_closed_through'),
+          '2026-08-19',
+        );
+      },
+    );
+
+    test(
+      'greater closing boundary wins even with an older remote timestamp',
+      () async {
+        final settingsTable = syncTables.firstWhere(
+          (table) => table.name == 'user_settings',
+        );
+        await SettingsRepository.setSyncedLocal(
+          'late_night_closed_through',
+          '2026-08-17',
+          updatedAt: '2026-08-18T10:00:00.000Z',
+        );
+
+        await settingsTable.applyRemote({
+          'key': 'late_night_closed_through',
+          'value': '2026-08-18',
+          'updated_at': '2026-08-18T09:00:00.000Z',
+        });
+
+        expect(
+          await SettingsRepository.get('late_night_closed_through'),
+          '2026-08-18',
+        );
+        expect(
+          await SettingsRepository.isSyncDirty('late_night_closed_through'),
+          isFalse,
+        );
+      },
+    );
+
     test('focus_sessions applyRemote is idempotent', () async {
-      final focusTable = syncTables.firstWhere((t) => t.name == 'focus_sessions');
+      final focusTable = syncTables.firstWhere(
+        (t) => t.name == 'focus_sessions',
+      );
       final row = {
         'id': 's1',
         'todo_id': null,
@@ -214,15 +429,18 @@ void main() {
         "SELECT name FROM sqlite_master WHERE type='table'",
       );
       final names = tables.map((t) => t['name']).toSet();
-      expect(names, containsAll([
-        'todos',
-        'habits',
-        'focus_sessions',
-        'countdowns',
-        'sleep_records',
-        'user_settings',
-        'ustc_news_cache',
-      ]));
+      expect(
+        names,
+        containsAll([
+          'todos',
+          'habits',
+          'focus_sessions',
+          'countdowns',
+          'sleep_records',
+          'user_settings',
+          'ustc_news_cache',
+        ]),
+      );
 
       // default profile rows seeded on fresh install
       expect(await SettingsRepository.get('user_name'), '离线用户');
@@ -231,26 +449,26 @@ void main() {
 
     test('deleteAllData wipes and recreates schema', () async {
       await TodoRepository.insert(
-        Todo.create(title: 'temp', timingType: TimingTypeExtension.fromValue('forward')),
+        Todo.create(
+          title: 'temp',
+          timingType: TimingTypeExtension.fromValue('forward'),
+        ),
       );
       await AppDatabase.deleteAllData();
 
       expect(await TodoRepository.getAll(), isEmpty);
       // defaults re-seeded
       expect(await SettingsRepository.get('user_name'), '离线用户');
-      final tables = await (await AppDatabase.database)
-          .rawQuery("SELECT name FROM sqlite_master WHERE type='table'");
+      final tables = await (await AppDatabase.database).rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table'",
+      );
       expect(tables.map((t) => t['name']), contains('countdowns'));
     });
   });
 
   group('HabitRepository', () {
     test('insert/update/resetForNewDay roundtrip', () async {
-      final habit = Habit.create(
-        title: '喝水',
-        targetCount: 8,
-        unit: '杯',
-      );
+      final habit = Habit.create(title: '喝水', targetCount: 8, unit: '杯');
       await HabitRepository.insert(habit);
 
       final updated = habit.copyWith(currentCount: 3);
@@ -263,28 +481,35 @@ void main() {
       expect(after.single.lastResetDate, '2026-08-13');
     });
 
-    test('resetForNewDay stamps updated_at so the reset reaches the cloud', () async {
-      final habit = Habit.create(title: '早起', targetCount: 1);
-      await HabitRepository.insert(habit);
-      final db = await AppDatabase.database;
-      final before = (await db.query(
-        'habits',
-        columns: ['updated_at'],
-        where: 'id = ?',
-        whereArgs: [habit.id],
-      )).first['updated_at'] as String;
+    test(
+      'resetForNewDay stamps updated_at so the reset reaches the cloud',
+      () async {
+        final habit = Habit.create(title: '早起', targetCount: 1);
+        await HabitRepository.insert(habit);
+        final db = await AppDatabase.database;
+        final before =
+            (await db.query(
+                  'habits',
+                  columns: ['updated_at'],
+                  where: 'id = ?',
+                  whereArgs: [habit.id],
+                )).first['updated_at']
+                as String;
 
-      await Future<void>.delayed(const Duration(milliseconds: 5));
-      await HabitRepository.resetForNewDay('2026-08-14');
-      final after = (await db.query(
-        'habits',
-        columns: ['updated_at'],
-        where: 'id = ?',
-        whereArgs: [habit.id],
-      )).first['updated_at'] as String;
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+        await HabitRepository.resetForNewDay('2026-08-14');
+        final after =
+            (await db.query(
+                  'habits',
+                  columns: ['updated_at'],
+                  where: 'id = ?',
+                  whereArgs: [habit.id],
+                )).first['updated_at']
+                as String;
 
-      expect(DateTime.parse(after).isAfter(DateTime.parse(before)), isTrue);
-    });
+        expect(DateTime.parse(after).isAfter(DateTime.parse(before)), isTrue);
+      },
+    );
   });
 
   group('CountdownRepository', () {
@@ -328,5 +553,133 @@ void main() {
       expect(all.single.id, 'r1'); // original id preserved
       expect(all.single.wakeTime, '08:00');
     });
+
+    test('concurrent same-date local upserts still produce one row', () async {
+      await Future.wait([
+        SleepRepository.upsert(
+          SleepRecord(
+            id: 'concurrent-a',
+            recordDate: '2026-08-20',
+            wakeTime: '07:00',
+          ),
+        ),
+        SleepRepository.upsert(
+          SleepRecord(
+            id: 'concurrent-b',
+            recordDate: '2026-08-20',
+            sleepTime: '23:00',
+          ),
+        ),
+      ]);
+
+      final records = await SleepRepository.getAll();
+      expect(records, hasLength(1));
+      expect(records.single.wakeTime, '07:00');
+      expect(records.single.sleepTime, '23:00');
+    });
+
+    test('stores workout duration and text description', () async {
+      await SleepRepository.upsert(
+        SleepRecord(
+          id: 'workout-1',
+          recordDate: '2026-08-16',
+          workoutDurationMinutes: 35,
+          note: '爬楼梯 20 层',
+        ),
+      );
+
+      final record = (await SleepRepository.getAll()).single;
+      expect(record.workoutDurationMinutes, 35);
+      expect(record.note, '爬楼梯 20 层');
+      expect(record.workoutTime, isNull);
+    });
+
+    test('workout update preserves newer sleep and wake fields', () async {
+      await SleepRepository.upsert(
+        SleepRecord(
+          id: 'daily-row',
+          recordDate: '2026-08-19',
+          wakeTime: '07:30',
+          sleepTime: '23:45',
+        ),
+      );
+
+      final updated = await SleepRepository.upsertWorkout(
+        recordDate: '2026-08-19',
+        durationMinutes: 50,
+        description: '力量训练',
+      );
+
+      expect(updated.wakeTime, '07:30');
+      expect(updated.sleepTime, '23:45');
+      expect(updated.workoutDurationMinutes, 50);
+      expect(updated.note, '力量训练');
+    });
+
+    test(
+      'remote same-date row replaces the local UUID without duplicating',
+      () async {
+        await SleepRepository.upsert(
+          SleepRecord(
+            id: 'local-id',
+            recordDate: '2026-08-17',
+            wakeTime: '07:00',
+          ),
+        );
+
+        await SleepRepository.upsertFromRemote({
+          'id': 'remote-id',
+          'record_date': '2026-08-17',
+          'wake_time': '07:30',
+          'sleep_time': '01:00',
+          'workout_time': null,
+          'workout_duration_minutes': 45,
+          'note': '力量训练',
+          'updated_at': '2999-08-17T08:00:00.000Z',
+        });
+
+        final records = await SleepRepository.getAll();
+        expect(records, hasLength(1));
+        expect(records.single.id, 'remote-id');
+        expect(records.single.wakeTime, '07:30');
+        expect(records.single.workoutDurationMinutes, 45);
+      },
+    );
+
+    test(
+      'older remote same-date row does not overwrite a newer local edit',
+      () async {
+        await SleepRepository.upsert(
+          SleepRecord(
+            id: 'local-newer',
+            recordDate: '2026-08-18',
+            wakeTime: '08:00',
+          ),
+        );
+        final db = await AppDatabase.database;
+        await db.update(
+          'sleep_records',
+          {'updated_at': '2026-08-18T09:00:00.000Z'},
+          where: 'record_date = ?',
+          whereArgs: ['2026-08-18'],
+        );
+
+        await SleepRepository.upsertFromRemote({
+          'id': 'remote-older',
+          'record_date': '2026-08-18',
+          'wake_time': '06:00',
+          'sleep_time': null,
+          'workout_time': null,
+          'workout_duration_minutes': null,
+          'note': null,
+          'updated_at': '2026-08-18T07:00:00.000Z',
+        });
+
+        final records = await SleepRepository.getAll();
+        expect(records, hasLength(1));
+        expect(records.single.id, 'local-newer');
+        expect(records.single.wakeTime, '08:00');
+      },
+    );
   });
 }

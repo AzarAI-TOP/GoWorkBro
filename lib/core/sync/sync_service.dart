@@ -16,7 +16,8 @@ import 'package:goworkbro/core/sync/sync_table_registry.dart';
 /// 1. All reads come from local SQLite (instant, offline-capable).
 /// 2. All writes go to local SQLite first, then push to Supabase in background.
 /// 3. Pull merges with last-write-wins by `updated_at` (todos / habits /
-///    countdowns), so a periodic pull never rolls back newer local edits.
+///    countdowns / sleep records), so a periodic pull never rolls back newer
+///    local edits.
 /// 4. Realtime subscriptions apply inserts/updates/deletes to the local cache
 ///    and notify the UI. Realtime is best-effort: mobile backgrounded apps and
 ///    missed events are covered by the 60s polling fallback.
@@ -26,7 +27,8 @@ import 'package:goworkbro/core/sync/sync_table_registry.dart';
 /// single loop over that registry instead of per-table code.
 class SyncService {
   static SupabaseClient? _client;
-  static bool _isSyncing = false;
+  static Future<void>? _pulling;
+  static Future<void>? _pushingSettings;
   static final List<RealtimeChannel> _channels = [];
   static Timer? _notifyTimer;
 
@@ -57,19 +59,29 @@ class SyncService {
   /// Per-table failures are logged and skipped so one broken table cannot
   /// block the rest of the pull.
   static Future<void> pullAll() async {
-    if (_client == null || _isSyncing) return;
-    _isSyncing = true;
+    if (_client == null) return;
+    final active = _pulling;
+    if (active != null) {
+      await active;
+      return;
+    }
 
+    final operation = _pullAllInternal();
+    _pulling = operation;
     try {
-      for (final table in syncTables) {
-        try {
-          await _pullTable(table.name, table.applyRemote);
-        } catch (e) {
-          debugPrint('Pull ${table.name} failed: $e');
-        }
-      }
+      await operation;
     } finally {
-      _isSyncing = false;
+      if (identical(_pulling, operation)) _pulling = null;
+    }
+  }
+
+  static Future<void> _pullAllInternal() async {
+    for (final table in syncTables) {
+      try {
+        await _pullTable(table.name, table.applyRemote);
+      } catch (e) {
+        debugPrint('Pull ${table.name} failed: $e');
+      }
     }
   }
 
@@ -79,10 +91,7 @@ class SyncService {
   ) async {
     final uid = currentUserId;
     if (uid == null) return;
-    final response = await _client!
-        .from(table)
-        .select()
-        .eq('user_id', uid);
+    final response = await _client!.from(table).select().eq('user_id', uid);
     for (final row in response) {
       await applyRemote(row);
     }
@@ -190,9 +199,10 @@ class SyncService {
         'wake_time': record.wakeTime,
         'sleep_time': record.sleepTime,
         'workout_time': record.workoutTime,
+        'workout_duration_minutes': record.workoutDurationMinutes,
         'note': record.note,
-        'updated_at': DateTime.now().toUtc().toIso8601String(),
-      });
+        'updated_at': record.updatedAt ?? nowStamp(),
+      }, onConflict: 'user_id,record_date');
     } catch (e) {
       debugPrint('Push sleep record failed: $e');
     }
@@ -213,59 +223,161 @@ class SyncService {
     final uid = currentUserId;
     if (uid == null) return;
 
-    Future<Map<String, String?>> remoteStamps(String table) async {
+    Future<Map<String, String?>?> remoteStamps(
+      String table, {
+      String key = 'id',
+    }) async {
       try {
         final rows = await _client!
             .from(table)
-            .select('id, updated_at')
+            .select('$key, updated_at')
             .eq('user_id', uid);
         return {
-          for (final r in rows) r['id'] as String: r['updated_at'] as String?,
+          for (final r in rows) r[key] as String: r['updated_at'] as String?,
         };
       } catch (e) {
         debugPrint('Fetch $table stamps failed: $e');
-        return const {};
+        return null;
+      }
+    }
+
+    Future<Set<String>?> remoteIds(String table) async {
+      try {
+        final rows = await _client!.from(table).select('id').eq('user_id', uid);
+        return {for (final row in rows) row['id'] as String};
+      } catch (e) {
+        debugPrint('Fetch $table ids failed: $e');
+        return null;
       }
     }
 
     final todoStamps = await remoteStamps('todos');
-    for (final t in todos) {
-      if (isLocalNewer(t.updatedAt, todoStamps[t.id])) {
-        unawaited(pushTodo(t));
+    if (todoStamps != null) {
+      for (final t in todos) {
+        if (isLocalNewer(t.updatedAt, todoStamps[t.id])) {
+          unawaited(pushTodo(t));
+        }
       }
     }
     final habitStamps = await remoteStamps('habits');
-    for (final h in habits) {
-      if (isLocalNewer(h.updatedAt, habitStamps[h.id])) {
-        unawaited(pushHabit(h));
+    if (habitStamps != null) {
+      for (final h in habits) {
+        if (isLocalNewer(h.updatedAt, habitStamps[h.id])) {
+          unawaited(pushHabit(h));
+        }
       }
     }
     final countdownStamps = await remoteStamps('countdowns');
-    for (final c in countdowns) {
-      if (isLocalNewer(c.updatedAt, countdownStamps[c.id])) {
-        unawaited(pushCountdown(c));
+    if (countdownStamps != null) {
+      for (final c in countdowns) {
+        if (isLocalNewer(c.updatedAt, countdownStamps[c.id])) {
+          unawaited(pushCountdown(c));
+        }
       }
     }
-    // Append-only / idempotent tables are pushed as-is.
-    for (final s in sessions) {
-      unawaited(pushFocusSession(s));
+    // Focus sessions are append-only. Retry the complete local inventory, but
+    // only upload ids that are absent remotely so historical rows do not get
+    // re-sent on every periodic sync.
+    final remoteFocusIds = await remoteIds('focus_sessions');
+    if (remoteFocusIds != null) {
+      for (final session in sessions) {
+        if (!remoteFocusIds.contains(session.id)) {
+          unawaited(pushFocusSession(session));
+        }
+      }
     }
-    for (final r in sleepRecords) {
-      unawaited(pushSleepRecord(r));
+    final sleepStamps = await remoteStamps('sleep_records', key: 'record_date');
+    if (sleepStamps != null) {
+      for (final r in sleepRecords) {
+        if (!sleepStamps.containsKey(r.recordDate) ||
+            isLocalNewer(r.updatedAt, sleepStamps[r.recordDate])) {
+          unawaited(pushSleepRecord(r));
+        }
+      }
     }
   }
 
-  /// Push the local profile (user_name / avatar_path) to cloud user_settings.
+  /// Push synced user settings (profile and late-night mode) to the cloud.
   /// A legacy device-local avatar path is transparently migrated to Storage
   /// before pushing — only Storage object paths ever leave the device.
-  static Future<void> pushUserSettings() async {
+  static Future<void> pushUserSettings({bool onlyDirty = false}) async {
+    while (true) {
+      final active = _pushingSettings;
+      if (active != null) {
+        await active;
+        continue;
+      }
+
+      final operation = _pushUserSettingsInternal(onlyDirty: onlyDirty);
+      _pushingSettings = operation;
+      try {
+        await operation;
+      } finally {
+        if (identical(_pushingSettings, operation)) _pushingSettings = null;
+      }
+      return;
+    }
+  }
+
+  static Future<void> _pushUserSettingsInternal({
+    required bool onlyDirty,
+  }) async {
     if (_client == null) return;
     final uid = currentUserId;
     if (uid == null) return;
     try {
+      final dirtyStates = <String, bool>{};
       for (final key in profileKeys) {
+        dirtyStates[key] = await SettingsRepository.isSyncDirty(key);
+      }
+
+      final remoteUpdatedAt = <String, String?>{};
+      final remoteValues = <String, String?>{};
+      var remoteInventoryAvailable = true;
+      final needsConflictInventory = outboxProtectedProfileKeys.any(
+        (key) => dirtyStates[key] ?? false,
+      );
+      if (needsConflictInventory) {
+        try {
+          final remoteRows = await _client!
+              .from('user_settings')
+              .select('key, value, updated_at')
+              .eq('user_id', uid);
+          for (final row in remoteRows) {
+            final key = row['key'] as String?;
+            if (key != null) {
+              remoteValues[key] = row['value'] as String?;
+              remoteUpdatedAt[key] = row['updated_at'] as String?;
+            }
+          }
+        } catch (e) {
+          remoteInventoryAvailable = false;
+          debugPrint('Read remote user setting timestamps failed: $e');
+        }
+      }
+
+      final rows = <Map<String, Object?>>[];
+      final completedSnapshots = <String, String>{};
+      final sentValues = <String, String>{};
+      final fallbackStamp = nowStamp();
+      for (final key in profileKeys) {
+        final isDirty = dirtyStates[key] ?? false;
+        final localUpdatedAt = await SettingsRepository.getSyncUpdatedAt(key);
         final value = await SettingsRepository.get(key);
         if (value == null) continue;
+        if (!shouldPushUserSetting(
+          key: key,
+          isDirty: isDirty,
+          onlyDirty: onlyDirty,
+          localValue: value,
+          remoteValue: remoteValues[key],
+          localUpdatedAt: localUpdatedAt,
+          remoteUpdatedAt: remoteUpdatedAt[key],
+          remoteInventoryAvailable: remoteInventoryAvailable,
+        )) {
+          continue;
+        }
+        final rowUpdatedAt = localUpdatedAt ?? fallbackStamp;
         var cloudValue = value;
         if (key == 'avatar_path' && !AvatarSync.isStoragePath(value)) {
           try {
@@ -276,16 +388,100 @@ class SyncService {
             continue; // never push a device-local path to the cloud
           }
         }
-        await _client!.from('user_settings').upsert({
+        rows.add({
           'key': key,
           'user_id': uid,
           'value': cloudValue,
-          'updated_at': DateTime.now().toUtc().toIso8601String(),
+          'updated_at': rowUpdatedAt,
         });
+        if (localUpdatedAt != null) {
+          completedSnapshots[key] = localUpdatedAt;
+          sentValues[key] = cloudValue;
+        }
+      }
+      if (rows.isNotEmpty) {
+        // One PostgREST request applies mode + closing boundary together;
+        // realtime may emit multiple rows, but its debounce then refreshes the
+        // complete committed pair before rollover.
+        final returnedRows = await _client!
+            .from('user_settings')
+            .upsert(rows)
+            .select('key, value, updated_at');
+        final returnedByKey = <String, Map<String, dynamic>>{};
+        for (final row in returnedRows) {
+          final key = row['key'] as String?;
+          if (key != null) returnedByKey[key] = row;
+        }
+        for (final entry in completedSnapshots.entries) {
+          final returned = returnedByKey[entry.key];
+          if (returned == null ||
+              !didServerAcceptUserSetting(
+                sentValue: sentValues[entry.key]!,
+                sentUpdatedAt: entry.value,
+                returnedValue: returned['value'] as String?,
+                returnedUpdatedAt: returned['updated_at'] as String?,
+              )) {
+            continue;
+          }
+          await SettingsRepository.markSyncComplete(
+            entry.key,
+            expectedUpdatedAt: entry.value,
+          );
+        }
       }
     } catch (e) {
       debugPrint('Push user settings failed: $e');
     }
+  }
+
+  /// Decides whether a local user setting should be uploaded. Logical-day
+  /// settings additionally require a durable dirty marker and, when one is
+  /// present, a client-side LWW comparison against the remote row. The
+  /// closing boundary stays monotonic: a greater ISO date wins even when the
+  /// local timestamp is older.
+  static bool shouldPushUserSetting({
+    required String key,
+    required bool isDirty,
+    required bool onlyDirty,
+    String? localValue,
+    String? remoteValue,
+    String? localUpdatedAt,
+    String? remoteUpdatedAt,
+    bool remoteInventoryAvailable = true,
+  }) {
+    final requiresOutbox = outboxProtectedProfileKeys.contains(key);
+    if (!isDirty && (onlyDirty || requiresOutbox)) return false;
+    if (!requiresOutbox) return !onlyDirty || isDirty;
+    if (!remoteInventoryAvailable || localUpdatedAt == null) return false;
+    if (key == 'late_night_closed_through' &&
+        _isIsoDateSetting(localValue) &&
+        _isIsoDateSetting(remoteValue)) {
+      final valueComparison = localValue!.compareTo(remoteValue!);
+      if (valueComparison != 0) return valueComparison > 0;
+    }
+    if (remoteUpdatedAt == null) return true;
+    return isLocalNewer(localUpdatedAt, remoteUpdatedAt);
+  }
+
+  static bool _isIsoDateSetting(String? value) {
+    return value != null && RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(value);
+  }
+
+  /// True when the server actually persisted the value and timestamp that
+  /// were sent, so the local dirty marker can be cleared safely.
+  static bool didServerAcceptUserSetting({
+    required String sentValue,
+    required String sentUpdatedAt,
+    required String? returnedValue,
+    required String? returnedUpdatedAt,
+  }) {
+    if (returnedValue != sentValue || returnedUpdatedAt == null) return false;
+    if (returnedUpdatedAt == sentUpdatedAt) return true;
+    final sent = DateTime.tryParse(sentUpdatedAt);
+    final returned = DateTime.tryParse(returnedUpdatedAt);
+    return sent != null &&
+        returned != null &&
+        sent.toUtc().isAtSameMomentAs(returned.toUtc());
   }
 
   // ============ Avatar ============
@@ -330,20 +526,29 @@ class SyncService {
 
   static Future<void> deleteRemoteTodo(String id) async {
     if (_client == null) return;
-    try { await _client!.from('todos').delete().eq('id', id); }
-    catch (e) { debugPrint('Delete remote todo failed: $e'); }
+    try {
+      await _client!.from('todos').delete().eq('id', id);
+    } catch (e) {
+      debugPrint('Delete remote todo failed: $e');
+    }
   }
 
   static Future<void> deleteRemoteHabit(String id) async {
     if (_client == null) return;
-    try { await _client!.from('habits').delete().eq('id', id); }
-    catch (e) { debugPrint('Delete remote habit failed: $e'); }
+    try {
+      await _client!.from('habits').delete().eq('id', id);
+    } catch (e) {
+      debugPrint('Delete remote habit failed: $e');
+    }
   }
 
   static Future<void> deleteRemoteCountdown(String id) async {
     if (_client == null) return;
-    try { await _client!.from('countdowns').delete().eq('id', id); }
-    catch (e) { debugPrint('Delete remote countdown failed: $e'); }
+    try {
+      await _client!.from('countdowns').delete().eq('id', id);
+    } catch (e) {
+      debugPrint('Delete remote countdown failed: $e');
+    }
   }
 
   // ============ Realtime ============
@@ -367,16 +572,18 @@ class SyncService {
                 final oldRow = payload.oldRecord;
                 if (oldRow.isNotEmpty && table.applyDelete != null) {
                   unawaited(
-                    table
-                        .applyDelete!(oldRow)
-                        .then((_) => _notifyRemoteChanged()),
+                    table.applyDelete!(oldRow).then(
+                      (_) => _notifyRemoteChanged(),
+                    ),
                   );
                 }
               } else {
                 final newRow = payload.newRecord;
                 if (newRow.isNotEmpty) {
                   unawaited(
-                    table.applyRemote(newRow).then((_) => _notifyRemoteChanged()),
+                    table
+                        .applyRemote(newRow)
+                        .then((_) => _notifyRemoteChanged()),
                   );
                 }
               }
