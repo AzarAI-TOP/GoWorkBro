@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:goworkbro/core/theme/app_theme.dart';
 import 'package:goworkbro/core/database/repositories/settings_repository.dart';
+import 'package:goworkbro/core/domain/check_in_type.dart';
 
 /// Single source of truth for locale and theme mode.
 /// Persists to SQLite via DatabaseService (no AppProvider dependency).
@@ -344,12 +345,14 @@ class S {
       locale == AppLocale.zh
       ? '起床 $wake  ·  健身 $workout  ·  睡觉 $sleep'
       : 'Wake $wake  ·  Workout $workout  ·  Sleep $sleep';
-  String selectCheckInTime(String type) => switch (type) {
-    'wake' => locale == AppLocale.zh ? '选择起床时间' : 'Select wake time',
-    'workout' => locale == AppLocale.zh ? '选择健身时间' : 'Select workout time',
-    'sleep' => locale == AppLocale.zh ? '选择睡觉时间' : 'Select bedtime',
-    _ => locale == AppLocale.zh ? '选择时间' : 'Select time',
-  };
+  String selectCheckInTime(CheckInType type) => switch (type) {
+        CheckInType.sleep =>
+          locale == AppLocale.zh ? '选择睡觉时间' : 'Select bedtime',
+        CheckInType.wake =>
+          locale == AppLocale.zh ? '选择起床时间' : 'Select wake time',
+        CheckInType.workout =>
+          locale == AppLocale.zh ? '选择健身时间' : 'Select workout time',
+      };
   String count(int value) => locale == AppLocale.zh ? '$value 个' : '$value';
 
   // ---- Settings ----
@@ -357,8 +360,8 @@ class S {
   String get lateNightMode =>
       locale == AppLocale.zh ? '熬夜模式' : 'Late-night mode';
   String get lateNightModeDescription => locale == AppLocale.zh
-      ? '午夜后至睡眠打卡前的活动计入前一天（最晚到中午）'
-      : 'After-midnight activity counts toward yesterday until sleep check-in (no later than noon)';
+      ? '凌晨 4 点前的活动计入前一天'
+      : 'Activity before 4 AM counts toward the previous day';
   String lateNightModeActive(String date) => locale == AppLocale.zh
       ? '已开启 · 当前活动计入 $date'
       : 'On · current activity counts toward $date';
