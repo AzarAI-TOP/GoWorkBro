@@ -42,7 +42,6 @@ class AppProvider extends ChangeNotifier {
   int _lifetimeHabitsCompleted = 0;
   String _lastRolloverDate = '';
   bool _lateNightModeEnabled = false;
-  String _lateNightClosedThrough = '';
   Future<void>? _rolloverFuture;
   Timer? _rolloverTimer;
   Timer? _syncTimer;
@@ -71,16 +70,11 @@ class AppProvider extends ChangeNotifier {
 
   String get calendarDate => dateKeyOf(_now());
 
-  String get todayDate {
-    final now = _now();
-    final calendar = dateKeyOf(now);
-    return logicalDateKey(
-      now: now,
-      lateNightModeEnabled: _lateNightModeEnabled,
-      sleepCheckedInForCalendarDate: _lateNightClosedThrough == calendar,
-      lastRolloverDate: _lastRolloverDate,
-    );
-  }
+  String get todayDate => logicalDateKey(
+        now: _now(),
+        lateNightModeEnabled: _lateNightModeEnabled,
+        lastRolloverDate: _lastRolloverDate,
+      );
 
   bool get isLateNightCarryoverActive => todayDate != calendarDate;
 
@@ -111,10 +105,6 @@ class AppProvider extends ChangeNotifier {
         await SettingsRepository.get('last_rollover_date') ?? '';
     _lateNightModeEnabled =
         await SettingsRepository.get('late_night_mode') == 'true';
-    _lateNightClosedThrough =
-        await SettingsRepository.get('late_night_closed_through') ?? '';
-    // The sleep boundary participates in logical-day calculation, so it must
-    // be loaded before the first rollover decision.
     _sleepRecords = await SleepRepository.getAll();
     _firstUsedDate =
         await SettingsRepository.get('first_used_date') ?? todayDate;
@@ -325,8 +315,6 @@ class AppProvider extends ChangeNotifier {
     _sleepRecords = await SleepRepository.getAll();
     _lateNightModeEnabled =
         await SettingsRepository.get('late_night_mode') == 'true';
-    _lateNightClosedThrough =
-        await SettingsRepository.get('late_night_closed_through') ?? '';
     _todaySessions = await FocusRepository.getByDate(todayDate);
     _allSessions = await FocusRepository.getAll();
     final name = await SettingsRepository.get('user_name');
@@ -629,11 +617,7 @@ class AppProvider extends ChangeNotifier {
     unawaited(SyncService.pushSleepRecord(persisted));
   }
 
-  Future<void> recordSleep(
-    SleepRecord record, {
-    String? closesLogicalDayThrough,
-  }) async {
-    final previousLogicalDate = todayDate;
+  Future<void> recordSleep(SleepRecord record) async {
     final persisted = await SleepRepository.upsert(record);
     // Update in-memory: replace if same date exists, else add
     final i = _sleepRecords.indexWhere(
@@ -645,22 +629,7 @@ class AppProvider extends ChangeNotifier {
       _sleepRecords.insert(0, persisted);
     }
     _sleepRecords.sort((a, b) => b.recordDate.compareTo(a.recordDate));
-    if (closesLogicalDayThrough != null) {
-      if (_lateNightClosedThrough.isEmpty ||
-          _lateNightClosedThrough.compareTo(closesLogicalDayThrough) < 0) {
-        _lateNightClosedThrough = closesLogicalDayThrough;
-        await SettingsRepository.setSyncedLocal(
-          'late_night_closed_through',
-          _lateNightClosedThrough,
-        );
-      }
-      unawaited(SyncService.pushUserSettings(onlyDirty: true));
-    }
-    if (previousLogicalDate != todayDate) {
-      await _performDailyRollover();
-    } else {
-      notifyListeners();
-    }
+    notifyListeners();
     unawaited(SyncService.pushSleepRecord(persisted));
   }
 
@@ -735,7 +704,6 @@ class AppProvider extends ChangeNotifier {
     _lifetimeHabitsCompleted = 0;
     _lastRolloverDate = '';
     _lateNightModeEnabled = false;
-    _lateNightClosedThrough = '';
     notifyListeners();
   }
 

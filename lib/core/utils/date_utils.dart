@@ -11,26 +11,23 @@ String dateKeyOf(DateTime date) =>
 /// Today's date as `yyyy-MM-dd` (local time).
 String get todayDateKey => dateKeyOf(DateTime.now());
 
-const int lateNightCutoffHour = 12;
+const int lateNightBoundaryHour = 4;
+const int sleepRowCutoffHour = 12;
 
 /// Returns the date bucket used by daily app data.
 ///
-/// In late-night mode, activity after midnight stays on the previous day
-/// until sleep is checked in. The carry-over stops at [carryoverCutoffHour]
-/// as a safety net when a sleep check-in is missed. A day that has already
-/// rolled over is never moved backwards because rollover deletes/resets data.
+/// In late-night mode, activity between midnight and [lateNightBoundaryHour]
+/// (4 AM) stays on the previous day. The boundary is fixed in time — no
+/// check-ins or stored state are involved. A day that has already rolled
+/// over is never moved backwards because rollover deletes/resets data.
 String logicalDateKey({
   required DateTime now,
   required bool lateNightModeEnabled,
-  required bool sleepCheckedInForCalendarDate,
   required String lastRolloverDate,
-  int carryoverCutoffHour = lateNightCutoffHour,
 }) {
   final calendarDate = dateKeyOf(now);
-  final canCarryOver =
-      lateNightModeEnabled &&
-      now.hour < carryoverCutoffHour &&
-      !sleepCheckedInForCalendarDate &&
+  final canCarryOver = lateNightModeEnabled &&
+      now.hour < lateNightBoundaryHour &&
       lastRolloverDate != calendarDate;
   return canCarryOver
       ? dateKeyOf(now.subtract(const Duration(days: 1)))
@@ -42,10 +39,11 @@ String logicalDateKey({
 /// A check-in before noon belongs to the current calendar row; one from noon
 /// onward belongs to the following row. This keeps sleep and wake times paired
 /// even when activity before an after-midnight sleep belongs to the prior
-/// logical day.
+/// logical day. Unrelated to [lateNightBoundaryHour], which only governs the
+/// activity date bucket.
 String sleepRecordDateKey(
   DateTime now, {
-  int cutoffHour = lateNightCutoffHour,
+  int cutoffHour = sleepRowCutoffHour,
 }) => dateKeyOf(now.hour < cutoffHour ? now : now.add(const Duration(days: 1)));
 
 /// Row used by a wake-up check-in. Unlike daily activity, wake-up belongs to

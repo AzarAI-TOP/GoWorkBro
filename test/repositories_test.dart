@@ -234,32 +234,6 @@ void main() {
       );
       expect(
         SyncService.shouldPushUserSetting(
-          key: 'late_night_closed_through',
-          isDirty: true,
-          onlyDirty: false,
-          localValue: '2026-08-18',
-          remoteValue: '2026-08-17',
-          localUpdatedAt: '2026-08-17T08:00:00.000Z',
-          remoteUpdatedAt: '2026-08-17T09:00:00.000Z',
-          remoteInventoryAvailable: true,
-        ),
-        isTrue,
-      );
-      expect(
-        SyncService.shouldPushUserSetting(
-          key: 'late_night_closed_through',
-          isDirty: true,
-          onlyDirty: false,
-          localValue: '2026-08-17',
-          remoteValue: '2026-08-18',
-          localUpdatedAt: '2026-08-17T10:00:00.000Z',
-          remoteUpdatedAt: '2026-08-17T09:00:00.000Z',
-          remoteInventoryAvailable: true,
-        ),
-        isFalse,
-      );
-      expect(
-        SyncService.shouldPushUserSetting(
           key: 'late_night_mode',
           isDirty: true,
           onlyDirty: false,
@@ -337,67 +311,18 @@ void main() {
       );
       await settingsTable.applyRemote({'key': 'locale', 'value': 'en'});
       await settingsTable.applyRemote({'key': 'user_name', 'value': 'AzarAI'});
+      await settingsTable.applyRemote({
+        'key': 'late_night_closed_through',
+        'value': '2026-08-17',
+      });
 
       expect(await SettingsRepository.get('locale'), isNull);
       expect(await SettingsRepository.get('user_name'), 'AzarAI');
+      expect(
+        await SettingsRepository.get('late_night_closed_through'),
+        isNull,
+      );
     });
-
-    test(
-      'remote closing boundary never moves a newer local boundary backward',
-      () async {
-        final settingsTable = syncTables.firstWhere(
-          (t) => t.name == 'user_settings',
-        );
-        await SettingsRepository.set('late_night_closed_through', '2026-08-18');
-
-        await settingsTable.applyRemote({
-          'key': 'late_night_closed_through',
-          'value': '2026-08-17',
-        });
-        expect(
-          await SettingsRepository.get('late_night_closed_through'),
-          '2026-08-18',
-        );
-
-        await settingsTable.applyRemote({
-          'key': 'late_night_closed_through',
-          'value': '2026-08-19',
-        });
-        expect(
-          await SettingsRepository.get('late_night_closed_through'),
-          '2026-08-19',
-        );
-      },
-    );
-
-    test(
-      'greater closing boundary wins even with an older remote timestamp',
-      () async {
-        final settingsTable = syncTables.firstWhere(
-          (table) => table.name == 'user_settings',
-        );
-        await SettingsRepository.setSyncedLocal(
-          'late_night_closed_through',
-          '2026-08-17',
-          updatedAt: '2026-08-18T10:00:00.000Z',
-        );
-
-        await settingsTable.applyRemote({
-          'key': 'late_night_closed_through',
-          'value': '2026-08-18',
-          'updated_at': '2026-08-18T09:00:00.000Z',
-        });
-
-        expect(
-          await SettingsRepository.get('late_night_closed_through'),
-          '2026-08-18',
-        );
-        expect(
-          await SettingsRepository.isSyncDirty('late_night_closed_through'),
-          isFalse,
-        );
-      },
-    );
 
     test('focus_sessions applyRemote is idempotent', () async {
       final focusTable = syncTables.firstWhere(

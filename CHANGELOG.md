@@ -4,6 +4,17 @@ All notable changes to GoWorkBro are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **熬夜模式重构为固定 04:00 边界**：开启后，凌晨 4 点前的活动统一计入前一天，4 点起归当天——不再依赖睡眠打卡闭合（原"打卡闭合 + 边界标记 + 12 点安全网"状态机整体删除）。待办/习惯/专注/统计的日期归属在任何时刻确定；睡眠打卡记录与统计不受影响。
+- **睡眠记录可编辑**：历史打卡记录点击即可补录/修正入睡与起床时间（统计修正）。
+
+### Removed
+
+- 忘打卡提示卡、`late_night_closed_through` 设置及其同步特判（旧数据保留为无害残留）。
+
 ## [1.1.2] - 2026-08-16
 
 ### Added

@@ -93,52 +93,53 @@ void main() {
     expect(provider.lateNightModeEnabled, isTrue);
   });
 
-  test(
-    'sleep check-in persists the supplied logical-day closing boundary',
-    () async {
-      await provider.recordSleep(
-        SleepRecord.create(recordDate: provider.todayDate, sleepTime: '23:00'),
-        closesLogicalDayThrough: '2026-08-17',
-      );
-
-      expect(
-        await SettingsRepository.get('late_night_closed_through'),
-        '2026-08-17',
-      );
-    },
-  );
-
-  test('sleep check-in never moves the closing boundary backward', () async {
-    await SettingsRepository.set('late_night_closed_through', '2026-08-18');
-    await provider.refreshAll();
-
+  test('sleep check-in records the row without touching the day bucket',
+      () async {
+    final before = provider.todayDate;
     await provider.recordSleep(
-      SleepRecord.create(recordDate: '2026-08-17', sleepTime: '01:00'),
-      closesLogicalDayThrough: '2026-08-17',
+      SleepRecord.create(recordDate: provider.todayDate, sleepTime: '23:00'),
     );
 
-    expect(
-      await SettingsRepository.get('late_night_closed_through'),
-      '2026-08-18',
-    );
+    expect(provider.todayDate, before);
+    expect(provider.sleepRecords, isNotEmpty);
   });
 
-  test(
-    'remote closing marker triggers rollover before control returns',
-    () async {
-      provider.dispose();
-      await SettingsRepository.set('late_night_mode', 'true');
-      await SettingsRepository.set('late_night_closed_through', '');
-      await SettingsRepository.set('last_rollover_date', '2026-08-16');
-      provider = AppProvider(now: () => DateTime(2026, 8, 17, 2));
-      await provider.init();
-      expect(provider.todayDate, '2026-08-16');
+  test('late-night day rolls over at the 04:00 boundary', () async {
+    provider.dispose();
+    await SettingsRepository.set('late_night_mode', 'true');
+    await SettingsRepository.set('last_rollover_date', '2026-08-16');
+    provider = AppProvider(now: () => DateTime(2026, 8, 17, 3, 59));
+    await provider.init();
 
-      await SettingsRepository.set('late_night_closed_through', '2026-08-17');
-      await provider.refreshAfterRemoteChangeForTesting();
+    expect(provider.todayDate, '2026-08-16');
+    expect(provider.isLateNightCarryoverActive, isTrue);
 
-      expect(provider.todayDate, '2026-08-17');
-      expect(await SettingsRepository.get('last_rollover_date'), '2026-08-17');
-    },
-  );
+    // The boundary is a fixed wall-clock rule: once 04:00 passes, the
+    // provider's periodic rollover moves the day forward.
+    provider.dispose();
+    provider = AppProvider(now: () => DateTime(2026, 8, 17, 4, 0));
+    await provider.init();
+
+    expect(provider.todayDate, '2026-08-17');
+    expect(provider.isLateNightCarryoverActive, isFalse);
+  });
+
+  test('toggling mode near the boundary never flaps the rolled-over day',
+      () async {
+    provider.dispose();
+    await SettingsRepository.set('late_night_mode', 'true');
+    await SettingsRepository.set('last_rollover_date', '2026-08-16');
+    provider = AppProvider(now: () => DateTime(2026, 8, 17, 2));
+    await provider.init();
+    expect(provider.todayDate, '2026-08-16');
+
+    // Turn the mode off at 02:00 — the day advances to the calendar date.
+    await provider.setLateNightModeEnabled(false);
+    expect(provider.todayDate, '2026-08-17');
+
+    // Turning it back on must not drag the day backwards: rollover for
+    // Aug 17 has already run (deleted/reset data).
+    await provider.setLateNightModeEnabled(true);
+    expect(provider.todayDate, '2026-08-17');
+  });
 }

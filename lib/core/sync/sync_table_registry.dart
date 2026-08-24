@@ -16,12 +16,10 @@ const profileKeys = [
   'user_name',
   'avatar_path',
   'late_night_mode',
-  'late_night_closed_through',
 ];
 
 const outboxProtectedProfileKeys = {
   'late_night_mode',
-  'late_night_closed_through',
 };
 
 /// Declarative description of one cloud table: how it is pulled on startup
@@ -106,20 +104,6 @@ final List<SyncTable> syncTables = [
         return;
       }
 
-      if (key == 'late_night_closed_through') {
-        if (value != null && RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(value)) {
-          final local = await SettingsRepository.get(key);
-          if (local != null && local.compareTo(value) > 0) return;
-          await SettingsRepository.applySyncedRemote(
-            key: key,
-            value: value,
-            updatedAt: updatedAt,
-            preferLexicographicallyGreaterValue: true,
-          );
-        }
-        return;
-      }
-
       // key == 'avatar_path': only a Storage object path is applied. A
       // non-Storage value is a legacy device-local path pushed by an old
       // client — ignore it and keep the local avatar (issue #12). Cloud
@@ -160,8 +144,7 @@ final List<SyncTable> syncTables = [
             await file.delete().catchError((_) => file);
           }
         }
-      } else if (key == 'late_night_mode' ||
-          key == 'late_night_closed_through') {
+      } else if (key == 'late_night_mode') {
         if (!await SettingsRepository.isSyncDirty(key!)) {
           await SettingsRepository.deleteSyncedState(key);
         }

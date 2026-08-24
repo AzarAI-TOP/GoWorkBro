@@ -453,18 +453,8 @@ class SyncService {
     if (!isDirty && (onlyDirty || requiresOutbox)) return false;
     if (!requiresOutbox) return !onlyDirty || isDirty;
     if (!remoteInventoryAvailable || localUpdatedAt == null) return false;
-    if (key == 'late_night_closed_through' &&
-        _isIsoDateSetting(localValue) &&
-        _isIsoDateSetting(remoteValue)) {
-      final valueComparison = localValue!.compareTo(remoteValue!);
-      if (valueComparison != 0) return valueComparison > 0;
-    }
     if (remoteUpdatedAt == null) return true;
     return isLocalNewer(localUpdatedAt, remoteUpdatedAt);
-  }
-
-  static bool _isIsoDateSetting(String? value) {
-    return value != null && RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(value);
   }
 
   /// True when the server actually persisted the value and timestamp that
