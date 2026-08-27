@@ -345,9 +345,10 @@ create policy "avatars delete own"
 -- News ingestion RPC + API surface hardening
 -- ============================================================
 
--- Validated, idempotent news upsert. SECURITY DEFINER so the anon-key upload
--- script needs no secret, but writes are limited to this exact operation with
--- validated inputs (ISO date, not in the future, size caps).
+-- Validated, idempotent news upsert. SECURITY DEFINER so ingestion needs no
+-- table grants; execute is limited to service_role (the upload script passes
+-- a service-role key via env). Inputs are validated (ISO date, not in the
+-- future, size caps).
 create or replace function public.upsert_ustc_news(
   p_date text,
   p_title text,
@@ -414,9 +415,10 @@ grant select, insert, update, delete on table public.countdowns to authenticated
 grant select, insert, update, delete on table public.sleep_records to authenticated;
 grant select, insert, update, delete on table public.user_settings to authenticated;
 
--- Ingestion RPC: anon role only (upload script); PUBLIC default revoked above.
-revoke execute on function public.upsert_ustc_news(text, text, text) from public;
-grant execute on function public.upsert_ustc_news(text, text, text) to anon;
+-- Ingestion RPC: service_role only (upload script); anon write removed so a
+-- leaked publishable key cannot rewrite published editions.
+revoke execute on function public.upsert_ustc_news(text, text, text) from public, anon;
+grant execute on function public.upsert_ustc_news(text, text, text) to service_role;
 
 -- LWW trigger executes as the DML user.
 grant execute on function public.merge_user_setting_lww() to authenticated;

@@ -8,12 +8,13 @@ Reads the markdown file, strips frontmatter, extracts the H1 title, and
 upserts the daily edition through the validated `upsert_ustc_news` RPC.
 
 The RPC is SECURITY DEFINER and validates the date (ISO format, not in the
-future) and content limits, so the public anon key is sufficient — no secret
-key is ever required for news ingestion.
+future) and content limits. Execute is limited to the service_role, so a
+server-side secret is required for ingestion — it is never committed and
+only lives in your environment.
 
-Environment variables (optional, override defaults):
-  SUPABASE_URL       — Supabase project URL
-  SUPABASE_ANON_KEY  — Supabase anon/publishable key
+Environment variables:
+  SUPABASE_URL               — Supabase project URL (has a default)
+  SUPABASE_SERVICE_ROLE_KEY  — service-role key (REQUIRED, no default)
 """
 
 import sys
@@ -29,10 +30,9 @@ SUPABASE_URL = os.environ.get(
     "SUPABASE_URL",
     "https://icsulquyravumynznisa.supabase.co",
 )
-SUPABASE_ANON_KEY = os.environ.get(
-    "SUPABASE_ANON_KEY",
-    "sb_publishable_HRd65D5M-BIcBakD3XQBSQ_iG9lC6fK",
-)
+# Required — the legacy anon-key ingestion path was revoked; never hardcode
+# a fallback here.
+SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
 
 VAULT_PATH = os.environ.get(
     "OBSIDIAN_VAULT",
@@ -65,8 +65,8 @@ def upload(date_str: str, title: str, content: str) -> bool:
     """Upsert news through the validated Supabase RPC."""
     url = f"{SUPABASE_URL}/rest/v1/rpc/upsert_ustc_news"
     headers = {
-        "apikey": SUPABASE_ANON_KEY,
-        "Authorization": f"Bearer {SUPABASE_ANON_KEY}",
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
         "Content-Type": "application/json",
     }
     payload = json.dumps(
@@ -96,6 +96,13 @@ def upload(date_str: str, title: str, content: str) -> bool:
 
 
 def main():
+    if not SUPABASE_SERVICE_ROLE_KEY:
+        print(
+            "❌ SUPABASE_SERVICE_ROLE_KEY is not set. "
+            "Export it before uploading (never commit it)."
+        )
+        sys.exit(1)
+
     if len(sys.argv) >= 3:
         date_str = sys.argv[1]
         file_path = sys.argv[2]
