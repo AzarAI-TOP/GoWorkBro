@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  analyze-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.8
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      - name: Check for secrets in code
+        run: |
+          if grep -r "sb_publishable_" lib/ --include="*.dart" | grep -v "local_config\|fromEnvironment\|empty_config"; then
+            echo "ERROR: Hardcoded Supabase key found!"
+            exit 1
+          fi
+          echo "No hardcoded secrets found ✓"
