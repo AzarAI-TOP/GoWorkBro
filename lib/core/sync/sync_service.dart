@@ -177,7 +177,7 @@ class SyncService {
         'id': countdown.id,
         'user_id': uid,
         'title': countdown.title,
-        'target_datetime': countdown.targetDateTime.toIso8601String(),
+        'target_datetime': countdown.targetDateTime.toUtc().toIso8601String(),
         'created_date': countdown.createdDate,
         'color_index': countdown.colorIndex,
         'updated_at': DateTime.now().toUtc().toIso8601String(),

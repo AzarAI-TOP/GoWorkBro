@@ -5,13 +5,15 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../sync/sync_compare.dart' show nowStamp;
+
 /// Owns the SQLite connection, schema and migrations.
 ///
 /// Domain CRUD lives in the repositories under
 /// `repositories/` (TodoRepository, HabitRepository, …) — this class only
 /// knows how to open/upgrade/reset the database file.
 class AppDatabase {
-  static const int schemaVersion = 6;
+  static const int schemaVersion = 7;
 
   static Database? _db;
 
@@ -240,6 +242,32 @@ class AppDatabase {
         CREATE UNIQUE INDEX IF NOT EXISTS idx_sleep_records_record_date_unique
         ON sleep_records(record_date)
       ''');
+    }
+    if (oldVersion < 7 && newVersion >= 7) {
+      // v7: countdowns store target_datetime as UTC ISO-8601 (Z suffix) so
+      // the instant survives cross-timezone sync. Legacy rows are
+      // timezone-naive local strings — re-encode as the same instant in UTC
+      // and bump updated_at so the UTC form wins LWW against stale cloud
+      // rows (otherwise the next pull would overwrite it back to naive).
+      final rows = await db.query(
+        'countdowns',
+        columns: ['id', 'target_datetime'],
+      );
+      for (final row in rows) {
+        final raw = row['target_datetime'] as String?;
+        if (raw == null) continue;
+        final parsed = DateTime.tryParse(raw);
+        if (parsed == null || parsed.isUtc) continue;
+        await db.update(
+          'countdowns',
+          {
+            'target_datetime': parsed.toUtc().toIso8601String(),
+            'updated_at': nowStamp(),
+          },
+          where: 'id = ?',
+          whereArgs: [row['id']],
+        );
+      }
     }
   }
 

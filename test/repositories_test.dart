@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:goworkbro/core/database/app_database.dart';
 import 'package:goworkbro/core/database/repositories/countdown_repository.dart';
 import 'package:goworkbro/core/database/repositories/focus_repository.dart';
@@ -23,6 +25,31 @@ void main() {
   tearDown(() async {
     await AppDatabase.closeForTesting();
     await tempDir.delete(recursive: true);
+  });
+
+  group('Todo model', () {
+    test('copyWith with explicit null clears completedDate', () {
+      final done = Todo.create(
+        title: 'x',
+        timingType: TimingTypeExtension.fromValue('forward'),
+      ).copyWith(isCompleted: true, completedDate: '2026-08-01T10:00:00');
+
+      final undone = done.copyWith(isCompleted: false, completedDate: null);
+
+      expect(undone.isCompleted, isFalse);
+      expect(undone.completedDate, isNull);
+    });
+
+    test('copyWith without completedDate keeps the existing value', () {
+      final done = Todo.create(
+        title: 'x',
+        timingType: TimingTypeExtension.fromValue('forward'),
+      ).copyWith(isCompleted: true, completedDate: '2026-08-01T10:00:00');
+
+      final renamed = done.copyWith(title: 'y');
+
+      expect(renamed.completedDate, '2026-08-01T10:00:00');
+    });
   });
 
   group('TodoRepository', () {
@@ -448,6 +475,96 @@ void main() {
 
       await CountdownRepository.deleteById(countdown.id);
       expect(await CountdownRepository.getAll(), isEmpty);
+    });
+
+    test('toMap stores target as UTC with Z suffix', () {
+      final local = DateTime(2026, 9, 1, 9, 30);
+      final countdown = Countdown.create(title: 'x', targetDateTime: local);
+      expect(
+        (countdown.toMap()['target_datetime'] as String).endsWith('Z'),
+        isTrue,
+      );
+    });
+
+    test('legacy naive string and UTC string parse to the same moment', () {
+      final local = DateTime(2026, 9, 1, 9, 30);
+      final naive = local.toIso8601String(); // no offset — legacy format
+      final utc = local.toUtc().toIso8601String(); // v7 format
+      expect(
+        Countdown.fromMap({
+          'id': 'a',
+          'title': 'x',
+          'target_datetime': naive,
+          'created_date': '2026-08-01',
+          'color_index': 0,
+          'updated_at': null,
+        }).targetDateTime.isAtSameMomentAs(
+          Countdown.fromMap({
+            'id': 'b',
+            'title': 'x',
+            'target_datetime': utc,
+            'created_date': '2026-08-01',
+            'color_index': 0,
+            'updated_at': null,
+          }).targetDateTime,
+        ),
+        isTrue,
+      );
+    });
+
+    test('roundtrip through toMap/fromMap preserves the instant', () {
+      final local = DateTime.now().add(const Duration(days: 10));
+      final countdown = Countdown.create(title: 'x', targetDateTime: local);
+      final restored = Countdown.fromMap(countdown.toMap());
+      expect(
+        restored.targetDateTime.isAtSameMomentAs(local),
+        isTrue,
+      );
+    });
+
+    test('v7 migration rewrites naive rows to UTC and bumps updated_at',
+        () async {
+      // Simulate a legacy row by writing raw values the way v6 did.
+      final db = await AppDatabase.database;
+      final naive = DateTime.now()
+          .add(const Duration(days: 5))
+          .toIso8601String();
+      await db.insert('countdowns', {
+        'id': 'legacy-1',
+        'title': 'legacy',
+        'target_datetime': naive,
+        'created_date': '2026-01-01T00:00:00.000',
+        'color_index': 0,
+        'updated_at': null,
+      });
+
+      // Re-open at the old version to force the upgrade path is not possible
+      // on a fresh DB, so exercise the migration body directly instead.
+      await AppDatabase.closeForTesting();
+
+      // Manually regress the stored row to naive form, then downgrade the
+      // user_version so reopening replays the v7 block.
+      final db2Path = p.join(tempDir.path, 'goworkbro.db');
+      final db2 = await databaseFactoryFfi.openDatabase(db2Path);
+      await db2.execute("UPDATE countdowns SET target_datetime = ?, updated_at = NULL WHERE id = 'legacy-1'", [naive]);
+      await db2.execute('PRAGMA user_version = 6');
+      await db2.close();
+
+      final reopened = await AppDatabase.database;
+      final row = (await reopened.query(
+        'countdowns',
+        where: "id = 'legacy-1'",
+      )).first;
+      final stored = row['target_datetime'] as String;
+      expect(stored.endsWith('Z'), isTrue,
+          reason: 'migration must rewrite naive strings to UTC');
+      expect(
+        DateTime.parse(stored).isAtSameMomentAs(DateTime.parse(naive)),
+        isTrue,
+        reason: 'rewritten value must preserve the original instant',
+      );
+      expect(row['updated_at'], isNotNull,
+          reason: 'migration must bump updated_at so LWW prefers the UTC form');
     });
   });
 

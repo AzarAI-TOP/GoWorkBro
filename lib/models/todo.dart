@@ -4,6 +4,14 @@ import 'package:goworkbro/models/timing_type.dart';
 
 const _uuid = Uuid();
 
+/// Sentinel for [Todo.copyWith]: distinguishes "not provided" from an
+/// explicit null (which clears the field).
+class _Unset {
+  const _Unset();
+}
+
+const _unset = _Unset();
+
 class Todo {
   final String id;
   final String title;
@@ -60,7 +68,7 @@ class Todo {
     bool? isCompleted,
     int? sortOrder,
     bool? keepTomorrow,
-    String? completedDate,
+    Object? completedDate = _unset,
     int? actualDurationSeconds,
     String? updatedAt,
   }) {
@@ -73,8 +81,11 @@ class Todo {
       sortOrder: sortOrder ?? this.sortOrder,
       keepTomorrow: keepTomorrow ?? this.keepTomorrow,
       createdDate: createdDate,
-      completedDate: completedDate ?? this.completedDate,
-      actualDurationSeconds: actualDurationSeconds ?? this.actualDurationSeconds,
+      completedDate: identical(completedDate, _unset)
+          ? this.completedDate
+          : completedDate as String?,
+      actualDurationSeconds:
+          actualDurationSeconds ?? this.actualDurationSeconds,
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }

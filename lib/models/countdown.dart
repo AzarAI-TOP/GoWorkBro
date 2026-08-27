@@ -5,6 +5,10 @@ const _uuid = Uuid();
 class Countdown {
   final String id;
   final String title;
+
+  /// Target moment. Always normalized to the device's local zone on read
+  /// ([Countdown.fromMap]) and stored/synced as UTC ISO-8601 with a `Z`
+  /// suffix, so the instant survives cross-timezone sync.
   final DateTime targetDateTime;
   final String createdDate;
   final int colorIndex;
@@ -43,7 +47,7 @@ class Countdown {
   Map<String, dynamic> toMap() => {
     'id': id,
     'title': title,
-    'target_datetime': targetDateTime.toIso8601String(),
+    'target_datetime': targetDateTime.toUtc().toIso8601String(),
     'created_date': createdDate,
     'color_index': colorIndex,
     'updated_at': updatedAt,
@@ -52,7 +56,10 @@ class Countdown {
   factory Countdown.fromMap(Map<String, dynamic> m) => Countdown(
     id: m['id'] as String,
     title: m['title'] as String,
-    targetDateTime: DateTime.parse(m['target_datetime'] as String),
+    // Legacy rows are timezone-naive local strings — DateTime.parse reads
+    // them in this device's zone (no-op normalization). New UTC rows get
+    // converted to local wall-clock so pickers/formatters stay correct.
+    targetDateTime: DateTime.parse(m['target_datetime'] as String).toLocal(),
     createdDate: m['created_date'] as String,
     colorIndex: m['color_index'] as int,
     updatedAt: m['updated_at'] as String?,
