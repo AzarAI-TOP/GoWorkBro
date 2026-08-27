@@ -6,6 +6,8 @@ All notable changes to GoWorkBro are documented here. Format follows
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-08-27
+
 ### Changed
 
 - **熬夜模式重构为固定 04:00 边界**：开启后，凌晨 4 点前的活动统一计入前一天，4 点起归当天——不再依赖睡眠打卡闭合（原"打卡闭合 + 边界标记 + 12 点安全网"状态机整体删除）。待办/习惯/专注/统计的日期归属在任何时刻确定；睡眠打卡记录与统计不受影响。
@@ -14,6 +16,20 @@ All notable changes to GoWorkBro are documented here. Format follows
 ### Removed
 
 - 忘打卡提示卡、`late_night_closed_through` 设置及其同步特判（旧数据保留为无害残留）。
+
+### Fixed
+
+- **取消完成时间戳残留**：`Todo.copyWith` 现支持显式清空 `completedDate`——取消完成后不再残留旧完成时间，已完成区排序恢复正确。
+- **倒计时跨时区偏移**：目标时间统一以 UTC（Z 后缀）存储与云端同步，读取时归一化为本地时区；存量本地数据自动等值迁移（DB v7），跨设备/跨时区不再偏移数小时。
+
+### Security
+
+- **新闻写入仅限 service_role**：撤销 `anon` 对 `upsert_ustc_news` 的执行权限，泄露的 publishable key 不再能改写期刊内容；上传脚本改用环境变量注入的 service key，仓库内不再内置任何密钥。全部 API 密钥已轮换，历史泄露密钥作废。
+
+### Build
+
+- **Android 正式签名**：release 构建改用独立 keystore（`key.properties`/`*.jks` 均不入库），告别 debug 签名。
+- **CI 回归**：GitHub Actions 恢复并升级为 analyze + 全量测试 + 硬编码密钥扫描。
 
 ## [1.1.2] - 2026-08-16
 
