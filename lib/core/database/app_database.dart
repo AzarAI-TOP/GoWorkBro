@@ -13,7 +13,7 @@ import '../sync/sync_compare.dart' show nowStamp;
 /// `repositories/` (TodoRepository, HabitRepository, …) — this class only
 /// knows how to open/upgrade/reset the database file.
 class AppDatabase {
-  static const int schemaVersion = 8;
+  static const int schemaVersion = 9;
 
   static Database? _db;
 
@@ -147,6 +147,14 @@ class AppDatabase {
         table_name TEXT NOT NULL,
         row_id TEXT NOT NULL,
         queued_at TEXT NOT NULL,
+        PRIMARY KEY (table_name, row_id)
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE synced_remote_ids (
+        table_name TEXT NOT NULL,
+        row_id TEXT NOT NULL,
         PRIMARY KEY (table_name, row_id)
       )
     ''');
@@ -306,6 +314,19 @@ class AppDatabase {
         ON focus_sessions(session_date)
       ''');
     }
+    if (oldVersion < 9 && newVersion >= 9) {
+      // v9: cross-device delete propagation — the set of remote row ids seen
+      // by the last successful pull, used to detect rows deleted on another
+      // device (seen before, absent now) and remove them locally instead of
+      // re-pushing them to the cloud.
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS synced_remote_ids (
+          table_name TEXT NOT NULL,
+          row_id TEXT NOT NULL,
+          PRIMARY KEY (table_name, row_id)
+        )
+      ''');
+    }
   }
 
   static Future<void> _deduplicateSleepRecords(
@@ -390,6 +411,7 @@ class AppDatabase {
       await txn.execute('DROP TABLE IF EXISTS user_settings');
       await txn.execute('DROP TABLE IF EXISTS ustc_news_cache');
       await txn.execute('DROP TABLE IF EXISTS pending_deletes');
+      await txn.execute('DROP TABLE IF EXISTS synced_remote_ids');
       await _onCreate(txn, schemaVersion);
     });
   }

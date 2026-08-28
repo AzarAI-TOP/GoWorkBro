@@ -260,6 +260,9 @@ class S {
   String get done => locale == AppLocale.zh ? '已完成' : 'Done';
   String get timerNotStarted =>
       locale == AppLocale.zh ? '尚未开始计时' : 'Timer has not started';
+  String get recordSaveFailed => locale == AppLocale.zh
+      ? '记录保存失败，请重试'
+      : 'Failed to save the record — please retry';
   String get confirmExitTimer =>
       locale == AppLocale.zh ? '确定退出计时？' : 'Exit the timer?';
   String get todoDone =>

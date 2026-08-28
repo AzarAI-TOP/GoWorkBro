@@ -17,6 +17,17 @@ abstract final class SleepRepository {
     await db.delete('sleep_records', where: 'id = ?', whereArgs: [id]);
   }
 
+  /// Deletes the row for [recordDate] — the business key. Used by pull-side
+  /// delete reconciliation, which only knows the key, not the row id.
+  static Future<void> deleteByRecordDate(String recordDate) async {
+    final db = await AppDatabase.database;
+    await db.delete(
+      'sleep_records',
+      where: 'record_date = ?',
+      whereArgs: [recordDate],
+    );
+  }
+
   static Future<SleepRecord?> getById(String id) async {
     final db = await AppDatabase.database;
     final maps = await db.query(

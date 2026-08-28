@@ -149,8 +149,10 @@ class AppProvider extends ChangeNotifier {
     await refreshAll();
 
     if (syncReady) {
-      // Self-heal legacy avatar rows (issue #12): a device-local avatar_path
-      // is migrated to Storage and pushed as an object path.
+      // Profile keys are outbox-protected now: only dirty (recently edited)
+      // values are pushed, with an LWW check against the remote row. A
+      // legacy unstamped avatar_path/user_name is treated as older than any
+      // cloud row and is adopted from the pull instead of being pushed.
       unawaited(SyncService.pushUserSettings());
       _pushAll();
       // Derive the profile after the remote profile has been applied.
@@ -206,11 +208,17 @@ class AppProvider extends ChangeNotifier {
           ? email.split('@').first
           : '离线用户';
       if (displayName != currentName) {
-        await SettingsRepository.set('user_name', displayName);
-        _userName = displayName;
         if (fromMeta) {
-          unawaited(SyncService.pushUserSettings());
+          // A real profile name is an outbox-tracked edit — push promptly.
+          await SettingsRepository.setSyncedLocal('user_name', displayName);
+          unawaited(SyncService.pushUserSettings(onlyDirty: true));
+        } else {
+          // The email-prefix fallback stays device-local (unstamped, so any
+          // cloud row wins the LWW comparison) — it must never clobber a
+          // custom name pushed by another device.
+          await SettingsRepository.set('user_name', displayName);
         }
+        _userName = displayName;
       }
     }
 
@@ -764,9 +772,11 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> setUserName(String name) async {
     _userName = name;
-    await SettingsRepository.set('user_name', name);
+    // Outbox-tracked edit: stamped + dirty, so an offline rename survives
+    // the next pull and wins (or cleanly loses) the LWW comparison.
+    await SettingsRepository.setSyncedLocal('user_name', name);
     notifyListeners();
-    unawaited(SyncService.pushUserSettings());
+    unawaited(SyncService.pushUserSettings(onlyDirty: true));
   }
 
   Future<void> setLateNightModeEnabled(bool enabled) async {
@@ -788,13 +798,10 @@ class AppProvider extends ChangeNotifier {
   Future<void> setAvatarPath(String? path) async {
     _avatarPath = path;
     if (path == null || path.isEmpty) {
-      final db = await AppDatabase.database;
       final oldStoragePath = await SettingsRepository.get('avatar_path');
-      await db.delete(
-        'user_settings',
-        where: 'key IN (?, ?)',
-        whereArgs: ['avatar_path', 'avatar_local_path'],
-      );
+      await SettingsRepository.delete('avatar_local_path');
+      // Also drops the outbox stamp/dirty markers for the key.
+      await SettingsRepository.deleteSyncedState('avatar_path');
       // Remove the cloud copy too — the realtime DELETE propagates to the
       // other device. A legacy local-path value cannot be a storage path.
       if (oldStoragePath != null && AvatarSync.isStoragePath(oldStoragePath)) {
@@ -805,6 +812,10 @@ class AppProvider extends ChangeNotifier {
     } else {
       // Device-local display cache + Storage upload for cross-device sync.
       await SettingsRepository.set('avatar_local_path', path);
+      // Track the pick as a pending synced edit (the value migrates to a
+      // Storage object path on push) so a pull of an older cloud avatar
+      // cannot roll the local one back while the upload is still pending.
+      await SettingsRepository.setSyncedLocal('avatar_path', path);
       unawaited(SyncService.uploadAvatarAndPush(path));
     }
     notifyListeners();

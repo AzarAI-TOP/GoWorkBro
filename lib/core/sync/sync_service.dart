@@ -5,6 +5,7 @@ import 'package:goworkbro/models/models.dart';
 import 'package:goworkbro/core/config/supabase_config.dart';
 import 'package:goworkbro/core/database/repositories/pending_deletes_repository.dart';
 import 'package:goworkbro/core/database/repositories/settings_repository.dart';
+import 'package:goworkbro/core/database/repositories/synced_ids_repository.dart';
 import 'package:goworkbro/core/sync/avatar_sync.dart';
 import 'package:goworkbro/core/sync/sync_compare.dart';
 import 'package:goworkbro/core/sync/sync_table_registry.dart';
@@ -90,7 +91,7 @@ class SyncService {
     await retryPendingDeletes();
     for (final table in syncTables) {
       try {
-        await _pullTable(table.name, table.applyRemote);
+        await _pullTable(table);
       } catch (e) {
         debugPrint('Pull ${table.name} failed: $e');
       }
@@ -114,21 +115,61 @@ class SyncService {
     }
   }
 
-  static Future<void> _pullTable(
-    String table,
-    Future<void> Function(Map<String, dynamic> row) applyRemote,
-  ) async {
+  static Future<void> _pullTable(SyncTable table) async {
     final uid = currentUserId;
     if (uid == null) return;
-    final response = await _client!.from(table).select().eq('user_id', uid);
-    for (final row in response) {
-      // One malformed row must not discard the rest of the table.
-      try {
-        await applyRemote(row);
-      } catch (e) {
-        debugPrint('Apply remote row in $table failed: $e');
+    final response = await _client!
+        .from(table.name)
+        .select()
+        .eq('user_id', uid)
+        .count();
+    final rows = response.data;
+
+    if (table.reconcileDeletes) {
+      // Reconcile deletes only when the response provably holds the FULL
+      // table: a truncated body (server-side max-rows) must never be
+      // mistaken for a mass remote deletion.
+      if (response.count <= rows.length) {
+        await reconcileRemoteDeletes(
+          table,
+          {for (final row in rows) row[table.reconcileKey] as String},
+        );
       }
     }
+
+    for (final row in rows) {
+      // One malformed row must not discard the rest of the table.
+      try {
+        await table.applyRemote(row);
+      } catch (e) {
+        debugPrint('Apply remote row in ${table.name} failed: $e');
+      }
+    }
+  }
+
+  /// Deletes local rows that vanished from the remote table since the last
+  /// successful pull. This is what makes deletes propagate across devices:
+  /// without it, an offline device that missed the delete would happily
+  /// re-upload the row on its next pushAll.
+  ///
+  /// Only ids recorded by a PREVIOUS pull are eligible — locally created
+  /// rows have never been seen remotely and stay untouched. Delete wins over
+  /// concurrent local edits of the same row (standard LWW-delete choice).
+  @visibleForTesting
+  static Future<void> reconcileRemoteDeletes(
+    SyncTable table,
+    Set<String> remoteKeys,
+  ) async {
+    final syncedKeys = await SyncedIdsRepository.getIds(table.name);
+    final vanished = syncedKeys.difference(remoteKeys);
+    for (final key in vanished) {
+      try {
+        await table.applyDelete!({table.reconcileKey: key});
+      } catch (e) {
+        debugPrint('Propagate remote delete in ${table.name} ($key): $e');
+      }
+    }
+    await SyncedIdsRepository.replaceAll(table.name, remoteKeys);
   }
 
   // ============ Push ============
@@ -513,14 +554,16 @@ class SyncService {
   // ============ Avatar ============
 
   /// Upload the picked avatar file to Storage and push the object path.
-  /// On failure (bucket missing / offline) the avatar stays device-local.
+  /// On failure (bucket missing / offline) the dirty marker from the pick
+  /// stays set, so the periodic push retries the upload — the avatar never
+  /// silently reverts to the old cloud copy.
   static Future<void> uploadAvatarAndPush(String localPath) async {
     if (_client == null) return;
     final uid = currentUserId;
     if (uid == null) return;
     try {
       final storagePath = await AvatarSync.upload(_client!, uid, localPath);
-      await SettingsRepository.set('avatar_path', storagePath);
+      await SettingsRepository.setSyncedLocal('avatar_path', storagePath);
       await pushUserSettings();
     } catch (e) {
       debugPrint('Avatar upload failed: $e');

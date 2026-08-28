@@ -281,13 +281,35 @@ void main() {
         ),
         isFalse,
       );
+      // user_name and avatar_path are outbox-protected like late_night_mode:
+      // a clean value is never blindly flushed to the cloud, and a dirty
+      // one only goes out when it wins the LWW comparison.
       expect(
         SyncService.shouldPushUserSetting(
           key: 'user_name',
           isDirty: false,
           onlyDirty: false,
         ),
+        isFalse,
+      );
+      expect(
+        SyncService.shouldPushUserSetting(
+          key: 'user_name',
+          isDirty: true,
+          onlyDirty: false,
+          localUpdatedAt: '2026-08-17T12:00:00.000Z',
+          remoteUpdatedAt: '2026-08-17T11:00:00.000Z',
+          remoteInventoryAvailable: true,
+        ),
         isTrue,
+      );
+      expect(
+        SyncService.shouldPushUserSetting(
+          key: 'avatar_path',
+          isDirty: false,
+          onlyDirty: false,
+        ),
+        isFalse,
       );
       expect(
         SyncService.shouldPushUserSetting(

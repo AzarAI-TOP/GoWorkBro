@@ -19,7 +19,13 @@ const profileKeys = [
   'late_night_mode',
 ];
 
+/// Profile keys whose local edits are protected by the durable outbox:
+/// a dirty marker plus a local timestamp, compared against the remote row
+/// before either side overwrites the other. Without this, an offline rename
+/// or avatar change would be silently rolled back by the next pull.
 const outboxProtectedProfileKeys = {
+  'user_name',
+  'avatar_path',
   'late_night_mode',
 };
 
@@ -34,6 +40,8 @@ class SyncTable {
     required this.applyRemote,
     this.applyDelete,
     this.event = PostgresChangeEvent.all,
+    this.reconcileDeletes = false,
+    this.reconcileKey = 'id',
   });
 
   final String name;
@@ -44,6 +52,18 @@ class SyncTable {
 
   /// Applies a remote DELETE (the payload's oldRecord) to the local database.
   final Future<void> Function(Map<String, dynamic> oldRow)? applyDelete;
+
+  /// Whether pull reconciles remotely-deleted rows: keys seen in a previous
+  /// pull but absent from the current one are deleted locally (via
+  /// [applyDelete]) instead of being re-pushed by the next pushAll. Only
+  /// valid for data tables with a stable business key.
+  final bool reconcileDeletes;
+
+  /// The remote column whose values identify rows for delete
+  /// reconciliation. Defaults to the row id; sleep_records uses
+  /// record_date because a same-date edit from another device rewrites the
+  /// remote row id (record_date is the true business key there).
+  final String reconcileKey;
 }
 
 /// All tables participating in cloud sync, in pull order.
@@ -51,6 +71,7 @@ final List<SyncTable> syncTables = [
   SyncTable(
     name: 'todos',
     applyRemote: TodoRepository.upsertFromRemote,
+    reconcileDeletes: true,
     applyDelete: (oldRow) async {
       final id = oldRow['id'] as String;
       await TodoRepository.deleteById(id);
@@ -62,6 +83,7 @@ final List<SyncTable> syncTables = [
   SyncTable(
     name: 'habits',
     applyRemote: HabitRepository.upsertFromRemote,
+    reconcileDeletes: true,
     applyDelete: (oldRow) async {
       final id = oldRow['id'] as String;
       await HabitRepository.deleteById(id);
@@ -71,6 +93,7 @@ final List<SyncTable> syncTables = [
   SyncTable(
     name: 'countdowns',
     applyRemote: CountdownRepository.upsertFromRemote,
+    reconcileDeletes: true,
     applyDelete: (oldRow) async {
       final id = oldRow['id'] as String;
       await CountdownRepository.deleteById(id);
@@ -80,12 +103,27 @@ final List<SyncTable> syncTables = [
   SyncTable(
     name: 'sleep_records',
     applyRemote: SleepRepository.upsertFromRemote,
-    applyDelete: (oldRow) => SleepRepository.deleteById(oldRow['id'] as String),
+    reconcileDeletes: true,
+    reconcileKey: 'record_date',
+    // Realtime DELETE payloads carry the full old row (id present); the
+    // pull-side reconciliation passes only the business key.
+    applyDelete: (oldRow) async {
+      final id = oldRow['id'] as String?;
+      if (id != null) {
+        await SleepRepository.deleteById(id);
+        return;
+      }
+      final recordDate = oldRow['record_date'] as String?;
+      if (recordDate != null) {
+        await SleepRepository.deleteByRecordDate(recordDate);
+      }
+    },
   ),
   SyncTable(
     name: 'focus_sessions',
     event: PostgresChangeEvent.insert,
     applyRemote: FocusRepository.insertIfNotExists,
+    reconcileDeletes: true,
     applyDelete: (oldRow) => FocusRepository.deleteById(oldRow['id'] as String),
   ),
   // user_settings carries many device-local keys; only user-facing settings
@@ -102,7 +140,13 @@ final List<SyncTable> syncTables = [
 
       if (key == 'user_name') {
         if (value != null && value.isNotEmpty) {
-          await SettingsRepository.set(key, value);
+          // LWW against the local outbox stamp: a rename made while offline
+          // must not be rolled back by a stale cloud value.
+          await SettingsRepository.applySyncedRemote(
+            key: key,
+            value: value,
+            updatedAt: updatedAt,
+          );
         }
         return;
       }
@@ -131,9 +175,16 @@ final List<SyncTable> syncTables = [
           break;
         case AvatarApplyAction.apply:
           // applyDecision only returns `apply` for a valid Storage path, so
-          // the value is non-null here.
+          // the value is non-null here. LWW-gated: a locally picked avatar
+          // that has not been uploaded yet keeps winning over older cloud
+          // rows until its own push lands.
           final path = value!;
-          await SettingsRepository.set('avatar_path', path);
+          final accepted = await SettingsRepository.applySyncedRemote(
+            key: 'avatar_path',
+            value: path,
+            updatedAt: updatedAt,
+          );
+          if (!accepted) break;
           try {
             final local = await AvatarSync.download(
               Supabase.instance.client,

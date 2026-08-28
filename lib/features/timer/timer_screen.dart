@@ -24,6 +24,7 @@ class _TimerScreenState extends State<TimerScreen> with WidgetsBindingObserver {
   Timer? _timer;
   bool _isRunning = false;
   bool _isFinished = false;
+  bool _sessionRecorded = false;
   DateTime? _backgroundedAt;
 
   @override
@@ -62,7 +63,7 @@ class _TimerScreenState extends State<TimerScreen> with WidgetsBindingObserver {
         setState(() {
           _isFinished = true;
         });
-        _recordSessionAndComplete();
+        unawaited(_recordSessionAndComplete());
       } else {
         setState(() {});
         _start();
@@ -75,16 +76,19 @@ class _TimerScreenState extends State<TimerScreen> with WidgetsBindingObserver {
     setState(() => _isRunning = true);
     HapticFeedback.lightImpact();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      setState(() {
-        _elapsedSeconds++;
-        if (widget.todo.timingType == TimingType.backward &&
-            _elapsedSeconds >= _targetSeconds) {
-          _timer?.cancel();
+      if (!mounted) return;
+      _elapsedSeconds++;
+      if (widget.todo.timingType == TimingType.backward &&
+          _elapsedSeconds >= _targetSeconds) {
+        _timer?.cancel();
+        setState(() {
           _isRunning = false;
           _isFinished = true;
-          _recordSessionAndComplete();
-        }
-      });
+        });
+        unawaited(_recordSessionAndComplete());
+        return;
+      }
+      setState(() {});
     });
   }
 
@@ -94,10 +98,10 @@ class _TimerScreenState extends State<TimerScreen> with WidgetsBindingObserver {
     setState(() => _isRunning = false);
   }
 
-  void _finish() {
+  Future<void> _finish() async {
     if (_elapsedSeconds == 0) {
       // #9: Show feedback instead of silently popping
-      HapticFeedback.heavyImpact();
+      unawaited(HapticFeedback.heavyImpact());
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -109,17 +113,22 @@ class _TimerScreenState extends State<TimerScreen> with WidgetsBindingObserver {
       return;
     }
     _timer?.cancel();
-    HapticFeedback.mediumImpact();
+    unawaited(HapticFeedback.mediumImpact());
     setState(() {
       _isRunning = false;
       _isFinished = true;
     });
-    _recordSessionAndComplete();
+    await _recordSessionAndComplete();
   }
 
   /// Record focus session AND mark the todo as completed.
   /// #10: Read current todo title from provider to avoid stale snapshot.
-  void _recordSessionAndComplete() {
+  ///
+  /// Both writes are awaited — a lost DB write must be visible to the user,
+  /// not silently dropped with the data gone. On failure the finished state
+  /// is reverted so 停止/记录 can be pressed again; the session half of the
+  /// pair is remembered so a retry cannot double-record it.
+  Future<void> _recordSessionAndComplete() async {
     final provider = context.read<AppProvider>();
 
     // #10: Use current title from provider if available
@@ -128,16 +137,34 @@ class _TimerScreenState extends State<TimerScreen> with WidgetsBindingObserver {
         .firstOrNull;
     final currentTitle = currentTodo?.title ?? widget.todo.title;
 
-    provider.recordFocusSession(
-      FocusSession.create(
-        todoId: widget.todo.id,
-        sourceType: 'todo',
-        sourceTitle: currentTitle,
-        durationSeconds: _elapsedSeconds,
-      ),
-    );
-
-    provider.completeTodoWithDuration(widget.todo.id, _elapsedSeconds);
+    try {
+      if (!_sessionRecorded) {
+        await provider.recordFocusSession(
+          FocusSession.create(
+            todoId: widget.todo.id,
+            sourceType: 'todo',
+            sourceTitle: currentTitle,
+            durationSeconds: _elapsedSeconds,
+          ),
+        );
+        _sessionRecorded = true;
+      }
+      await provider.completeTodoWithDuration(widget.todo.id, _elapsedSeconds);
+    } catch (e) {
+      debugPrint('Record focus session/todo completion failed: $e');
+      if (!mounted) return;
+      setState(() {
+        _isRunning = false;
+        _isFinished = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            S.of(context.read<AppLocaleProvider>().locale).recordSaveFailed,
+          ),
+        ),
+      );
+    }
   }
 
   String _formatTime(int seconds) {
@@ -388,10 +415,12 @@ class _TimerScreenState extends State<TimerScreen> with WidgetsBindingObserver {
           ),
           if (_elapsedSeconds > 0)
             TextButton(
-              onPressed: () {
+              // Stay on the timer screen when saving failed (reverted
+              // _isFinished) so the user can retry instead of losing it.
+              onPressed: () async {
                 Navigator.pop(ctx);
-                _finish();
-                Navigator.pop(context);
+                await _finish();
+                if (mounted && _isFinished) Navigator.pop(context);
               },
               child: Text(s.recordAndExit),
             ),
