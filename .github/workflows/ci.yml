@@ -22,7 +22,9 @@ jobs:
           # Scan the whole tracked repo (not just lib/) for publishable and
           # secret keys plus legacy JWT-shaped anon keys — the historical
           # leak was in scripts/, which the old lib/-only scan missed.
-          if git grep -nE "sb_publishable_|sb_secret_|eyJ[A-Za-z0-9_-]{20,}" -- . ':(exclude)pubspec.lock' | grep -v "fromEnvironment\|empty_config"; then
+          # Patterns require a token after the prefix so documentation that
+          # merely mentions a key kind does not false-positive.
+          if git grep -nE "sb_publishable_[A-Za-z0-9_-]{10,}|sb_secret_[A-Za-z0-9_-]{10,}|eyJ[A-Za-z0-9_-]{20,}" -- . ':(exclude)pubspec.lock' | grep -v "fromEnvironment\|empty_config"; then
             echo "ERROR: Hardcoded Supabase key found!"
             exit 1
           fi
