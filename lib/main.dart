@@ -5,11 +5,16 @@ import 'package:window_manager/window_manager.dart';
 
 import 'package:goworkbro/core/config/supabase_config.dart';
 import 'package:goworkbro/core/l10n/app_locale.dart';
+import 'package:goworkbro/services/error_log_service.dart';
 import 'package:goworkbro/services/tray_service.dart';
 import 'package:goworkbro/app/app.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Uncaught errors must leave a trace on disk — release builds otherwise
+  // swallow them silently.
+  ErrorLogService.install();
 
   // Must be initialized before window_manager on Windows
   if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {

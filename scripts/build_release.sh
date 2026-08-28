@@ -42,6 +42,19 @@ build_windows() {
   echo "✅ Windows build complete: build/windows/x64/runner/Release/goworkbro.exe"
 }
 
+# The in-app updater refuses to run any installer whose SHA-256 sidecar is
+# missing, so every uploaded asset MUST be accompanied by its .sha256 file.
+hash_release() {
+  local installer="build/installer/GoWorkBro-Setup-v${VERSION}.exe"
+  if [ -f "$installer" ]; then
+    sha256sum "$installer" > "${installer}.sha256"
+    echo "🔢 SHA-256 sidecar generated: ${installer}.sha256"
+    echo "   ⚠️  Upload BOTH files to the GitHub release."
+  else
+    echo "⚠️  Installer not found at $installer — build it (ISCC) before releasing."
+  fi
+}
+
 build_apk() {
   echo "🏗️  Building Android APK..."
   export JAVA_HOME="C:/Program Files/Eclipse Adoptium/jdk-21.0.11.10-hotspot"
@@ -50,8 +63,8 @@ build_apk() {
 }
 
 case "$TARGET" in
-  windows) build_windows ;;
+  windows) build_windows; hash_release ;;
   apk)     build_apk ;;
-  all)     build_windows; build_apk ;;
+  all)     build_windows; build_apk; hash_release ;;
   *)       echo "Usage: bash scripts/build_release.sh [windows|apk|all]"; exit 1 ;;
 esac

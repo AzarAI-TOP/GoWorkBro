@@ -56,3 +56,6 @@ __pycache__/
 
 # Hermes agent workspace
 .hermes/
+
+# Local agent workspace
+.zcode/

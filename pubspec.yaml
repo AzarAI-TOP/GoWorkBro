@@ -24,8 +24,9 @@ dependencies:
   fl_chart: ^0.69.0
 
   # Markdown rendering for USTC news
-  flutter_markdown: ^0.7.4+3
-  markdown: ^7.2.2
+  # (flutter_markdown is discontinued; flutter_markdown_plus is the
+  # community continuation with a drop-in API)
+  flutter_markdown_plus: ^1.0.0
 
   # HTTP for backend API
   http: ^1.2.2

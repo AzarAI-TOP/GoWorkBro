@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
@@ -90,6 +91,11 @@ class UpdateService {
   }
 
   /// Download and launch the MSI installer (Windows only).
+  ///
+  /// Integrity: every release ships a SHA-256 sidecar (`<asset>.sha256`)
+  /// next to the installer; the download is streamed to disk while hashing
+  /// and refused unless it matches. A release without a sidecar (legacy or
+  /// tampered) is rejected — an unverified executable must never run.
   static Future<void> downloadAndInstall(
     BuildContext context,
     String msiUrl,
@@ -110,20 +116,50 @@ class UpdateService {
         ),
       );
 
-      // Download to temp
-      final res = await http.get(Uri.parse(msiUrl));
+      final expectedDigest = await _fetchSha256Sidecar(msiUrl);
+
       final tempDir = Directory.systemTemp;
       final isExe = Uri.parse(msiUrl).path.toLowerCase().endsWith('.exe');
       final filePath =
           '${tempDir.path}\\GoWorkBro-Update.${isExe ? 'exe' : 'msi'}';
       final file = File(filePath);
-      await file.writeAsBytes(res.bodyBytes);
+
+      // Stream to disk (no full installer in memory) while hashing.
+      final client = http.Client();
+      try {
+        final response = await client
+            .send(http.Request('GET', Uri.parse(msiUrl)))
+            .timeout(const Duration(seconds: 30));
+        if (response.statusCode != 200) {
+          throw Exception('HTTP ${response.statusCode}');
+        }
+        final digestSink = _DigestCollector();
+        final hashInput = sha256.startChunkedConversion(digestSink);
+        final sink = file.openWrite();
+        try {
+          await for (final chunk in response.stream) {
+            sink.add(chunk);
+            hashInput.add(chunk);
+          }
+          await sink.flush();
+        } finally {
+          await sink.close();
+          hashInput.close();
+        }
+        final actualDigest = digestSink.value.toString();
+        if (actualDigest != expectedDigest) {
+          await file.delete();
+          throw Exception('SHA-256 mismatch');
+        }
+      } finally {
+        client.close();
+      }
 
       if (!context.mounted) return;
       // Close dialog
       Navigator.of(context).pop();
 
-      // Launch the MSI installer
+      // Launch the verified installer
       if (isExe) {
         await Process.start(filePath, const [], mode: ProcessStartMode.detached);
       } else {
@@ -141,6 +177,22 @@ class UpdateService {
         context,
       ).showSnackBar(SnackBar(content: Text(s.downloadFailed(e))));
     }
+  }
+
+  /// Fetches the `<assetUrl>.sha256` sidecar published with each release and
+  /// validates its shape. Missing/malformed sidecar = refused download.
+  static Future<String> _fetchSha256Sidecar(String assetUrl) async {
+    final res = await http
+        .get(Uri.parse('$assetUrl.sha256'))
+        .timeout(const Duration(seconds: 15));
+    if (res.statusCode != 200) {
+      throw Exception('SHA-256 checksum file missing (HTTP ${res.statusCode})');
+    }
+    final digest = res.body.trim().split(RegExp(r'\s+')).first.toLowerCase();
+    if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(digest)) {
+      throw Exception('SHA-256 checksum file malformed');
+    }
+    return digest;
   }
 
   /// Show update available dialog.
@@ -212,6 +264,17 @@ class UpdateInfo {
     this.msiUrl,
     this.apkUrl,
   });
+}
+
+/// Captures the single [Digest] emitted by a chunked hash conversion.
+class _DigestCollector implements Sink<Digest> {
+  Digest? value;
+
+  @override
+  void add(Digest data) => value = data;
+
+  @override
+  void close() {}
 }
 
 class _DownloadDialog extends StatelessWidget {
