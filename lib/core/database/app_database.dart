@@ -13,7 +13,7 @@ import '../sync/sync_compare.dart' show nowStamp;
 /// `repositories/` (TodoRepository, HabitRepository, …) — this class only
 /// knows how to open/upgrade/reset the database file.
 class AppDatabase {
-  static const int schemaVersion = 7;
+  static const int schemaVersion = 8;
 
   static Database? _db;
 
@@ -46,12 +46,18 @@ class AppDatabase {
         version: schemaVersion,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
+        // An older app version would leave newer columns behind while
+        // user_version shrinks; re-upgrading would then fail with
+        // "duplicate column name" and lock the database forever. Wiping on
+        // downgrade is the only recoverable choice for a sync-backed app —
+        // the cloud is the source of truth once the user signs in again.
+        onDowngrade: onDatabaseDowngradeDelete,
       ),
     );
     return _db!;
   }
 
-  static Future<void> _onCreate(Database db, int version) async {
+  static Future<void> _onCreate(DatabaseExecutor db, int version) async {
     await db.execute('''
       CREATE TABLE todos (
         id TEXT PRIMARY KEY,
@@ -96,6 +102,11 @@ class AppDatabase {
     ''');
 
     await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_focus_sessions_session_date
+      ON focus_sessions(session_date)
+    ''');
+
+    await db.execute('''
       CREATE TABLE countdowns (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
@@ -128,6 +139,15 @@ class AppDatabase {
       CREATE TABLE user_settings (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE pending_deletes (
+        table_name TEXT NOT NULL,
+        row_id TEXT NOT NULL,
+        queued_at TEXT NOT NULL,
+        PRIMARY KEY (table_name, row_id)
       )
     ''');
 
@@ -269,6 +289,23 @@ class AppDatabase {
         );
       }
     }
+    if (oldVersion < 8 && newVersion >= 8) {
+      // v8: delete tombstones — a locally deleted row must not be resurrected
+      // by the next pull while its remote delete is still in flight (offline
+      // delete, failed request). Cleared once the remote delete is confirmed.
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS pending_deletes (
+          table_name TEXT NOT NULL,
+          row_id TEXT NOT NULL,
+          queued_at TEXT NOT NULL,
+          PRIMARY KEY (table_name, row_id)
+        )
+      ''');
+      await db.execute('''
+        CREATE INDEX IF NOT EXISTS idx_focus_sessions_session_date
+        ON focus_sessions(session_date)
+      ''');
+    }
   }
 
   static Future<void> _deduplicateSleepRecords(
@@ -338,6 +375,10 @@ class AppDatabase {
   /// Drop all tables and recreate the database from scratch.
   /// Used by "delete all data" — wipes todos, habits, focus sessions,
   /// countdowns, sleep records, and user settings.
+  ///
+  /// The whole rebuild runs inside one transaction: a crash halfway through
+  /// must not leave a schema-less database with a current user_version
+  /// (that state would never be repaired by onCreate/onUpgrade).
   static Future<void> deleteAllData() async {
     final db = await database;
     await db.transaction((txn) async {
@@ -348,7 +389,8 @@ class AppDatabase {
       await txn.execute('DROP TABLE IF EXISTS sleep_records');
       await txn.execute('DROP TABLE IF EXISTS user_settings');
       await txn.execute('DROP TABLE IF EXISTS ustc_news_cache');
+      await txn.execute('DROP TABLE IF EXISTS pending_deletes');
+      await _onCreate(txn, schemaVersion);
     });
-    await _onCreate(db, schemaVersion);
   }
 }

@@ -117,22 +117,11 @@ abstract final class SleepRepository {
   }
 
   /// Upsert a row pushed by the cloud sync (schema-normalized).
+  /// Read-compare-write runs in one transaction so a concurrent local edit
+  /// cannot be overwritten by a stale check result.
   static Future<void> upsertFromRemote(Map<String, dynamic> row) async {
     final db = await AppDatabase.database;
     final recordDate = row['record_date'] as String;
-    final existing = await db.query(
-      'sleep_records',
-      columns: ['id', 'updated_at'],
-      where: 'record_date = ?',
-      whereArgs: [recordDate],
-    );
-    if (existing.isNotEmpty &&
-        isLocalNewer(
-          existing.first['updated_at'] as String?,
-          row['updated_at'] as String?,
-        )) {
-      return;
-    }
     final normalized = <String, Object?>{
       'id': row['id'],
       'record_date': recordDate,
@@ -144,12 +133,25 @@ abstract final class SleepRepository {
       'updated_at': row['updated_at'],
     };
     await db.transaction((txn) async {
+      final existing = await txn.query(
+        'sleep_records',
+        columns: ['id', 'updated_at'],
+        where: 'record_date = ?',
+        whereArgs: [recordDate],
+      );
+      if (existing.isNotEmpty &&
+          isLocalNewer(
+            existing.first['updated_at'] as String?,
+            row['updated_at'] as String?,
+          )) {
+        return;
+      }
       // record_date is the business key. Adopt the cloud UUID so subsequent
       // realtime updates/deletes target the same row on every device.
       await txn.delete(
         'sleep_records',
         where: 'record_date = ? AND id <> ?',
-        whereArgs: [normalized['record_date'], normalized['id']],
+        whereArgs: [recordDate, normalized['id']],
       );
       await txn.insert(
         'sleep_records',

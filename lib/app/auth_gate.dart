@@ -57,6 +57,11 @@ class _AuthGateState extends State<AuthGate> {
         final provider = context.read<AppProvider>();
         provider.onSignedIn();
       } else if (event == AuthChangeEvent.signedOut) {
+        // Stop realtime/sync before the auth screen shows — the sync client
+        // must not keep channels open for the signed-out session. Local
+        // data is kept; a different account signing in later is handled by
+        // AppProvider's account isolation wipe.
+        context.read<AppProvider>().onSignedOut();
         setState(() => _isLoggedIn = false);
       }
     });

@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../database/repositories/countdown_repository.dart';
 import '../database/repositories/focus_repository.dart';
 import '../database/repositories/habit_repository.dart';
+import '../database/repositories/pending_deletes_repository.dart';
 import '../database/repositories/settings_repository.dart';
 import '../database/repositories/sleep_repository.dart';
 import '../database/repositories/todo_repository.dart';
@@ -50,18 +51,31 @@ final List<SyncTable> syncTables = [
   SyncTable(
     name: 'todos',
     applyRemote: TodoRepository.upsertFromRemote,
-    applyDelete: (oldRow) => TodoRepository.deleteById(oldRow['id'] as String),
+    applyDelete: (oldRow) async {
+      final id = oldRow['id'] as String;
+      await TodoRepository.deleteById(id);
+      // The realtime DELETE confirms our own pending delete (its echo) or
+      // another device's delete — either way the tombstone is obsolete.
+      await PendingDeletesRepository.clear('todos', id);
+    },
   ),
   SyncTable(
     name: 'habits',
     applyRemote: HabitRepository.upsertFromRemote,
-    applyDelete: (oldRow) => HabitRepository.deleteById(oldRow['id'] as String),
+    applyDelete: (oldRow) async {
+      final id = oldRow['id'] as String;
+      await HabitRepository.deleteById(id);
+      await PendingDeletesRepository.clear('habits', id);
+    },
   ),
   SyncTable(
     name: 'countdowns',
     applyRemote: CountdownRepository.upsertFromRemote,
-    applyDelete: (oldRow) =>
-        CountdownRepository.deleteById(oldRow['id'] as String),
+    applyDelete: (oldRow) async {
+      final id = oldRow['id'] as String;
+      await CountdownRepository.deleteById(id);
+      await PendingDeletesRepository.clear('countdowns', id);
+    },
   ),
   SyncTable(
     name: 'sleep_records',

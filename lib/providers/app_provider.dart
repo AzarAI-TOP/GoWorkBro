@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
@@ -7,6 +8,7 @@ import 'package:goworkbro/models/models.dart';
 import 'package:goworkbro/core/database/app_database.dart';
 import 'package:goworkbro/core/device/device_identity_service.dart';
 import 'package:goworkbro/core/sync/avatar_sync.dart';
+import 'package:goworkbro/core/sync/sync_compare.dart';
 import 'package:goworkbro/core/sync/sync_service.dart';
 import 'package:goworkbro/core/utils/date_utils.dart';
 import 'package:goworkbro/core/config/supabase_config.dart';
@@ -45,10 +47,22 @@ class AppProvider extends ChangeNotifier {
   Future<void>? _rolloverFuture;
   Timer? _rolloverTimer;
   Timer? _syncTimer;
+  Future<void>? _syncOperation;
+  bool _syncAgain = false;
 
-  /// How often the background sync pull runs (covers realtime gaps on
-  /// mobile: backgrounded apps, missed events, flaky connections).
-  static const syncInterval = Duration(seconds: 60);
+  /// Bumped whenever the auth session identity changes (sign-out, account
+  /// switch). A sync cycle captured under an older epoch aborts before its
+  /// push phase — it might be holding the previous account's in-memory rows.
+  int _syncEpoch = 0;
+
+  /// Device-local marker of which account owns the local data (the SQLite
+  /// rows carry no user_id). See [_ensureAccountIsolation].
+  static const _lastSignedInUidKey = 'last_signed_in_uid';
+
+  /// Fallback polling cadence. Realtime is the primary change channel; this
+  /// timer only covers backgrounded apps, missed events and flaky
+  /// connections, so it can be slow.
+  static const syncInterval = Duration(minutes: 5);
 
   List<Todo> get todos => _todos;
   List<Habit> get habits => _habits;
@@ -84,6 +98,18 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<void> _initInternal() async {
+    // Sync setup (and account isolation) must run BEFORE any local data is
+    // read: a switched account wipes the local database, and every read
+    // below must then observe the wiped state, not the previous account's.
+    var syncReady = false;
+    if (isSupabaseConfigured) {
+      await SyncService.initialize();
+      if (SyncService.isInitialized && SyncService.currentUserId != null) {
+        await _ensureAccountIsolation();
+        syncReady = true;
+      }
+    }
+
     _userName = await SettingsRepository.get('user_name') ?? '离线用户';
     _deviceId = await DeviceIdentityService.getOrCreateDeviceId();
     // Display path: the device-local cached avatar file first; fall back to
@@ -109,20 +135,14 @@ class AppProvider extends ChangeNotifier {
     _firstUsedDate =
         await SettingsRepository.get('first_used_date') ?? todayDate;
 
-    var syncReady = false;
-    if (isSupabaseConfigured) {
-      await SyncService.initialize();
-      syncReady =
-          SyncService.isInitialized && SyncService.currentUserId != null;
-      if (syncReady) {
-        // Realtime writes land in SQLite; refresh the visible state when
-        // they arrive so the UI updates live on both devices.
-        SyncService.onRemoteChanged = _onRemoteChanged;
-        await SyncService.pullAll();
-        // Load the complete synced logical-day pair before any destructive
-        // rollover decision is made.
-        await refreshAll(notify: false);
-      }
+    if (syncReady) {
+      // Realtime writes land in SQLite; refresh the visible state when
+      // they arrive so the UI updates live on both devices.
+      SyncService.onRemoteChanged = _onRemoteChanged;
+      await SyncService.pullAll();
+      // Load the complete synced logical-day pair before any destructive
+      // rollover decision is made.
+      await refreshAll(notify: false);
     }
 
     await _performDailyRollover();
@@ -142,13 +162,17 @@ class AppProvider extends ChangeNotifier {
         _performDailyRollover().then((_) => refreshAll());
       }
     });
-    _syncTimer = Timer.periodic(syncInterval, (_) {
-      unawaited(syncNow());
-    });
+    _ensureSyncTimer();
 
     _isInitialized = true;
     _initializing = null;
     notifyListeners();
+  }
+
+  void _ensureSyncTimer() {
+    _syncTimer ??= Timer.periodic(syncInterval, (_) {
+      unawaited(syncNow());
+    });
   }
 
   /// Sync the visible profile with the signed-in Supabase user.
@@ -205,8 +229,10 @@ class AppProvider extends ChangeNotifier {
     if (!isSupabaseConfigured) return;
     await SyncService.initialize();
     if (!SyncService.isInitialized) return;
-    if (wasInitialized) {
+    final switchedAccount = await _ensureAccountIsolation();
+    if (wasInitialized || switchedAccount) {
       SyncService.onRemoteChanged = _onRemoteChanged;
+      _ensureSyncTimer();
       await SyncService.pullAll();
       await _refreshAfterRemoteChange();
       unawaited(SyncService.pushUserSettings());
@@ -215,18 +241,91 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
+  /// Called when the user signs out (AuthGate). Local data is kept for the
+  /// same-account fast path; a different account signing in later triggers
+  /// the isolation wipe in [_ensureAccountIsolation].
+  void onSignedOut() {
+    unawaited(_drainSyncAndTearDown());
+  }
+
+  /// Waits for any in-flight sync cycle before disposing the sync client —
+  /// a straggler push after the session flipped could write the old
+  /// account's data into the new session's cloud scope.
+  Future<void> _drainSyncAndTearDown() async {
+    final active = _syncOperation;
+    if (active != null) await active;
+    _syncEpoch++;
+    _syncTimer?.cancel();
+    _syncTimer = null;
+    SyncService.dispose();
+  }
+
   /// Pull remote changes and refresh the UI. Used by the periodic sync
   /// timer and by the app-resume hook (mobile).
+  ///
+  /// Serialized and coalesced: the timer, realtime callbacks and the resume
+  /// hook can fire concurrently, but only one sync cycle runs at a time —
+  /// anything arriving mid-cycle triggers exactly one follow-up run.
   Future<void> syncNow() async {
+    final epoch = _syncEpoch;
+    final active = _syncOperation;
+    if (active != null) {
+      _syncAgain = true;
+      await active;
+      return;
+    }
+    final operation = _syncNowInternal();
+    _syncOperation = operation;
+    try {
+      await operation;
+    } finally {
+      _syncOperation = null;
+      if (_syncAgain && epoch == _syncEpoch) {
+        _syncAgain = false;
+        unawaited(syncNow());
+      }
+    }
+  }
+
+  Future<void> _syncNowInternal() async {
+    final epoch = _syncEpoch;
     if (!isSupabaseConfigured) return;
     await SyncService.initialize();
     if (!SyncService.isInitialized || SyncService.currentUserId == null) {
       return;
     }
     await SyncService.pullAll();
+    if (epoch != _syncEpoch) return;
     await _refreshAfterRemoteChange();
+    if (epoch != _syncEpoch) return;
     await SyncService.pushUserSettings(onlyDirty: true);
+    if (epoch != _syncEpoch) return;
     _pushAll();
+  }
+
+  /// Local rows carry no user_id, so the local database belongs to exactly
+  /// one account at a time. When a DIFFERENT account signs in than the one
+  /// recorded in [_lastSignedInUidKey], the previous account's local data
+  /// is wiped before anything can sync — otherwise pull would blend both
+  /// accounts' rows and push would leak the old account's data into the
+  /// new account's cloud. The same account (or a first-ever sign-in, whose
+  /// offline-created rows are meant to be pushed up) keeps local data.
+  Future<bool> _ensureAccountIsolation() async {
+    final uid = SyncService.currentUserId;
+    if (uid == null) return false;
+    // Drain any sync cycle that started before the session changed — it
+    // may still be holding the previous account's in-memory rows — then
+    // invalidate late stragglers before wiping.
+    final active = _syncOperation;
+    if (active != null) await active;
+    _syncEpoch++;
+    final previousUid = await SettingsRepository.get(_lastSignedInUidKey);
+    if (previousUid == uid) return false;
+    if (previousUid != null) {
+      await _wipeLocalData();
+    }
+    await SettingsRepository.set(_lastSignedInUidKey, uid);
+    return previousUid != null;
   }
 
   void _onRemoteChanged() {
@@ -236,11 +335,30 @@ class AppProvider extends ChangeNotifier {
     unawaited(syncNow());
   }
 
+  /// Compact per-row signature (id + LWW stamp) of every visible list, used
+  /// to detect whether a pull actually changed anything worth rebuilding
+  /// the UI for.
+  List<String> _stateSignature() => [
+    for (final t in _todos) 't:${t.id}:${t.updatedAt}',
+    for (final h in _habits) 'h:${h.id}:${h.updatedAt}',
+    for (final c in _countdowns) 'c:${c.id}:${c.updatedAt}',
+    for (final r in _sleepRecords) 's:${r.recordDate}:${r.updatedAt}',
+    for (final f in _todaySessions) 'f:${f.id}',
+    'all:${_allSessions.length}',
+    'n:$_userName',
+    'a:$_avatarPath',
+    'l:$_lateNightModeEnabled',
+  ];
+
   Future<void> _refreshAfterRemoteChange() async {
+    final before = _stateSignature();
     await refreshAll(notify: false);
     if (_lastRolloverDate != todayDate) {
       await _performDailyRollover();
-    } else {
+      return;
+    }
+    // Idle polling with no remote change must not rebuild the whole UI.
+    if (!listEquals(before, _stateSignature())) {
       notifyListeners();
     }
   }
@@ -428,7 +546,7 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<void> deleteTodo(String id) async {
-    await TodoRepository.deleteById(id);
+    await TodoRepository.deleteWithTombstone(id);
     _todos.removeWhere((t) => t.id == id);
     notifyListeners();
     unawaited(SyncService.deleteRemoteTodo(id));
@@ -438,11 +556,14 @@ class AppProvider extends ChangeNotifier {
     if (newIndex > oldIndex) newIndex--;
     final item = _todos.removeAt(oldIndex);
     _todos.insert(newIndex, item);
-    // Batch: update sortOrder for all items in a single DB transaction
+    // Batch: update sortOrder for all items in a single DB transaction.
+    // A fresh stamp is part of the change: without it the reorder would
+    // lose every LWW comparison and the next pull would roll it back.
+    final stamp = nowStamp();
     final db = await AppDatabase.database;
     await db.transaction((txn) async {
       for (var i = 0; i < _todos.length; i++) {
-        _todos[i] = _todos[i].copyWith(sortOrder: i);
+        _todos[i] = _todos[i].copyWith(sortOrder: i, updatedAt: stamp);
         await txn.update(
           'todos',
           _todos[i].toMap(),
@@ -502,7 +623,7 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<void> deleteHabit(String id) async {
-    await HabitRepository.deleteById(id);
+    await HabitRepository.deleteWithTombstone(id);
     _habits.removeWhere((h) => h.id == id);
     notifyListeners();
     unawaited(SyncService.deleteRemoteHabit(id));
@@ -512,10 +633,13 @@ class AppProvider extends ChangeNotifier {
     if (newIndex > oldIndex) newIndex--;
     final item = _habits.removeAt(oldIndex);
     _habits.insert(newIndex, item);
+    // Same as reorderTodos: fresh stamp so the order survives LWW, plus an
+    // explicit push — habits previously never synced their sort order.
+    final stamp = nowStamp();
     final db = await AppDatabase.database;
     await db.transaction((txn) async {
       for (var i = 0; i < _habits.length; i++) {
-        _habits[i] = _habits[i].copyWith(sortOrder: i);
+        _habits[i] = _habits[i].copyWith(sortOrder: i, updatedAt: stamp);
         await txn.update(
           'habits',
           _habits[i].toMap(),
@@ -524,6 +648,9 @@ class AppProvider extends ChangeNotifier {
         );
       }
     });
+    for (final h in _habits) {
+      unawaited(SyncService.pushHabit(h));
+    }
     notifyListeners();
   }
 
@@ -586,7 +713,7 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<void> deleteCountdown(String id) async {
-    await CountdownRepository.deleteById(id);
+    await CountdownRepository.deleteWithTombstone(id);
     _countdowns.removeWhere((c) => c.id == id);
     notifyListeners();
     unawaited(SyncService.deleteRemoteCountdown(id));
@@ -683,8 +810,30 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Deletes ALL data — cloud rows first (otherwise the next sync would
+  /// resurrect them locally within minutes), then the local database.
+  ///
+  /// Throws when the signed-in user's cloud wipe fails (offline / server
+  /// error): the local data is kept in that case so the user can retry,
+  /// instead of being told "all data deleted" while the cloud copy lives on.
   Future<void> deleteAllData() async {
-    final oldAvatarPath = _avatarPath;
+    _syncTimer?.cancel();
+    _syncTimer = null;
+    try {
+      await SyncService.deleteAllRemoteData();
+      await _wipeLocalData(keepAccountLink: true);
+    } finally {
+      _ensureSyncTimer();
+    }
+    notifyListeners();
+  }
+
+  /// Local-only wipe used by account switching and (after the remote wipe)
+  /// by [deleteAllData]. Resets the database and every in-memory field.
+  Future<void> _wipeLocalData({bool keepAccountLink = false}) async {
+    final uid = keepAccountLink ? SyncService.currentUserId : null;
+    final oldAvatarPath =
+        _avatarPath ?? await SettingsRepository.get('avatar_local_path');
     await AppDatabase.deleteAllData();
     if (oldAvatarPath != null) {
       final avatar = File(oldAvatarPath);
@@ -704,7 +853,11 @@ class AppProvider extends ChangeNotifier {
     _lifetimeHabitsCompleted = 0;
     _lastRolloverDate = '';
     _lateNightModeEnabled = false;
-    notifyListeners();
+    if (uid != null) {
+      // Keep the isolation marker so the wipe is not mistaken for a
+      // first-ever sign-in on the next sync cycle.
+      await SettingsRepository.set(_lastSignedInUidKey, uid);
+    }
   }
 
   // ============ Computed stats ============

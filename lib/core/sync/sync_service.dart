@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:goworkbro/models/models.dart';
 import 'package:goworkbro/core/config/supabase_config.dart';
+import 'package:goworkbro/core/database/repositories/pending_deletes_repository.dart';
 import 'package:goworkbro/core/database/repositories/settings_repository.dart';
 import 'package:goworkbro/core/sync/avatar_sync.dart';
 import 'package:goworkbro/core/sync/sync_compare.dart';
@@ -28,6 +29,7 @@ import 'package:goworkbro/core/sync/sync_table_registry.dart';
 class SyncService {
   static SupabaseClient? _client;
   static Future<void>? _pulling;
+  static bool _pullAgain = false;
   static Future<void>? _pushingSettings;
   static final List<RealtimeChannel> _channels = [];
   static Timer? _notifyTimer;
@@ -55,13 +57,18 @@ class SyncService {
 
   // ============ Startup Pull ============
 
-  /// Pulls every registered table once (in registry order).
-  /// Per-table failures are logged and skipped so one broken table cannot
-  /// block the rest of the pull.
+  /// Pulls every registered table once (in registry order). Pending remote
+  /// deletes are retried first so a locally deleted row is removed from the
+  /// cloud before its stale copy could be pulled back.
+  ///
+  /// A caller that arrives while a pull is active waits for it and schedules
+  /// one re-pull — realtime events landing mid-pull must not wait for the
+  /// next polling cycle.
   static Future<void> pullAll() async {
     if (_client == null) return;
     final active = _pulling;
     if (active != null) {
+      _pullAgain = true;
       await active;
       return;
     }
@@ -72,15 +79,37 @@ class SyncService {
       await operation;
     } finally {
       if (identical(_pulling, operation)) _pulling = null;
+      if (_pullAgain) {
+        _pullAgain = false;
+        unawaited(pullAll());
+      }
     }
   }
 
   static Future<void> _pullAllInternal() async {
+    await retryPendingDeletes();
     for (final table in syncTables) {
       try {
         await _pullTable(table.name, table.applyRemote);
       } catch (e) {
         debugPrint('Pull ${table.name} failed: $e');
+      }
+    }
+  }
+
+  /// Replays queued delete tombstones to the cloud. Each confirmed delete
+  /// clears its tombstone; failures stay queued for the next round.
+  static Future<void> retryPendingDeletes() async {
+    if (_client == null) return;
+    final uid = currentUserId;
+    if (uid == null) return;
+    final pending = await PendingDeletesRepository.takePending();
+    for (final (table, id) in pending) {
+      try {
+        await _client!.from(table).delete().eq('id', id).eq('user_id', uid);
+        await PendingDeletesRepository.clear(table, id);
+      } catch (e) {
+        debugPrint('Retry pending delete ($table/$id) failed: $e');
       }
     }
   }
@@ -93,7 +122,12 @@ class SyncService {
     if (uid == null) return;
     final response = await _client!.from(table).select().eq('user_id', uid);
     for (final row in response) {
-      await applyRemote(row);
+      // One malformed row must not discard the rest of the table.
+      try {
+        await applyRemote(row);
+      } catch (e) {
+        debugPrint('Apply remote row in $table failed: $e');
+      }
     }
   }
 
@@ -118,7 +152,9 @@ class SyncService {
         'created_date': todo.createdDate,
         'completed_date': todo.completedDate,
         'actual_duration_seconds': todo.actualDurationSeconds,
-        'updated_at': DateTime.now().toUtc().toIso8601String(),
+        // The row's own stamp keeps local and cloud in agreement; the pull
+        // echo of this push then compares equal and is a no-op.
+        'updated_at': todo.updatedAt ?? nowStamp(),
       });
     } catch (e) {
       debugPrint('Push todo failed: $e');
@@ -140,7 +176,7 @@ class SyncService {
         'created_date': habit.createdDate,
         'current_count': habit.currentCount,
         'last_reset_date': habit.lastResetDate,
-        'updated_at': DateTime.now().toUtc().toIso8601String(),
+        'updated_at': habit.updatedAt ?? nowStamp(),
       });
     } catch (e) {
       debugPrint('Push habit failed: $e');
@@ -180,7 +216,7 @@ class SyncService {
         'target_datetime': countdown.targetDateTime.toUtc().toIso8601String(),
         'created_date': countdown.createdDate,
         'color_index': countdown.colorIndex,
-        'updated_at': DateTime.now().toUtc().toIso8601String(),
+        'updated_at': countdown.updatedAt ?? nowStamp(),
       });
     } catch (e) {
       debugPrint('Push countdown failed: $e');
@@ -541,6 +577,47 @@ class SyncService {
     }
   }
 
+  /// Deletes every cloud row owned by the signed-in user ("delete all
+  /// data"). Throws on the first failed table so the caller can abort the
+  /// local wipe instead of leaving the cloud copy to resurrect it.
+  static Future<void> deleteAllRemoteData() async {
+    final client = _client;
+    final uid = currentUserId;
+    if (client == null || uid == null) return;
+    // Read the avatar path before its user_settings row is deleted below.
+    String? avatarPath;
+    try {
+      final avatarRow = await client
+          .from('user_settings')
+          .select('value')
+          .eq('user_id', uid)
+          .eq('key', 'avatar_path')
+          .maybeSingle();
+      avatarPath = avatarRow?['value'] as String?;
+    } catch (e) {
+      debugPrint('Read remote avatar on wipe failed: $e');
+    }
+    for (final table in const [
+      'todos',
+      'habits',
+      'countdowns',
+      'focus_sessions',
+      'sleep_records',
+      'user_settings',
+    ]) {
+      await client.from(table).delete().eq('user_id', uid);
+    }
+    // Best-effort avatar object removal — a leftover file is not user data
+    // in the UI sense and must not block the wipe.
+    if (avatarPath != null && AvatarSync.isStoragePath(avatarPath)) {
+      try {
+        await AvatarSync.remove(client, avatarPath);
+      } catch (e) {
+        debugPrint('Remove remote avatar on wipe failed: $e');
+      }
+    }
+  }
+
   // ============ Realtime ============
 
   static void _setupRealtime() {
@@ -562,9 +639,13 @@ class SyncService {
                 final oldRow = payload.oldRecord;
                 if (oldRow.isNotEmpty && table.applyDelete != null) {
                   unawaited(
-                    table.applyDelete!(oldRow).then(
-                      (_) => _notifyRemoteChanged(),
-                    ),
+                    table
+                        .applyDelete!(oldRow)
+                        .then(
+                          (_) => _notifyRemoteChanged(),
+                          onError: (e) =>
+                              debugPrint('Realtime delete failed: $e'),
+                        ),
                   );
                 }
               } else {
@@ -573,7 +654,11 @@ class SyncService {
                   unawaited(
                     table
                         .applyRemote(newRow)
-                        .then((_) => _notifyRemoteChanged()),
+                        .then(
+                          (_) => _notifyRemoteChanged(),
+                          onError: (e) =>
+                              debugPrint('Realtime apply failed: $e'),
+                        ),
                   );
                 }
               }
@@ -592,6 +677,8 @@ class SyncService {
     });
   }
 
+  /// Tears down realtime and drops the client reference. A later
+  /// [initialize] (e.g. sign-in after sign-out) re-subscribes from scratch.
   static void dispose() {
     _notifyTimer?.cancel();
     _notifyTimer = null;
@@ -600,5 +687,9 @@ class SyncService {
       channel.unsubscribe();
     }
     _channels.clear();
+    _client = null;
+    _pulling = null;
+    _pullAgain = false;
+    _pushingSettings = null;
   }
 }

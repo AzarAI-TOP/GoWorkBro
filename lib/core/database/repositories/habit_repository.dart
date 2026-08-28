@@ -3,6 +3,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../../../models/models.dart';
 import '../../sync/sync_compare.dart';
 import '../app_database.dart';
+import 'pending_deletes_repository.dart';
 
 /// Habits data access.
 abstract final class HabitRepository {
@@ -33,6 +34,17 @@ abstract final class HabitRepository {
     await db.delete('habits', where: 'id = ?', whereArgs: [id]);
   }
 
+  /// Locally-initiated delete: drops the row and queues a tombstone in the
+  /// same transaction so a pending remote delete can never be undone by the
+  /// next pull resurrecting the row.
+  static Future<void> deleteWithTombstone(String id) async {
+    final db = await AppDatabase.database;
+    await db.transaction((txn) async {
+      await txn.delete('habits', where: 'id = ?', whereArgs: [id]);
+      await PendingDeletesRepository.record(txn, 'habits', id);
+    });
+  }
+
   static Future<Habit?> getById(String id) async {
     final db = await AppDatabase.database;
     final maps = await db.query('habits', where: 'id = ?', whereArgs: [id]);
@@ -55,33 +67,38 @@ abstract final class HabitRepository {
   }
 
   /// Upsert a row pushed by the cloud sync (schema-normalized),
-  /// last-write-wins by `updated_at`.
+  /// last-write-wins by `updated_at`. A tombstoned row is skipped so a
+  /// pending remote delete is not resurrected. Read-compare-write runs in
+  /// one transaction.
   static Future<void> upsertFromRemote(Map<String, dynamic> row) async {
     final db = await AppDatabase.database;
     final id = row['id'] as String;
-    final existing = await db.query(
-      'habits',
-      columns: ['updated_at'],
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-    if (existing.isNotEmpty &&
-        isLocalNewer(
-          existing.first['updated_at'] as String?,
-          row['updated_at'] as String?,
-        )) {
-      return; // local is newer — keep local
-    }
-    await db.insert('habits', {
-      'id': id,
-      'title': row['title'],
-      'target_count': row['target_count'],
-      'unit': row['unit'],
-      'sort_order': row['sort_order'] ?? 0,
-      'created_date': row['created_date'],
-      'current_count': row['current_count'] ?? 0,
-      'last_reset_date': row['last_reset_date'],
-      'updated_at': row['updated_at'],
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.transaction((txn) async {
+      if (await PendingDeletesRepository.contains(txn, 'habits', id)) return;
+      final existing = await txn.query(
+        'habits',
+        columns: ['updated_at'],
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      if (existing.isNotEmpty &&
+          isLocalNewer(
+            existing.first['updated_at'] as String?,
+            row['updated_at'] as String?,
+          )) {
+        return; // local is newer — keep local
+      }
+      await txn.insert('habits', {
+        'id': id,
+        'title': row['title'],
+        'target_count': row['target_count'],
+        'unit': row['unit'],
+        'sort_order': row['sort_order'] ?? 0,
+        'created_date': row['created_date'],
+        'current_count': row['current_count'] ?? 0,
+        'last_reset_date': row['last_reset_date'],
+        'updated_at': row['updated_at'],
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    });
   }
 }

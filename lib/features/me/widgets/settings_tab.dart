@@ -483,11 +483,20 @@ class _SettingsTabState extends State<SettingsTab> {
       ),
     );
     if (confirmed != true || !context.mounted) return;
-    await provider.deleteAllData();
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(s.deleteDataSuccess)));
+    try {
+      await provider.deleteAllData();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.deleteDataSuccess)));
+    } catch (_) {
+      // The cloud wipe failed (offline / server error) and local data was
+      // kept on purpose — tell the user instead of implying success.
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(s.deleteDataFailed)));
+    }
   }
 
   Future<void> _checkForUpdate(BuildContext context) async {

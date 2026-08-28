@@ -383,8 +383,8 @@ class S {
   String get unknown => locale == AppLocale.zh ? '未知' : 'Unknown';
   String get logout => locale == AppLocale.zh ? '退出登录' : 'Sign Out';
   String get logoutConfirm => locale == AppLocale.zh
-      ? '确定退出登录？本地数据会保留，重新登录后将从云端同步。'
-      : 'Sign out? Local data is kept; re-login will sync from cloud.';
+      ? '确定退出登录？本地数据会保留，重新登录后将从云端同步；若改用其他账号登录，本地数据会被清空以防串号。'
+      : 'Sign out? Local data is kept and re-syncs after logging back in; signing in with a different account will clear it to avoid mixing accounts.';
   String get signOut => locale == AppLocale.zh ? '退出' : 'Sign Out';
   String get signOutSubtitle => locale == AppLocale.zh
       ? '退出后数据保留在本地，重新登录可同步'
@@ -417,10 +417,13 @@ class S {
   String get deleteData =>
       locale == AppLocale.zh ? '删除所有数据' : 'Delete All Data';
   String get deleteDataConfirm => locale == AppLocale.zh
-      ? '确定删除所有本地数据？此操作不可撤销，包括待办、习惯、打卡记录等。'
-      : 'Delete all local data? This is irreversible and includes todos, habits, check-in records, etc.';
+      ? '确定删除所有数据？此操作不可撤销，本地与云端（含其他设备待同步的修改）都会被删除。'
+      : 'Delete ALL data? This is irreversible and wipes both the local database and the cloud copy (including changes not yet synced from other devices).';
   String get deleteDataSuccess =>
       locale == AppLocale.zh ? '所有数据已删除' : 'All data deleted';
+  String get deleteDataFailed => locale == AppLocale.zh
+      ? '删除失败：无法连接云端，本地数据已保留，请检查网络后重试'
+      : 'Delete failed: cannot reach the cloud. Local data was kept — check your connection and retry.';
   String get editName => locale == AppLocale.zh ? '编辑昵称' : 'Edit Name';
   String get nameHint => locale == AppLocale.zh ? '输入昵称' : 'Enter name';
 
