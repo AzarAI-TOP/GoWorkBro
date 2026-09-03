@@ -1,221 +1,37 @@
 # GoWorkBro
 
-A clean, geometric todo & focus management app inspired by 番茄TODO.
-Built with Flutter for Android and Windows desktop, with Supabase cloud sync.
+本地单机的待办 / 习惯 / 专注 / 倒计时 / 打卡 Android 应用（原生 Kotlin + Jetpack Compose），
+附每日自动抓取的 USTC 要闻。**无账号、无云端同步、无跨端**——数据只存本机 SQLite，随时导出 JSON 备份。
 
-## Features
+## 功能
 
-| Module | Description |
-|--------|-------------|
-| **待办 (Todo)** | TODO items with forward/backward/no timer, "repeat tomorrow" auto-recreate, habits with daily reset & custom units |
-| **倒计时 (Countdown)** | Create countdown events with color coding, auto-delete next day, live remaining time |
-| **Today** | Focus statistics with pie chart, 7-day bar chart, session list, USTC daily news (Markdown rendered with LXGW WenKai font, date-keyed local cache) |
-| **Me** | Profile & avatar, wake/workout/sleep check-in with trend charts (bedtime/wake time/duration), lifetime statistics, settings (language, theme, cloud sync, data management) |
+- **待办 Todo**：正向计时 / 倒向计时（15/25/40/自定义分钟）/ 不记时；点按完成；"明天继续"完成后自动为次日生成副本；手动拖拽排序。
+- **已完成分区**：已完成的待办/习惯进入独立的"已完成"折叠区（默认收起，点按展开），不再混在未完成列表里，也不会被自动清空——直到你手动删除。
+- **习惯 Habit**：每日目标计数（次/分钟/小时/个/页/道 + 自定义单位记忆），进度条，每日自动重置。
+- **专注计时器**：全屏正/倒计时圆环，暂停/继续/记录/放弃，基于时间戳的恢复（退后台、甚至进程被杀，回来都在），完成即记录专注段并勾选待办。
+- **倒计时 Countdown**：6 色卡片、实时 D:H:M:S、剩余比例环、长按编辑、过期自动清理。
+- **Today**：今日专注总时长、来源饼图、近 7 天柱状图、专注记录列表、**USTC 每日要闻**（Markdown 渲染 + 霞鹜文楷，离线缓存，可翻往期）。
+- **我**：头像/昵称；起床/健身/睡觉打卡（智能按日分桶、凌晨 4 点深夜模式、历史回改、3 条 7 天趋势图）；累计/今日统计；设置（中英双语、浅深主题、4 款字体、数据导出/导入、清空数据）。
 
-## Architecture
+## 要闻数据链路
 
-Feature-first layout with a layered core. Dependencies point inward:
-UI (`features/`) → state (`providers/`) → domain access (`core/database/repositories/`)
-→ SQLite / Supabase.
+ZCode 定时任务（每天 08:00）抓取 USTC 官网生成日报 → 写入 Obsidian 笔记 → 发布到公开
+[GitHub Gist](https://gist.github.com/AzarAI-TOP/9eab46f314c078ed87dfb1fa9667df78) →
+App 从 Gist 拉取并缓存（唯一网络请求，无需任何密钥）。手动补跑：`/ustc-news`。
 
-```
-lib/
-├── main.dart                  # Bootstrap only: window, Supabase, locale init
-├── app/                       # App shell
-│   ├── app.dart               # GoWorkBroApp: providers + MaterialApp
-│   ├── auth_gate.dart         # Auth routing (Supabase session / offline)
-│   └── app_shell.dart         # Responsive navigation shell (rail / bottom bar)
-├── features/                  # Screens grouped by domain, each with widgets/
-│   ├── auth/  todos/  countdowns/  today/  timer/  me/
-├── providers/
-│   └── app_provider.dart      # App state (ChangeNotifier): caches + orchestration
-│                              # (rollover, sync trigger, cross-domain stats)
-├── core/                      # Infrastructure
-│   ├── database/
-│   │   ├── app_database.dart  # SQLite connection, schema, migrations, reset
-│   │   └── repositories/      # Domain data access (Todo/Habit/Countdown/Focus/
-│   │                          # Sleep/Settings/NewsCache) + remote-upsert mapping
-│   ├── sync/
-│   │   ├── sync_service.dart  # Push/pull/realtime orchestration
-│   │   └── sync_table_registry.dart  # Declarative cloud-table registration
-│   ├── l10n/app_locale.dart   # i18n provider (zh/en) + S translation class
-│   ├── theme/app_theme.dart   # Light/dark themes, CJK fallback chain, chart colors
-│   ├── config/supabase_config.dart  # Supabase URL/key via --dart-define
-│   ├── device/device_identity_service.dart  # Offline device ID (GWB-…)
-│   └── utils/                 # date_utils, sleep_chart_utils
-├── models/                    # Data models (Todo, Habit, Countdown, FocusSession, SleepRecord)
-└── services/                  # Platform/network services
-    ├── api_service.dart       # USTC news fetching (Supabase → Go backend → local vault)
-    ├── tray_service.dart      # Windows system tray icon
-    └── update_service.dart    # GitHub release update checker
-```
-
-### Data Flow
-
-```
-User Action → AppProvider (in-memory update + notifyListeners)
-                ↓                          ↓
-          SQLite (local-first)      Supabase (background push)
-                ↑
-          SyncService.pullAll() ← Supabase Realtime
-```
-
-Sync tables are declared once in `sync_table_registry.dart`; `pullAll` and the
-realtime subscriptions are single loops over that registry.
-
-## Getting Started
-
-### Prerequisites
-
-- Flutter 3.44+ (stable channel)
-- Dart 3.12+
-- For Windows: Visual Studio with C++ desktop workload
-- For Android: Android SDK, JDK 21
-- A Supabase project (free tier works)
-
-### Setup
-
-1. **Clone & install dependencies:**
-   ```bash
-   git clone https://github.com/AzarAI-TOP/GoWorkBro.git
-   cd GoWorkBro
-   flutter pub get
-   ```
-
-2. **Configure Supabase credentials:**
-   Create `lib/services/local_config.dart` (gitignored):
-   ```dart
-   const String localSupabaseUrl = 'https://your-project.supabase.co';
-   const String localSupabaseAnonKey = 'your-publishable-key';
-   ```
-
-3. **Set up Supabase database:**
-   Run `supabase/schema.sql` in Supabase Dashboard → SQL Editor.
-
-4. **Run:**
-   ```bash
-   # Using dev script (reads local_config.dart):
-   bash dev.sh
-
-   # Or manually with --dart-define:
-   flutter run --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...
-   ```
-
-### Build
+## 构建
 
 ```bash
-# One-shot release build (validates version consistency, reads credentials
-# from local_config.dart without printing them):
-bash scripts/build_release.sh            # Windows + Android APK
-bash scripts/build_release.sh windows    # Windows only
-bash scripts/build_release.sh apk        # Android only
-
-# Windows installer (manual step, requires Inno Setup):
-ISCC.exe windows/installer/goworkbro.iss
-
-# Manual build without the script:
-flutter build windows --release --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...
-flutter build apk --release --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...
+# JDK 21 + Android SDK 35；wrapper 自带 Gradle 8.12
+./gradlew assembleDebug            # 调试 APK
+./gradlew testDebugUnitTest        # 单元测试
+./gradlew assembleRelease          # 签名 APK（需 app/key.properties + jks）
 ```
 
-### Windows 任务栏图标不更新（故障排查）
+签名：`app/key.properties` + `app/goworkbro-release.jks`（均已 gitignore）。applicationId 沿用
+`com.azarai.goworkbro`，可直接覆盖安装升级。
 
-The app icon is embedded in `goworkbro.exe` (via `windows/runner/Runner.rc` → `resources/app_icon.ico`),
-so the title bar always shows the current icon. If the **taskbar** still shows an old icon after
-upgrading, the Windows icon cache is stale:
+## 数据格式
 
-1. Refresh the explorer icon cache: run `ie4uinit.exe -show` (the installer does this automatically
-   after install/upgrade)
-2. Or restart Windows Explorer (taskbar/explorer cache)
-3. If the app is **pinned** to the taskbar, unpin and pin it again — pinned entries cache their icon
-
-Verify the exe really embeds the new icon: extract with
-`[System.Drawing.Icon]::ExtractAssociatedIcon($exe)` and compare visually.
-
-### Tests
-
-```bash
-flutter test                        # unit tests (migrations, sleep utils, i18n)
-flutter test integration_test/user_flow_test.dart -d windows   # full user flow (local mode)
-flutter test integration_test/auth_test.dart -d windows        # auth screen (offline)
-```
-
-## Configuration
-
-### USTC Daily News
-
-The Today screen displays USTC daily news fetched from:
-1. **Supabase** `ustc_news` table (cloud, works on all platforms)
-2. **Local Obsidian vault** (desktop fallback, path configurable via settings)
-
-To upload news to Supabase, use the included script:
-```bash
-python scripts/upload_ustc_news.py YYYY-MM-DD /path/to/news.md
-```
-
-The script posts through the validated `upsert_ustc_news` RPC (SECURITY
-DEFINER, date/content validation, idempotent per day) using the public anon
-key — **no secret key is required**. Direct anonymous writes to `ustc_news`
-are blocked at both the RLS and grant layers.
-
-### Security (Supabase hardening)
-
-Enforced by schema (`supabase/schema.sql` / migrations):
-
-- RLS on every public table; personal tables allow only `authenticated`
-  access to the owner's own rows.
-- API surface hardening: `anon`/`authenticated` have no blanket grants;
-  privileges follow an explicit grant matrix.
-- `user_settings` last-write-wins trigger at the database boundary.
-- News ingestion only via the validated RPC; anonymous table writes denied.
-
-Dashboard checklist (one-time, cannot be applied via migrations):
-
-1. **Authentication → Sign In / Up → User Signups** → turn OFF
-   **Allow anonymous sign-ins**.
-2. **Authentication → Password Protection** → turn ON
-   **Detect leaked passwords** (if available on your plan).
-3. **Authentication → Password Protection** → set
-   **Minimum password length** to `10` (matches app client validation).
-4. **Authentication → Sessions** → turn ON
-   **Enforce single session per user**.
-5. (Optional) **Authentication → Sign In / Up** → turn ON
-   **Secure email change**.
-
-Verify with:
-```bash
-supabase db advisors --linked --type security --level info --fail-on none
-```
-Anonymous-access and leaked-password warnings should disappear.
-
-Emergency rollback of the API surface hardening (restores blanket grants;
-RLS policies still filter rows):
-
-```sql
-grant all on all tables in schema public to anon, authenticated;
-grant usage on all sequences in schema public to anon, authenticated;
-grant execute on all functions in schema public to anon, authenticated;
-alter default privileges in schema public grant all on tables to anon, authenticated;
-alter default privileges in schema public grant usage on sequences to anon, authenticated;
-alter default privileges in schema public grant execute on functions to anon, authenticated;
-```
-
-### Windows Tray
-
-On Windows, closing the window hides the app to the system tray.
-Right-click the tray icon to show the window or quit.
-
-## Tech Stack
-
-- **Flutter** 3.44 + Dart 3.12
-- **State**: Provider (ChangeNotifier)
-- **Database**: SQLite via sqflite_common_ffi
-- **Cloud**: Supabase (Auth, Postgres, Realtime)
-- **Charts**: fl_chart
-- **Markdown**: flutter_markdown
-- **Fonts**: 0xProto (UI) + LXGW WenKai (霞鹜文楷, news markdown)
-- **Desktop**: window_manager + tray_manager
-
-## License
-
-© 2026 AzarAI. All rights reserved.
+导出/导入 JSON：`format: goworkbro-data-export`，`format_version: 2`（兼容导入 v1 Flutter 版导出的
+version 1 文件）。导入为整库替换，操作前建议先导出备份。

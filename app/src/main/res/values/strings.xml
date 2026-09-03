@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">GoWorkBro</string>
+
+    <!-- Tabs -->
+    <string name="tab_todo">待办</string>
+    <string name="tab_countdown">倒计时</string>
+    <string name="tab_today">Today</string>
+    <string name="tab_me">我</string>
+    <string name="tab_check_in">打卡</string>
+    <string name="tab_stats">统计</string>
+    <string name="tab_settings">设置</string>
+
+    <!-- Common -->
+    <string name="add">添加</string>
+    <string name="edit">编辑</string>
+    <string name="delete">删除</string>
+    <string name="cancel">取消</string>
+    <string name="save">保存</string>
+    <string name="create">创建</string>
+    <string name="confirm_ok">确定</string>
+    <string name="back">返回</string>
+    <string name="retry">重试</string>
+    <string name="refresh">刷新</string>
+    <string name="custom">自定义</string>
+    <string name="today">今日</string>
+    <string name="color">颜色</string>
+    <string name="field_title">标题</string>
+    <string name="pick_time">选择时间</string>
+    <string name="completed">已完成</string>
+    <string name="habits">习惯</string>
+
+    <!-- Todo tab -->
+    <string name="completed_counter">已完成 %1$d/%2$d</string>
+    <string name="habit_counter">习惯 %1$d/%2$d</string>
+    <string name="no_todos">还没有待办事项</string>
+    <string name="no_todos_hint">点击右下角 + 创建第一个待办</string>
+    <string name="add_todo">新增待办</string>
+    <string name="edit_todo">编辑待办</string>
+    <string name="add_habit">新增习惯</string>
+    <string name="edit_habit">编辑习惯</string>
+    <string name="todo_title_hint">想做什么？</string>
+    <string name="timing_method">计时方式</string>
+    <string name="forward_timer">正向计时</string>
+    <string name="backward_timer">倒向计时</string>
+    <string name="no_timer">不记时</string>
+    <string name="timing_forward">正向计时</string>
+    <string name="timing_backward">倒向计时</string>
+    <string name="timing_none">不记时</string>
+    <string name="duration">时长</string>
+    <string name="custom_min_hint">输入分钟数</string>
+    <string name="keep_tomorrow">明天继续</string>
+    <string name="keep_tomorrow_desc">完成后自动为明天创建副本</string>
+    <string name="habit_name">习惯名称</string>
+    <string name="daily">每日</string>
+    <string name="target_count">目标数量</string>
+    <string name="unit">单位</string>
+    <string name="unit_hint">自定义单位（如：杯）</string>
+    <string name="habit_progress">每日 %1$d/%2$d %3$s</string>
+    <string name="habit_check">打卡</string>
+    <string name="habit_undo">取消打卡</string>
+    <string name="habit_inc">增加</string>
+    <string name="habit_dec">减少</string>
+    <string name="enter_title">请输入标题</string>
+    <string name="confirm_delete_message">删除「%1$s」？此操作无法撤销。</string>
+
+    <!-- Timer -->
+    <string name="record">记录</string>
+    <string name="stop">停止</string>
+    <string name="start">开始</string>
+    <string name="pause">暂停</string>
+    <string name="done">已完成</string>
+    <string name="remaining">剩余</string>
+    <string name="focus_time">专注 %1$s</string>
+    <string name="todo_done">待办已完成</string>
+    <string name="exit_timer">退出计时</string>
+    <string name="record_prompt">记录 %1$s 并退出？</string>
+    <string name="confirm_exit_timer">确认退出计时？</string>
+    <string name="keep_timing">继续计时</string>
+    <string name="record_and_exit">记录并退出</string>
+    <string name="abandon">放弃</string>
+    <string name="timer_not_started">还没有开始计时</string>
+    <string name="record_save_failed">记录保存失败，请重试</string>
+
+    <!-- Countdown -->
+    <string name="no_countdowns">还没有倒计时</string>
+    <string name="add_countdown_hint">点击 + 添加一个倒计时</string>
+    <string name="new_countdown">新建倒计时</string>
+    <string name="edit_countdown">编辑倒计时</string>
+    <string name="countdown_target">目标 %1$s</string>
+    <string name="countdown_finished">倒计时结束</string>
+    <string name="target_must_be_future">目标时间必须晚于现在</string>
+    <string name="unit_days">天</string>
+    <string name="unit_hours">时</string>
+    <string name="unit_minutes">分</string>
+    <string name="unit_seconds">秒</string>
+
+    <!-- Today -->
+    <string name="today_focus">今日专注</string>
+    <string name="session_count">%1$d 个专注段</string>
+    <string name="focus_source">来源分布</string>
+    <string name="weekly_focus">近 7 天</string>
+    <string name="today_sessions">今日专注记录</string>
+    <string name="no_sessions">今天还没有专注记录</string>
+    <string name="news_title">USTC 每日要闻</string>
+    <string name="view_full_news">查看全文</string>
+    <string name="news_error">要闻加载失败，请检查网络</string>
+    <string name="news_empty">暂无要闻，下拉刷新或稍后再试</string>
+
+    <!-- Me -->
+    <string name="change_avatar">更换头像</string>
+    <string name="edit_name">修改昵称</string>
+    <string name="today_check_in">今日打卡</string>
+    <string name="wake_up">起床</string>
+    <string name="workout">健身</string>
+    <string name="sleep">睡觉</string>
+    <string name="not_checked_in">未打卡</string>
+    <string name="minutes_value">%1$d 分钟</string>
+    <string name="sleep_trends">睡眠趋势</string>
+    <string name="check_in_history">打卡记录</string>
+    <string name="no_check_in_records">还没有打卡记录</string>
+    <string name="workout_summary">健身 %1$d 分钟%2$s</string>
+    <string name="sleep_summary">起 %1$s · %2$s · 睡 %3$s</string>
+    <string name="wake_time">起床时间</string>
+    <string name="bedtime">入睡时间</string>
+    <string name="sleep_duration">睡眠时长</string>
+    <string name="select_sleep_time">选择入睡时间</string>
+    <string name="select_wake_time">选择起床时间</string>
+    <string name="workout_note_hint">备注（可选）</string>
+
+    <!-- Stats -->
+    <string name="lifetime_stats">累计统计</string>
+    <string name="total_focus">累计专注</string>
+    <string name="total_sessions">专注段总数</string>
+    <string name="total_todos">完成待办</string>
+    <string name="total_habits">完成习惯</string>
+    <string name="using_since">使用始于</string>
+    <string name="pomodoro_count">专注段次数</string>
+    <string name="count_value">%1$d 个</string>
+    <string name="todo_completed">待办完成</string>
+    <string name="habit_completed">习惯完成</string>
+    <string name="active_countdowns">进行中的倒计时</string>
+
+    <!-- Settings -->
+    <string name="language">语言</string>
+    <string name="theme">主题</string>
+    <string name="theme_light">浅色</string>
+    <string name="theme_dark">深色</string>
+    <string name="theme_system">跟随系统</string>
+    <string name="font">字体</string>
+    <string name="font_system">系统</string>
+    <string name="font_proto">0xProto</string>
+    <string name="font_wenkai">霞鹜文楷</string>
+    <string name="font_noto">思源黑体</string>
+    <string name="late_night_mode">深夜模式</string>
+    <string name="late_night_desc">凌晨 4 点前的活动计入前一天</string>
+    <string name="data_management">数据管理</string>
+    <string name="export_data">导出全部数据（JSON）</string>
+    <string name="import_data">导入数据（替换当前数据）</string>
+    <string name="delete_all_data">清空所有数据</string>
+    <string name="confirm_delete_all">将删除本机所有待办、习惯、专注、打卡和统计数据，且无法恢复。确定继续？</string>
+    <string name="export_done">导出成功</string>
+    <string name="export_failed">导出失败</string>
+    <string name="import_done">导入成功</string>
+    <string name="import_failed">导入失败</string>
+    <string name="confirm_import">导入将替换本机当前全部数据，建议先导出备份。确定继续？</string>
+    <string name="about">关于</string>
+    <string name="about_body">GoWorkBro v2.0.0\n本地单机版 · 无账号 · 无同步\n待办 / 习惯 / 专注 / 倒计时 / 打卡 / USTC 每日要闻\n数据保存在本机 SQLite，可随时导出 JSON 备份。</string>
+</resources>

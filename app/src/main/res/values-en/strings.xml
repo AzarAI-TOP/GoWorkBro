@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">GoWorkBro</string>
+
+    <!-- Tabs -->
+    <string name="tab_todo">Todo</string>
+    <string name="tab_countdown">Countdown</string>
+    <string name="tab_today">Today</string>
+    <string name="tab_me">Me</string>
+    <string name="tab_check_in">Check-in</string>
+    <string name="tab_stats">Stats</string>
+    <string name="tab_settings">Settings</string>
+
+    <!-- Common -->
+    <string name="add">Add</string>
+    <string name="edit">Edit</string>
+    <string name="delete">Delete</string>
+    <string name="cancel">Cancel</string>
+    <string name="save">Save</string>
+    <string name="create">Create</string>
+    <string name="confirm_ok">OK</string>
+    <string name="back">Back</string>
+    <string name="retry">Retry</string>
+    <string name="refresh">Refresh</string>
+    <string name="custom">Custom</string>
+    <string name="today">Today</string>
+    <string name="color">Color</string>
+    <string name="field_title">Title</string>
+    <string name="pick_time">Pick time</string>
+    <string name="completed">Completed</string>
+    <string name="habits">Habits</string>
+
+    <!-- Todo tab -->
+    <string name="completed_counter">Done %1$d/%2$d</string>
+    <string name="habit_counter">Habits %1$d/%2$d</string>
+    <string name="no_todos">No todos yet</string>
+    <string name="no_todos_hint">Tap the + button to create your first one</string>
+    <string name="add_todo">Add todo</string>
+    <string name="edit_todo">Edit todo</string>
+    <string name="add_habit">Add habit</string>
+    <string name="edit_habit">Edit habit</string>
+    <string name="todo_title_hint">What do you want to do?</string>
+    <string name="timing_method">Timing</string>
+    <string name="forward_timer">Count up</string>
+    <string name="backward_timer">Countdown</string>
+    <string name="no_timer">No timer</string>
+    <string name="timing_forward">Count up</string>
+    <string name="timing_backward">Countdown</string>
+    <string name="timing_none">No timer</string>
+    <string name="duration">Duration</string>
+    <string name="custom_min_hint">Minutes</string>
+    <string name="keep_tomorrow">Keep tomorrow</string>
+    <string name="keep_tomorrow_desc">Create a copy for tomorrow when completed</string>
+    <string name="habit_name">Habit name</string>
+    <string name="daily">Daily</string>
+    <string name="target_count">Target</string>
+    <string name="unit">Unit</string>
+    <string name="unit_hint">Custom unit (e.g. cups)</string>
+    <string name="habit_progress">%1$d/%2$d %3$s daily</string>
+    <string name="habit_check">Check in</string>
+    <string name="habit_undo">Undo</string>
+    <string name="habit_inc">Increase</string>
+    <string name="habit_dec">Decrease</string>
+    <string name="enter_title">Please enter a title</string>
+    <string name="confirm_delete_message">Delete “%1$s”? This cannot be undone.</string>
+
+    <!-- Timer -->
+    <string name="record">Record</string>
+    <string name="stop">Stop</string>
+    <string name="start">Start</string>
+    <string name="pause">Pause</string>
+    <string name="done">Done</string>
+    <string name="remaining">Remaining</string>
+    <string name="focus_time">Focused %1$s</string>
+    <string name="todo_done">Todo completed</string>
+    <string name="exit_timer">Exit timer</string>
+    <string name="record_prompt">Record %1$s and exit?</string>
+    <string name="confirm_exit_timer">Exit the timer?</string>
+    <string name="keep_timing">Keep timing</string>
+    <string name="record_and_exit">Record &amp; exit</string>
+    <string name="abandon">Abandon</string>
+    <string name="timer_not_started">Timer not started yet</string>
+    <string name="record_save_failed">Failed to save, please retry</string>
+
+    <!-- Countdown -->
+    <string name="no_countdowns">No countdowns yet</string>
+    <string name="add_countdown_hint">Tap + to add a countdown</string>
+    <string name="new_countdown">New countdown</string>
+    <string name="edit_countdown">Edit countdown</string>
+    <string name="countdown_target">Target %1$s</string>
+    <string name="countdown_finished">Finished</string>
+    <string name="target_must_be_future">Target time must be in the future</string>
+    <string name="unit_days">d</string>
+    <string name="unit_hours">h</string>
+    <string name="unit_minutes">m</string>
+    <string name="unit_seconds">s</string>
+
+    <!-- Today -->
+    <string name="today_focus">Focus today</string>
+    <string name="session_count">%1$d sessions</string>
+    <string name="focus_source">By source</string>
+    <string name="weekly_focus">Last 7 days</string>
+    <string name="today_sessions">Today\'s sessions</string>
+    <string name="no_sessions">No focus sessions today</string>
+    <string name="news_title">USTC Daily News</string>
+    <string name="view_full_news">Read full report</string>
+    <string name="news_error">Failed to load news, check your connection</string>
+    <string name="news_empty">No news yet, refresh later</string>
+
+    <!-- Me -->
+    <string name="change_avatar">Change avatar</string>
+    <string name="edit_name">Edit name</string>
+    <string name="today_check_in">Today\'s check-in</string>
+    <string name="wake_up">Wake</string>
+    <string name="workout">Workout</string>
+    <string name="sleep">Sleep</string>
+    <string name="not_checked_in">Not checked in</string>
+    <string name="minutes_value">%1$d min</string>
+    <string name="sleep_trends">Sleep trends</string>
+    <string name="check_in_history">Check-in history</string>
+    <string name="no_check_in_records">No check-in records yet</string>
+    <string name="workout_summary">Workout %1$d min%2$s</string>
+    <string name="sleep_summary">Wake %1$s · %2$s · Sleep %3$s</string>
+    <string name="wake_time">Wake time</string>
+    <string name="bedtime">Bedtime</string>
+    <string name="sleep_duration">Sleep duration</string>
+    <string name="select_sleep_time">Select bedtime</string>
+    <string name="select_wake_time">Select wake time</string>
+    <string name="workout_note_hint">Note (optional)</string>
+
+    <!-- Stats -->
+    <string name="lifetime_stats">Lifetime</string>
+    <string name="total_focus">Total focus</string>
+    <string name="total_sessions">Total sessions</string>
+    <string name="total_todos">Todos completed</string>
+    <string name="total_habits">Habits completed</string>
+    <string name="using_since">Using since</string>
+    <string name="pomodoro_count">Sessions today</string>
+    <string name="count_value">%1$d</string>
+    <string name="todo_completed">Todos done</string>
+    <string name="habit_completed">Habits done</string>
+    <string name="active_countdowns">Active countdowns</string>
+
+    <!-- Settings -->
+    <string name="language">Language</string>
+    <string name="theme">Theme</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="theme_system">System</string>
+    <string name="font">Font</string>
+    <string name="font_system">System</string>
+    <string name="font_proto">0xProto</string>
+    <string name="font_wenkai">LXGW WenKai</string>
+    <string name="font_noto">Noto Sans SC</string>
+    <string name="late_night_mode">Late-night mode</string>
+    <string name="late_night_desc">Activity before 4 AM counts to the previous day</string>
+    <string name="data_management">Data</string>
+    <string name="export_data">Export all data (JSON)</string>
+    <string name="import_data">Import data (replaces current)</string>
+    <string name="delete_all_data">Delete all data</string>
+    <string name="confirm_delete_all">This deletes all todos, habits, focus, check-in and stats data on this device. This cannot be undone. Continue?</string>
+    <string name="export_done">Exported</string>
+    <string name="export_failed">Export failed</string>
+    <string name="import_done">Imported</string>
+    <string name="import_failed">Import failed</string>
+    <string name="confirm_import">Importing replaces all current data. Consider exporting a backup first. Continue?</string>
+    <string name="about">About</string>
+    <string name="about_body">GoWorkBro v2.0.0\nLocal-only · no accounts · no sync\nTodos / habits / focus / countdowns / check-ins / USTC daily news\nData lives in local SQLite; export a JSON backup anytime.</string>
+</resources>

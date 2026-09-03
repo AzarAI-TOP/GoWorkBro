@@ -6,26 +6,30 @@ on:
   pull_request:
 
 jobs:
-  analyze-and-test:
+  build-and-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
         with:
-          channel: stable
-          flutter-version: 3.44.8
-      - run: flutter pub get
-      - run: flutter analyze
-      - run: flutter test
-      - name: Check for secrets in code
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build & unit test
+        run: ./gradlew assembleDebug testDebugUnitTest --stacktrace
+
+      # Fail on any Supabase-style or JWT-shaped token committed to the repo.
+      # The patterns require token characters after the prefix so prose that
+      # merely mentions a key type does not fail the scan.
+      - name: Secret scan
         run: |
-          # Scan the whole tracked repo (not just lib/) for publishable and
-          # secret keys plus legacy JWT-shaped anon keys — the historical
-          # leak was in scripts/, which the old lib/-only scan missed.
-          # Patterns require a token after the prefix so documentation that
-          # merely mentions a key kind does not false-positive.
-          if git grep -nE "sb_publishable_[A-Za-z0-9_-]{10,}|sb_secret_[A-Za-z0-9_-]{10,}|eyJ[A-Za-z0-9_-]{20,}" -- . ':(exclude)pubspec.lock' | grep -v "fromEnvironment\|empty_config"; then
-            echo "ERROR: Hardcoded Supabase key found!"
+          if git grep -nIE "(sb_publishable_[A-Za-z0-9_-]{10,}|sb_secret_[A-Za-z0-9_-]{10,}|eyJ[A-Za-z0-9_-]{20,})" -- . ; then
+            echo "::error::Secret-like token found in tracked files"
             exit 1
           fi
-          echo "No hardcoded secrets found ✓"
+          echo "No hardcoded secrets found"

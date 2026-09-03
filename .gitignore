@@ -4,58 +4,33 @@
 *.pyc
 *.swp
 .DS_Store
-.atom/
-.build/
 .buildlog/
 .history
-.svn/
-.swiftpm/
-migrate_working_dir/
+__pycache__/
 
-# IntelliJ related
+# IntelliJ / Android Studio
 *.iml
 *.ipr
 *.iws
 .idea/
+.vscode/
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
+# Gradle / build
+.gradle/
+build/
+/local.properties
+.cxx
+.externalNativeBuild
+/captures
 
-# Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
-.dart_tool/
-.flutter-plugins-dependencies
-.pub-cache/
-.pub/
-/build/
-/coverage/
-
-# Symbolication related
-app.*.symbols
-
-# Obfuscation related
-app.*.map.json
-
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
+# Signing — DO NOT COMMIT
+*.jks
+*.keystore
+key.properties
 
 # Local secrets — DO NOT COMMIT
-lib/services/local_config.dart
 *.env
-server/goworkbro-server.exe
-/supabase/.temp/
-
-# Python cache
-__pycache__/
-*.pyc
-
-# Hermes agent workspace
-.hermes/
 
 # Local agent workspace
 .zcode/
+.hermes/

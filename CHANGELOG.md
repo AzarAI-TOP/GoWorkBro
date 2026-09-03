@@ -6,6 +6,29 @@ All notable changes to GoWorkBro are documented here. Format follows
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-09-01
+
+超级大翻新：从 Flutter（Android + Windows + Supabase 同步）重写为**原生 Android 单机版**（Kotlin + Jetpack Compose + Room + Material 3），功能对齐 v1.1.4 并按新定位精简。
+
+### Removed
+
+- **云同步 / 登录认证**：删除 Supabase 全链路（auth、LWW 同步、tombstone、Storage 头像、realtime）。应用改为完全单机，无任何账号体系。
+- **Windows 桌面端**：不再构建/维护，仓库移除 Flutter、Inno Setup 安装器、托盘、更新检查器（MSI/APK 下载 + SHA-256 校验）。
+
+### Changed
+
+- **已完成待办留在"已完成"分区**：不再次日自动清空，永久保留直至手动删除（"明天继续"照常生成次日副本）；分区默认折叠，与未完成列表彻底分离。
+- **启动白屏根治**：原生 SplashScreen + 首帧前零阻塞初始化（无网络等待、无迁移等待），Room Flow 缓存先行渲染。
+- **USTC 要闻数据源**：由 Supabase 表改为公开 GitHub Gist（ZCode 每天 08:00 自动抓取官网、写入 Obsidian 并发布，技能 `/ustc-news` 可手动补跑）；App 内唯一网络请求，零密钥。
+- **数据备份**：导出升级为 format_version 2；新增**导入**（整库替换，兼容导入 v1 导出文件），继续走系统文件选择器（SAF）。
+- 技术栈迁移：sqflite → Room（schema v1 重新起步）、provider → ViewModel/StateFlow、fl_chart/flutter_markdown → 自绘 Canvas 图表与 Markdown 渲染器；中英双语/三字体/深夜模式/番茄红主题全部保留。
+
+### Migration Notes
+
+- 旧版数据不迁移（按需求全部清除）；覆盖安装后首启会自动清理 v1 遗留的本地数据库文件。
+- Supabase 项目在 Gist 回填完成后已无依赖，可在 dashboard 自行删除。
+
+
 ## [1.1.4] - 2026-08-28
 
 本版本集中修复多设备同步的正确性问题——以下场景此前会静默丢数据或复活已删数据，现全部闭环（含数据库 v8/v9 两个迁移，存量安装原地升级）。
