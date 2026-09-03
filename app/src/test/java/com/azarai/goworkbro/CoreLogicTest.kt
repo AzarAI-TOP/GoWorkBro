@@ -155,4 +155,73 @@ class MarkdownParserTest {
         val paragraph = blocks.single() as MdBlock.Paragraph
         assertEquals(listOf(MdInline.Text("line one line two")), paragraph.inline)
     }
+
+    @Test
+    fun `indented continuation line joins its list item`() {
+        val blocks = MarkdownParser.parse(
+            "- **报名截止** 7月15日\n" +
+                "  → https://www.teach.ustc.edu.cn/notice/notice-teaching/20291.html\n" +
+                "- second",
+        )
+        assertEquals(2, blocks.size)
+        val item = blocks[0] as MdBlock.Bullet
+        assertEquals(0, item.indent)
+        assertEquals(
+            listOf(
+                MdInline.Bold("报名截止"),
+                MdInline.Text(" 7月15日"),
+                MdInline.Break,
+                MdInline.Text("→ "),
+                MdInline.Link(
+                    "https://www.teach.ustc.edu.cn/notice/notice-teaching/20291.html",
+                    "https://www.teach.ustc.edu.cn/notice/notice-teaching/20291.html",
+                ),
+            ),
+            item.inline,
+        )
+    }
+
+    @Test
+    fun `bare urls autolink with trailing punctuation trimmed`() {
+        val inline = MarkdownParser.parseInline("详见 https://ustc.edu.cn/a.html。下句")
+        assertEquals(
+            listOf(
+                MdInline.Text("详见 "),
+                MdInline.Link("https://ustc.edu.cn/a.html", "https://ustc.edu.cn/a.html"),
+                MdInline.Text("。下句"),
+            ),
+            inline,
+        )
+    }
+
+    @Test
+    fun `parses italic strike and inline code`() {
+        val inline = MarkdownParser.parseInline("*重点* ~~过期~~ `code`")
+        assertEquals(
+            listOf(
+                MdInline.Italic("重点"),
+                MdInline.Text(" "),
+                MdInline.Strike("过期"),
+                MdInline.Text(" "),
+                MdInline.Code("code"),
+            ),
+            inline,
+        )
+    }
+
+    @Test
+    fun `parses fenced code block`() {
+        val blocks = MarkdownParser.parse("before\n```\nval x = 1\n```\nafter")
+        assertEquals(MdBlock.Paragraph(listOf(MdInline.Text("before"))), blocks[0])
+        assertEquals(MdBlock.CodeBlock(listOf("val x = 1")), blocks[1])
+        assertEquals(MdBlock.Paragraph(listOf(MdInline.Text("after"))), blocks[2])
+    }
+
+    @Test
+    fun `consecutive quote lines merge into one block`() {
+        val blocks = MarkdownParser.parse("> 一\n> 二\n\n正文")
+        val quote = blocks[0] as MdBlock.Quote
+        assertEquals(listOf(MdInline.Text("一"), MdInline.Break, MdInline.Text("二")), quote.inline)
+        assertEquals(MdBlock.Paragraph(listOf(MdInline.Text("正文"))), blocks[1])
+    }
 }
