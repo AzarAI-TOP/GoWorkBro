@@ -1,34 +1,38 @@
 # GoWorkBro — Agent Guardrails
 
-Flutter app (Android + Windows desktop) with local SQLite + Supabase cloud sync.
+Native Android app (Kotlin + Jetpack Compose + Room, offline-first). The v1
+Flutter/Supabase codebase is gone — do not follow any Flutter-era instructions
+still floating around in old notes.
+
+## Architecture in one line
+
+Local-only todos / habits / focus timer / countdown / check-ins in app-private
+SQLite (Room); the app's **only network call** is an anonymous GitHub Gist
+fetch for the "USTC 每日要闻" news feed (no API keys, no accounts, no sync).
 
 ## Data safety — hard rules
 
-- The **real user database** lives at `C:\Users\ASUS\Documents\goworkbro.db`
-  (`getApplicationDocumentsDirectory()` at runtime). It holds the user's live
-  todos, habits, check-in records, focus sessions, and profile. **Treat it as
-  read-only.**
-- Never run tests, `flutter run`, or scripts against the real DB. Integration
-  tests must always go through the isolated data dir wired in
-  `integration_test/user_flow_test.dart` (`AppDatabase.setDataDirForTesting`).
-  Do not remove or bypass that isolation.
-- Never delete or overwrite user data (todos / habits / sleep / focus records)
-  as part of a test run or "cleanup". If a run pollutes the real DB, report it
-  to the user instead of silently cleaning.
-- Do not read or print secrets from `lib/services/local_config.dart` /
-  `dev.sh` (Supabase credentials).
+- The user's live data is the on-device app-private Room database. Never run
+  scripts, `adb` commands, or app actions that clear/overwrite it.
+- All tests are hermetic JVM tests (Robolectric, fresh sandbox +
+  `Graph.rebindForTesting`) — they cannot touch device data. Keep it that
+  way; don't add tests that need a real device or the production DB.
+- `app/key.properties` and `app/goworkbro-release.jks` are the release signing
+  secrets (gitignored). Do not read or print their contents.
 
 ## Toolchain
 
-- Flutter lives at `C:\flutter\bin` — in git-bash:
-  `export PATH="/c/flutter/bin:$PATH"`.
-- Verify with: `flutter analyze`, `flutter test`,
-  `flutter test integration_test/user_flow_test.dart -d windows`.
+- JDK 21 + Android SDK 35; the wrapper ships Gradle 8.12. Windows + git-bash.
+- Build/test:
+  - `./gradlew.bat :app:testDebugUnitTest` — all unit + Robolectric smoke tests
+  - `./gradlew.bat :app:assembleDebug` — debug APK
+  - `./gradlew.bat :app:assembleRelease` — signed APK (needs the keystore above)
 
 ## Conventions
 
+- News markdown is rendered by the hand-rolled parser in
+  `core/markdown/Markdown.kt` + `ui/components/MarkdownText.kt` (no markdown
+  library). Extend both in tandem, and keep the parser scoped to what the
+  Gist generator actually emits (see the `/ustc-news` skill for the format).
 - Conventional commits in English. Large changes may commit directly to main,
   but never push without being asked.
-- Test assertions must not depend on persisted profile state (user name,
-  locale). The real DB currently has `locale=en`, `user_name=AzarAI` — assert
-  against stable keys or fresh-install defaults instead.
