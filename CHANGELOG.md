@@ -6,6 +6,20 @@ All notable changes to GoWorkBro are documented here. Format follows
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-09-03
+
+要闻阅读体验专项优化：Markdown 渲染补全 + Today 页入口改版。
+
+### Added
+
+- **Markdown 渲染补全**：新闻条目下方的 `→ 链接` 续行并回所属条目内换行且可点击（不再拆成孤立段落）；裸 URL 自动转链接（兼容中文标点结尾、剥离尾随 ASCII 标点）；新增斜体、删除线、行内代码、围栏代码块；连续引用行合并为单块。
+
+### Changed
+
+- **Today 页要闻入口改版**：底部新闻卡片改为页面顶部的主题色圆角横幅（"USTC 每日要闻" + 最新日期），点按直接进入全屏阅读页；顶栏手动刷新保留；无缓存且加载失败时横幅下方提供重试。
+- **阅读页排版打磨**：H2 小节标题加主题色竖条锚点；引用块改为圆角底色 + 竖条 callout；列表符号按嵌套分级（•/◦/▪）；有序列表编号右对齐、换行正文悬挂对齐；列表间距按组收紧。
+- AGENTS.md 按原生版本现状重写（旧文仍描述 Flutter/Supabase）。
+
 ## [2.0.0] - 2026-09-01
 
 超级大翻新：从 Flutter（Android + Windows + Supabase 同步）重写为**原生 Android 单机版**（Kotlin + Jetpack Compose + Room + Material 3），功能对齐 v1.1.4 并按新定位精简。
