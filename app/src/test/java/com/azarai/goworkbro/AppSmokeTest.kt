@@ -141,14 +141,16 @@ class AppSmokeTest {
         launch()
         rule.onAllNodesWithText("Today")[0].performClick()
         rule.onNodeWithText("今日专注").assertExists()
+        // The news banner takes the top slot, pushing the chart cards below
+        // Robolectric's 320x470 fold — scroll to each before asserting.
+        rule.onNode(hasScrollAction()).performScrollToNode(hasText("来源分布"))
         rule.onNodeWithText("来源分布").assertExists()
+        rule.onNode(hasScrollAction()).performScrollToNode(hasText("近 7 天"))
         rule.onNodeWithText("近 7 天").assertExists()
-        // Robolectric's 320x470 viewport leaves the news card below the fold —
-        // scroll the list to it before interacting.
-        rule.onNode(hasScrollAction()).performScrollToNode(hasText("查看全文"))
-        rule.waitUntil(5_000) { exists("查看全文") }
-        rule.onNodeWithText("查看全文").performClick()
-        // The Today card behind the overlay repeats the edition title, so use
+        // Back to the top: the news banner opens the reader overlay.
+        rule.onNode(hasScrollAction()).performScrollToNode(hasText("USTC 每日要闻"))
+        rule.onNodeWithText("USTC 每日要闻").performClick()
+        // The Today banner behind the overlay repeats the title prefix, so use
         // existence checks (>=1) rather than unique-match assertions.
         org.junit.Assert.assertTrue(exists("USTC 每日要闻 — 测试"))
         org.junit.Assert.assertTrue(exists("测试条目"))

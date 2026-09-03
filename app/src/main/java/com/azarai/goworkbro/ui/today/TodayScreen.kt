@@ -1,6 +1,7 @@
 package com.azarai.goworkbro.ui.today
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +28,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -37,7 +40,6 @@ import com.azarai.goworkbro.ui.Overlay
 import com.azarai.goworkbro.ui.OverlayViewModel
 import com.azarai.goworkbro.ui.appString
 import com.azarai.goworkbro.ui.components.AppCard
-import com.azarai.goworkbro.ui.components.MarkdownText
 import com.azarai.goworkbro.ui.components.PieChart
 import com.azarai.goworkbro.ui.components.WeekBarChart
 import com.azarai.goworkbro.ui.theme.AppTheme
@@ -93,6 +95,50 @@ fun TodayRoute(overlays: OverlayViewModel, vm: TodayViewModel = viewModel()) {
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
+                item {
+                    // USTC news entry — orange banner, opens the reader overlay
+                    Column {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(colors.primary)
+                                .clickable { overlays.open(Overlay.NewsReader(latestNews?.date)) }
+                                .padding(horizontal = 20.dp, vertical = 18.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                appString(R.string.news_title),
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = Color.White,
+                            )
+                            latestNews?.let {
+                                Text(
+                                    it.date,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.White.copy(alpha = 0.75f),
+                                    modifier = Modifier.align(Alignment.CenterEnd),
+                                )
+                            }
+                        }
+                        if (newsError != null && latestNews == null) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(top = 2.dp),
+                            ) {
+                                Text(
+                                    appString(R.string.news_error),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = colors.textFaint,
+                                )
+                                TextButton(onClick = { vm.refreshNews(force = true) }) {
+                                    Text(appString(R.string.retry))
+                                }
+                            }
+                        }
+                    }
+                }
+
                 item {
                     // Total focus today
                     AppCard {
@@ -159,58 +205,6 @@ fun TodayRoute(overlays: OverlayViewModel, vm: TodayViewModel = viewModel()) {
                             sessions.forEach { session ->
                                 SessionRow(session)
                                 Spacer(Modifier.height(8.dp))
-                            }
-                        }
-                    }
-                }
-
-                item {
-                    // USTC news
-                    AppCard {
-                        Column(Modifier.fillMaxWidth().padding(4.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    appString(R.string.news_title),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = colors.textSecondary,
-                                )
-                                Spacer(Modifier.weight(1f))
-                                latestNews?.let {
-                                    Text(
-                                        it.date,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = colors.textFaint,
-                                    )
-                                }
-                            }
-                            Spacer(Modifier.height(8.dp))
-                            when {
-                                latestNews != null -> {
-                                    Text(
-                                        latestNews.title,
-                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                                        color = colors.textPrimary,
-                                    )
-                                    Spacer(Modifier.height(8.dp))
-                                    TextButton(onClick = { overlays.open(Overlay.NewsReader(latestNews.date)) }) {
-                                        Text(appString(R.string.view_full_news))
-                                    }
-                                }
-                                newsError != null -> Column {
-                                    Text(
-                                        appString(R.string.news_error),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = colors.textMuted,
-                                    )
-                                    TextButton(onClick = { vm.refreshNews(force = true) }) {
-                                        Text(appString(R.string.retry))
-                                    }
-                                }
-                                else -> Text(
-                                    appString(R.string.news_empty),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = colors.textFaint,
-                                )
                             }
                         }
                     }
