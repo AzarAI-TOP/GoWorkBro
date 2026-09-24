@@ -1,21 +1,20 @@
 package com.azarai.goworkbro
 
-import androidx.compose.ui.test.hasScrollAction
-import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onLast
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.longClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.azarai.goworkbro.core.Store
-import com.azarai.goworkbro.core.db.NewsCache
-import com.azarai.goworkbro.core.util.Dates
-import com.azarai.goworkbro.ui.AppRoot
-import com.azarai.goworkbro.ui.EnvViewModel
-import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -25,12 +24,8 @@ import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.SQLiteMode
 
 /**
- * Full-app smoke test on Robolectric: boots the real application, renders
- * the whole Compose UI and walks the primary flows (todos, habits, completed
- * section, timer, countdown, Today + news, Me + language switch).
- *
- * Screen titles duplicate the bottom-nav labels ("待办" etc.), so tab clicks
- * use onFirst() and assertions target unique strings.
+ * Full-app smoke test on Robolectric: boots the real activity, renders the
+ * home grid and walks the todo / habit / water flows.
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -39,137 +34,227 @@ import org.robolectric.annotation.SQLiteMode
 class AppSmokeTest {
 
     @get:Rule
-    val rule = createAndroidComposeRule<androidx.activity.ComponentActivity>()
+    val rule = createAndroidComposeRule<MainActivity>()
 
     @Before
     fun seed() {
-        // Robolectric reuses the classloader across methods — rebind Graph to
-        // this method's fresh application before touching any singleton.
         Graph.rebindForTesting(androidx.test.core.app.ApplicationProvider.getApplicationContext())
-        // Seed a cached news edition and make the hourly fetch check a no-op,
-        // keeping the smoke test offline-deterministic.
-        runBlocking {
-            Graph.db.newsCacheDao().upsertAll(
-                listOf(
-                    NewsCache(
-                        date = Dates.todayKey(),
-                        title = "USTC 每日要闻 — 测试",
-                        markdown = "# USTC 每日要闻 — 测试\n\n- 测试条目",
-                    ),
-                ),
-            )
-            Graph.store.set(Store.Keys.NEWS_LAST_FETCH, System.currentTimeMillis().toString())
-        }
-    }
-
-    private fun launch() {
-        rule.setContent {
-            val env: EnvViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
-            AppRoot(env)
-        }
-        rule.waitForIdle()
-        // Robolectric: first composition (incl. bundled font loading) can be
-        // slow and racy — poll until the tab shell is materialized.
-        rule.waitUntil(20_000) { exists("待办") }
-        rule.waitForIdle()
     }
 
     private fun exists(text: String) =
         rule.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
 
-    @Test
-    fun tabsRenderAndEmptyStateShows() {
-        launch()
-        org.junit.Assert.assertTrue(exists("待办"))
-        org.junit.Assert.assertTrue(exists("Today"))
-        org.junit.Assert.assertTrue(exists("我"))
-        rule.onNodeWithText("还没有待办事项").assertExists()
-        rule.onNodeWithText("点击右下角 + 创建第一个待办").assertExists()
-    }
+    private fun hasDesc(desc: String) =
+        rule.onAllNodesWithContentDescription(desc).fetchSemanticsNodes().isNotEmpty()
 
-    @Test
-    fun addTodoOpenTimerAndCompleteHabitFlow() {
-        launch()
+    private fun hasSub(text: String) =
+        rule.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty()
 
-        // -- add a forward-timer todo (Room write is async -> poll) --
-        rule.onNodeWithContentDescription("添加").performClick()
-        rule.onNodeWithText("TODO").performClick()
-        rule.onNodeWithText("想做什么？").performTextInput("复习线代")
-        rule.onNodeWithText("保存").performClick()
-        rule.waitUntil(5_000) { exists("复习线代") }
-        rule.onNodeWithText("正向计时").assertExists()
-
-        // -- tapping a timed todo opens the timer overlay --
-        rule.onNodeWithText("复习线代").performClick()
-        rule.onNodeWithText("开始").assertExists()
-        // back out without recording (elapsed == 0 -> close directly)
-        androidx.test.platform.app.InstrumentationRegistry
-            .getInstrumentation().runOnMainSync {
-                rule.activity.onBackPressedDispatcher.onBackPressed()
-            }
+    private fun homeReady() {
         rule.waitForIdle()
-        org.junit.Assert.assertFalse(exists("开始"))
+        rule.waitUntil(20_000) { exists("待办") && exists("睡觉") }
+    }
 
-        // -- add a habit and complete it --
+    @Test
+    fun startupRevealPlaysThenDismisses() {
+        homeReady()
+        rule.waitUntil(20_000) {
+            rule.onAllNodesWithContentDescription("启动动画").fetchSemanticsNodes().isEmpty()
+        }
+    }
+
+    @Test
+    fun homeShowsSixModules() {
+        homeReady()
+        listOf("待办", "习惯", "喝水", "健身", "起床", "睡觉").forEach {
+            assertTrue("missing module card: $it", exists(it))
+        }
+    }
+
+    @Test
+    fun todoAddToggleFlow() {
+        homeReady()
+        rule.onAllNodesWithText("待办").onFirst().performClick()
+        rule.waitUntil(10_000) { rule.onAllNodesWithContentDescription("添加").fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithContentDescription("添加").performClick()
-        rule.onNodeWithText("HABIT").performClick()
-        rule.onNodeWithText("习惯名称").performTextInput("喝水")
+        rule.waitUntil(10_000) { exists("新待办") }
+        rule.onNode(hasSetTextAction()).performTextInput("写作业")
         rule.onNodeWithText("保存").performClick()
-        rule.waitUntil(5_000) { exists("喝水") }
-        rule.onNodeWithText("每日 0/1 次").assertExists()
-        rule.onNodeWithContentDescription("打卡").performClick()
-        // Completed habit moves into the collapsed completed section.
-        rule.waitUntil(5_000) { exists("已完成 · 1") }
+        rule.waitUntil(10_000) { exists("写作业") }
+        // tap toggles done
+        rule.onAllNodesWithText("写作业").onFirst().performClick()
+        rule.waitUntil(10_000) { exists("已完成") }
+        // and back
+        rule.onAllNodesWithText("写作业").onFirst().performClick()
+        rule.waitUntil(10_000) { exists("待完成") }
     }
 
     @Test
-    fun countdownTabAddFlow() {
-        launch()
-        rule.onAllNodesWithText("倒计时")[0].performClick()
-        rule.onNodeWithText("还没有倒计时").assertExists()
+    fun timerForwardFlow() {
+        homeReady()
+        rule.onAllNodesWithText("待办").onFirst().performClick()
+        rule.waitUntil(10_000) { rule.onAllNodesWithContentDescription("添加").fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithContentDescription("添加").performClick()
-        rule.onNodeWithText("标题").performTextInput("期末考试")
-        rule.onNodeWithText("创建").performClick()
-        rule.waitUntil(5_000) { exists("期末考试") }
-        org.junit.Assert.assertTrue(
-            rule.onAllNodesWithText("目标 ", substring = true).fetchSemanticsNodes().isNotEmpty(),
-        )
+        rule.waitUntil(10_000) { exists("新待办") }
+        rule.onNode(hasSetTextAction()).performTextInput("Focus")
+        rule.onNodeWithText("正向计时").performClick()
+        rule.onNodeWithText("保存").performClick()
+        rule.waitUntil(10_000) { exists("Focus") }
+        // tap the timed card -> focus screen opens
+        rule.onAllNodesWithText("Focus").onFirst().performClick()
+        rule.waitUntil(10_000) {
+            rule.onAllNodesWithContentDescription("暂停").fetchSemanticsNodes().isNotEmpty()
+        }
+        rule.onNodeWithContentDescription("暂停").performClick()
+        rule.waitUntil(10_000) {
+            rule.onAllNodesWithContentDescription("继续").fetchSemanticsNodes().isNotEmpty()
+        }
+        // stop -> back to the list, card still there
+        rule.onNodeWithContentDescription("提前结束").performClick()
+        rule.waitUntil(10_000) { rule.onAllNodesWithContentDescription("暂停").fetchSemanticsNodes().isEmpty() }
+        assertTrue(exists("Focus"))
     }
 
     @Test
-    fun todayTabShowsStatsAndNews() {
-        launch()
-        rule.onAllNodesWithText("Today")[0].performClick()
-        rule.onNodeWithText("今日专注").assertExists()
-        // The news banner takes the top slot, pushing the chart cards below
-        // Robolectric's 320x470 fold — scroll to each before asserting.
-        rule.onNode(hasScrollAction()).performScrollToNode(hasText("来源分布"))
-        rule.onNodeWithText("来源分布").assertExists()
-        rule.onNode(hasScrollAction()).performScrollToNode(hasText("近 7 天"))
-        rule.onNodeWithText("近 7 天").assertExists()
-        // Back to the top: the news banner opens the reader overlay.
-        rule.onNode(hasScrollAction()).performScrollToNode(hasText("USTC 每日要闻"))
-        rule.onNodeWithText("USTC 每日要闻").performClick()
-        // The Today banner behind the overlay repeats the title prefix, so use
-        // existence checks (>=1) rather than unique-match assertions.
-        org.junit.Assert.assertTrue(exists("USTC 每日要闻 — 测试"))
-        org.junit.Assert.assertTrue(exists("测试条目"))
+    fun countdownTimerAndHomeMiniCardFlow() {
+        homeReady()
+        rule.onAllNodesWithText("待办").onFirst().performClick()
+        rule.waitUntil(10_000) { hasDesc("添加") }
+        rule.onNodeWithContentDescription("添加").performClick()
+        rule.waitUntil(10_000) { exists("新待办") }
+        rule.onNode(hasSetTextAction()).performTextInput("Read")
+        rule.onNodeWithText("倒计时").performClick()
+        rule.onNodeWithText("10").performClick()
+        rule.onNodeWithText("保存").performClick()
+        rule.waitUntil(10_000) { hasSub("倒计时 10min") }
+
+        // countdown card opens the focus screen
+        rule.onAllNodesWithText("Read").onFirst().performClick()
+        rule.waitUntil(10_000) { exists("倒计时") && exists("本任务已进行 0 次") }
+        assertTrue(hasDesc("暂停") && hasDesc("提前结束"))
+
+        // back arrow only closes the focus page -> list -> home mini-card
+        rule.onAllNodesWithContentDescription("返回").onFirst().performClick()
+        rule.waitUntil(10_000) { hasDesc("添加") }
+        rule.onAllNodesWithContentDescription("返回").onFirst().performClick()
+        rule.waitUntil(10_000) { exists("已进行 0 次") }
+        assertTrue(exists("倒"))
+        assertTrue(hasSub("%"))
+
+        // mini-card -> focus page; pause then finish early
+        rule.onAllNodesWithText("Read").onFirst().performClick()
+        rule.waitUntil(10_000) { hasDesc("暂停") }
+        rule.onNodeWithContentDescription("暂停").performClick()
+        rule.waitUntil(10_000) { hasSub("已暂停") }
+
+        // finishing from the focus page lands on the todo list
+        rule.onNodeWithContentDescription("提前结束").performClick()
+        rule.waitUntil(10_000) { hasDesc("添加") }
+        assertTrue(hasDesc("暂停").not())
+
+        // ...and a round shorter than a minute is not counted
+        rule.onAllNodesWithText("Read").onFirst().performClick()
+        rule.waitUntil(10_000) { exists("本任务已进行 0 次") }
+        rule.onAllNodesWithContentDescription("返回").onFirst().performClick()
+        rule.waitUntil(10_000) { hasDesc("添加") }
+
+        // long-press -> edit dialog -> 标记完成 (the only way to close a timed todo)
+        rule.onAllNodesWithText("Read").onFirst().performTouchInput { longClick() }
+        rule.waitUntil(10_000) { exists("标记完成") }
+        rule.onNodeWithText("标记完成").performClick()
+        rule.waitUntil(10_000) { exists("已完成") }
+
+        // a finished todo is history: no delete affordance, only 标记未完成
+        rule.onAllNodesWithText("Read").onFirst().performTouchInput { longClick() }
+        rule.waitUntil(10_000) { exists("标记未完成") }
+        assertTrue(rule.onAllNodesWithText("删除").fetchSemanticsNodes().isEmpty())
     }
 
     @Test
-    fun meTabRendersAndLanguageSwitches() {
-        launch()
-        rule.onAllNodesWithText("我")[0].performClick()
-        rule.onNodeWithText("今日打卡").assertExists()
-        rule.onNodeWithText("起床").assertExists()
-        rule.onAllNodesWithText("统计")[0].performClick()
-        rule.onNodeWithText("累计统计").assertExists()
-        rule.onAllNodesWithText("设置")[0].performClick()
-        rule.onNodeWithText("数据管理").assertExists()
-        // switch language to English and verify tab labels flip in-place
-        // (the locale write goes through Room, so wait for recomposition)
-        rule.onNodeWithText("English").performClick()
-        rule.waitUntil(10_000) { exists("Todo") }
-        org.junit.Assert.assertTrue(exists("Countdown"))
+    fun wakeCheckInWithoutSleepAsksForBedtime() {
+        homeReady()
+        // HOME's quick buttons sit inside a clickable card, which Robolectric's
+        // semantics clicks don't reach — drive the same flow from the page.
+        rule.onAllNodesWithText("起床").onFirst().performClick()
+        rule.waitUntil(10_000) { exists("起床打卡") || exists("修改时间") }
+        rule.onAllNodesWithText("打卡").onFirst().performScrollTo().performClick()
+        rule.waitUntil(10_000) { exists("上次是什么时候睡的？") }
+
+        rule.onNodeWithText("通宵了").performClick()
+        rule.waitUntil(10_000) { exists("修改时间") && !exists("今天还没起床打卡") }
+    }
+
+    @Test
+    fun sleepThenWakePairsWithoutPrompt() {
+        homeReady()
+        // record a bedtime, then a wake: the two pair up, so nothing is asked
+        rule.onAllNodesWithText("睡觉").onFirst().performClick()
+        rule.waitUntil(10_000) { exists("睡觉打卡") }
+        rule.onAllNodesWithText("打卡").onFirst().performScrollTo().performClick()
+        rule.waitUntil(10_000) { exists("修改时间") }
+
+        rule.onAllNodesWithContentDescription("返回").onFirst().performClick()
+        rule.waitUntil(10_000) { exists("待办") && exists("睡觉") }
+        rule.onAllNodesWithText("起床").onFirst().performClick()
+        rule.waitUntil(10_000) { exists("起床打卡") }
+        rule.onAllNodesWithText("打卡").onFirst().performScrollTo().performClick()
+        rule.waitUntil(10_000) { exists("修改时间") }
+        assertTrue(!exists("上次是什么时候睡的？"))
+    }
+
+    @Test
+    fun everyModuleScreenRenders() {
+        homeReady()
+        fun open(name: String) {
+            rule.onAllNodesWithText(name).onFirst().performClick()
+            rule.waitForIdle()
+        }
+        fun back(scrollable: Boolean = false) {
+            val node = rule.onAllNodesWithContentDescription("返回").onFirst()
+            if (scrollable) node.performScrollTo()
+            node.performClick()
+            rule.waitForIdle()
+        }
+
+        open("待办"); assertTrue(hasDesc("添加")); back()
+        open("习惯"); assertTrue(hasDesc("添加")); back()
+
+        open("喝水")
+        rule.waitUntil(5_000) { exists("快捷杯子（长按修改）") && exists("今日记录") && exists("近 7 天") }
+        assertTrue(exists("今日目标达成啦 🎉") || hasSub("还差"))
+        back()
+
+        open("健身")
+        rule.waitUntil(5_000) { exists("记一笔运动") && exists("今日记录") && exists("近 7 天") }
+        assertTrue(exists("+10 分钟") && exists("+30 分钟") && exists("自定义"))
+        back()
+
+        open("起床")
+        rule.waitUntil(5_000) { exists("最近 7 天") && exists("修改时间") }
+        assertTrue(exists("连续") && exists("累计"))
+        back()
+
+        open("睡觉")
+        rule.waitUntil(5_000) { exists("最近 7 天") }
+        back()
+
+        // overview -> settings -> back out of both
+        rule.onNodeWithContentDescription("数据纵览").performClick()
+        rule.waitUntil(5_000) { exists("今日专注时间占比") && exists("近七天睡眠时长") }
+        rule.onNodeWithContentDescription("设置").performScrollTo().performClick()
+        rule.waitUntil(5_000) { exists("熬夜模式") && exists("删除应用数据") }
+        back()
+        rule.waitUntil(5_000) { exists("今日专注时间占比") }
+        back(scrollable = true)
+        rule.waitUntil(5_000) { exists("待办") && exists("睡觉") }
+    }
+
+    @Test
+    fun waterDrinkFlow() {
+        homeReady()
+        rule.onAllNodesWithText("喝水").onFirst().performClick()
+        rule.waitUntil(10_000) { exists("快捷杯子（长按修改）") }
+        rule.onNodeWithText("250ml").performClick()
+        rule.waitUntil(10_000) { rule.onAllNodesWithText("喝了 250 ml", substring = true).fetchSemanticsNodes().isNotEmpty() }
     }
 }

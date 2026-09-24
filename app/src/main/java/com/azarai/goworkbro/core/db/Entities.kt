@@ -5,38 +5,44 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-/** Timing modes for a todo. Stored as the raw name for v1-export compatibility. */
-enum class TimingType(val raw: String) {
-    FORWARD("forward"),
-    BACKWARD("backward"),
-    NONE("none");
+/** Timing modes for a todo. */
+enum class TimingType(val raw: String, val label: String) {
+    FORWARD("forward", "正"),
+    COUNTDOWN("countdown", "倒"),
+    NONE("none", "");
 
     companion object {
-        fun fromRaw(value: String?): TimingType =
-            entries.firstOrNull { it.raw == value } ?: FORWARD
+        fun fromRaw(value: String?): TimingType = entries.firstOrNull { it.raw == value } ?: NONE
     }
 }
 
+/** A todo item. Checked state persists until the user removes it. */
 @Entity(tableName = "todos")
 data class Todo(
     @PrimaryKey val id: String,
     val title: String,
-    @ColumnInfo(name = "timing_type") val timingType: String = "forward",
+    /** Key into CartoonIcons (see ui/components/CartoonIcon.kt). */
+    val icon: String = "scroll",
+    /** Index into the pastel palette used for the icon circle background. */
+    @ColumnInfo(name = "color_index") val colorIndex: Int = 0,
+    /** none | forward | countdown */
+    @ColumnInfo(name = "timing_type") val timingType: String = "none",
+    /** Countdown duration in minutes (ignored otherwise). */
     @ColumnInfo(name = "duration_minutes") val durationMinutes: Int = 25,
-    @ColumnInfo(name = "is_completed") val isCompleted: Boolean = false,
+    @ColumnInfo(name = "is_done") val isDone: Boolean = false,
     @ColumnInfo(name = "sort_order") val sortOrder: Int = 0,
-    @ColumnInfo(name = "keep_tomorrow") val keepTomorrow: Boolean = true,
     @ColumnInfo(name = "created_date") val createdDate: String = "",
-    @ColumnInfo(name = "completed_date") val completedDate: String? = null,
-    @ColumnInfo(name = "actual_duration_seconds") val actualDurationSeconds: Int = 0,
 ) {
     val timing: TimingType get() = TimingType.fromRaw(timingType)
 }
 
+/** A habit with a daily counter that the rollover engine resets. */
 @Entity(tableName = "habits")
 data class Habit(
     @PrimaryKey val id: String,
     val title: String,
+    val icon: String = "sprout",
+    @ColumnInfo(name = "color_index") val colorIndex: Int = 1,
     @ColumnInfo(name = "target_count") val targetCount: Int = 1,
     val unit: String = "次",
     @ColumnInfo(name = "sort_order") val sortOrder: Int = 0,
@@ -47,54 +53,52 @@ data class Habit(
     val isCompleted: Boolean get() = currentCount >= targetCount
 }
 
-@Entity(
-    tableName = "focus_sessions",
-    indices = [Index("session_date")],
-)
-data class FocusSession(
+/**
+ * One wake or sleep check-in, stamped with its absolute local time. Sleep
+ * sessions are derived by pairing a sleep with the next wake
+ * (see [com.azarai.goworkbro.core.RoutineOps.pair]).
+ */
+@Entity(tableName = "routine_events", indices = [Index("at"), Index("kind")])
+data class RoutineEvent(
     @PrimaryKey val id: String,
-    @ColumnInfo(name = "todo_id") val todoId: String? = null,
-    @ColumnInfo(name = "source_type") val sourceType: String = "todo",
-    @ColumnInfo(name = "source_title") val sourceTitle: String = "",
-    @ColumnInfo(name = "start_time") val startTime: String = "",
-    @ColumnInfo(name = "end_time") val endTime: String = "",
-    @ColumnInfo(name = "duration_seconds") val durationSeconds: Int = 0,
-    @ColumnInfo(name = "session_date") val sessionDate: String = "",
+    /** "sleep" or "wake". */
+    val kind: String,
+    /** ISO local datetime of the check-in. */
+    @ColumnInfo(name = "at") val at: String,
+    /** True when this wake followed an all-nighter (nothing to pair with). */
+    @ColumnInfo(name = "no_sleep") val noSleep: Boolean = false,
 )
 
-@Entity(tableName = "countdowns")
-data class Countdown(
+/** One drink of water. */
+@Entity(tableName = "water_logs", indices = [Index("log_date")])
+data class WaterLog(
     @PrimaryKey val id: String,
-    val title: String,
-    /** UTC ISO-8601 with Z suffix (v1 semantics). */
-    @ColumnInfo(name = "target_datetime") val targetDatetime: String = "",
-    @ColumnInfo(name = "created_date") val createdDate: String = "",
-    @ColumnInfo(name = "color_index") val colorIndex: Int = 0,
+    @ColumnInfo(name = "log_date") val logDate: String = "",
+    val ml: Int,
+    /** `HH:mm` for display only. */
+    @ColumnInfo(name = "logged_at") val loggedAt: String = "",
 )
 
-@Entity(
-    tableName = "sleep_records",
-    indices = [Index(value = ["record_date"], unique = true)],
-)
-data class SleepRecord(
+/** One bout of exercise, in minutes. */
+@Entity(tableName = "fitness_logs", indices = [Index("log_date")])
+data class FitnessLog(
     @PrimaryKey val id: String,
-    @ColumnInfo(name = "record_date") val recordDate: String = "",
-    @ColumnInfo(name = "wake_time") val wakeTime: String? = null,
-    @ColumnInfo(name = "sleep_time") val sleepTime: String? = null,
-    @ColumnInfo(name = "workout_duration_minutes") val workoutDurationMinutes: Int? = null,
-    val note: String? = null,
+    @ColumnInfo(name = "log_date") val logDate: String = "",
+    val minutes: Int,
+    @ColumnInfo(name = "logged_at") val loggedAt: String = "",
+)
+
+/** One finished focus round for a todo (>= 1 minute). */
+@Entity(tableName = "focus_logs", indices = [Index("todo_id")])
+data class FocusLog(
+    @PrimaryKey val id: String,
+    @ColumnInfo(name = "todo_id") val todoId: String,
+    @ColumnInfo(name = "log_date") val logDate: String,
+    val minutes: Int,
 )
 
 @Entity(tableName = "user_settings")
 data class SettingRow(
     @PrimaryKey val key: String,
     val value: String,
-)
-
-@Entity(tableName = "ustc_news_cache")
-data class NewsCache(
-    @PrimaryKey val date: String,
-    val title: String,
-    val markdown: String,
-    @ColumnInfo(name = "cached_at") val cachedAt: String = "",
 )

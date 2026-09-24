@@ -15,14 +15,15 @@ val hasReleaseKeystore = keystoreProperties.getProperty("storeFile") != null
 
 android {
     namespace = "com.azarai.goworkbro"
-    compileSdk = 35
+    compileSdk = 36
+    buildToolsVersion = "36.0.0"
 
     defaultConfig {
         applicationId = "com.azarai.goworkbro"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        versionName = "2.0.1"
+        versionCode = 10
+        versionName = "3.0.0"
         vectorDrawables.useSupportLibrary = true
     }
 

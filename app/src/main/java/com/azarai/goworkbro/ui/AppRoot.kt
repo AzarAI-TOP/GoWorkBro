@@ -1,187 +1,150 @@
 package com.azarai.goworkbro.ui
 
-import android.content.Context
-import android.content.res.Configuration
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.HourglassBottom
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Today
-import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.HourglassBottom
-import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.Today
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.ViewModel
-import androidx.annotation.StringRes
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.foundation.layout.PaddingValues
-import com.azarai.goworkbro.R
-import com.azarai.goworkbro.ui.countdown.CountdownRoute
-import com.azarai.goworkbro.ui.me.MeRoute
-import com.azarai.goworkbro.ui.theme.AppTheme
+import com.azarai.goworkbro.Graph
+import com.azarai.goworkbro.core.LogicalDay
+import com.azarai.goworkbro.core.Rollover
+import com.azarai.goworkbro.ui.fitness.FitnessScreen
+import com.azarai.goworkbro.ui.habit.HabitScreen
+import com.azarai.goworkbro.ui.home.HomeScreen
+import com.azarai.goworkbro.ui.overview.OverviewScreen
+import com.azarai.goworkbro.ui.settings.SettingsScreen
 import com.azarai.goworkbro.ui.theme.GoWorkBroTheme
-import com.azarai.goworkbro.ui.theme.ThemeMode
-import com.azarai.goworkbro.ui.today.TodayRoute
+import com.azarai.goworkbro.ui.todo.TodoScreen
+import com.azarai.goworkbro.ui.water.WaterScreen
+import com.azarai.goworkbro.ui.routine.RoutineScreen
+import com.azarai.goworkbro.ui.components.StartupReveal
 import com.azarai.goworkbro.ui.timer.TimerScreen
-import java.util.Locale
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
+import com.azarai.goworkbro.ui.timer.TimerViewModel
 
-/** Full-screen layers shown above the tab shell (v1 pushed routes). */
-sealed class Overlay {
-    data class Timer(val todoId: String) : Overlay()
-    data class NewsReader(val date: String?) : Overlay()
+/** Route ids for the tiny hand-rolled navigation stack. */
+object Routes {
+    const val HOME = "home"
+    const val TODOS = "todos"
+    const val HABITS = "habits"
+    const val WATER = "water"
+    const val FITNESS = "fitness"
+    const val ROUTINE_WAKE = "routine:wake"
+    const val ROUTINE_SLEEP = "routine:sleep"
+    const val OVERVIEW = "overview"
+    const val SETTINGS = "settings"
 }
 
-class OverlayViewModel : ViewModel() {
-    val overlay = MutableStateFlow<Overlay?>(null)
-
-    fun open(value: Overlay) {
-        overlay.value = value
-    }
-
-    fun close() {
-        overlay.value = null
-    }
-}
-
-/** Context whose resources resolve in the in-app language (zh/en). */
-val LocalLocaleContext = compositionLocalOf<Context> {
-    error("LocalLocaleContext not provided")
-}
-
+/** Single-activity app root: one home page, no tabs, pushed detail pages. */
 @Composable
-fun appString(@StringRes id: Int): String = LocalLocaleContext.current.getString(id)
-
-@Composable
-fun appString(@StringRes id: Int, vararg args: Any): String =
-    LocalLocaleContext.current.getString(id, *args)
-
-@Composable
-fun AppRoot(env: EnvViewModel, overlays: OverlayViewModel = androidx.lifecycle.viewmodel.compose.viewModel()) {
-    val themeMode by env.themeMode.collectAsState()
-    val fontChoice by env.fontChoice.collectAsState()
-    val locale by env.locale.collectAsState()
-    val overlay by overlays.overlay.collectAsState()
-
-    // Rollover boundary checks: on resume + every 30s while foregrounded.
+fun AppRoot() {
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    // Coming back to the foreground re-reads the logical day; the day flow
+    // itself re-emits at the 04:00/midnight boundary while the app stays open.
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) env.refreshRollover()
+            if (event == Lifecycle.Event.ON_RESUME) LogicalDay.notifyResumed()
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     LaunchedEffect(Unit) {
-        while (true) {
-            delay(30_000)
-            env.refreshRollover()
-        }
+        LogicalDay.flow.collect { Rollover.ensure(Graph.db, Graph.store) }
     }
 
-    GoWorkBroTheme(themeMode = themeMode, fontChoice = fontChoice) {
-        val context = LocalContext.current
-        val localeContext = remember(locale, context) {
-            val config = Configuration(context.resources.configuration)
-            config.setLocale(Locale.forLanguageTag(locale))
-            context.createConfigurationContext(config)
+    GoWorkBroTheme {
+        var stack by rememberSaveable { mutableStateOf(listOf(Routes.HOME)) }
+        var showTimer by rememberSaveable { mutableStateOf(false) }
+        // cold-start reveal: the big sprout flies into the home header
+        var showReveal by rememberSaveable { mutableStateOf(true) }
+        var sproutCenter by remember { mutableStateOf<androidx.compose.ui.geometry.Offset?>(null) }
+        val timerVm: TimerViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+        val open: (String) -> Unit = { stack = stack + it }
+        val back: () -> Unit = { stack = stack.dropLast(1) }
+        val openTimer: (com.azarai.goworkbro.core.db.Todo) -> Unit = { todo ->
+            timerVm.start(todo)
+            showTimer = true
         }
-        val colors = AppTheme.colors
 
-        BackHandler(enabled = overlay != null) { overlays.close() }
+        val activeTimer by timerVm.active.collectAsState()
+        BackHandler(enabled = showTimer && activeTimer != null) { showTimer = false }
+        // the nav handler must not steal back while the focus overlay is up
+        BackHandler(enabled = !showTimer && stack.size > 1) { back() }
+
+        // A round that ends while the focus page is open drops the user on the
+        // todo list; otherwise the page stays put (the home mini-card just goes).
+        LaunchedEffect(activeTimer, showTimer) {
+            if (showTimer && activeTimer == null) {
+                showTimer = false
+                if (stack.last() != Routes.TODOS) stack = listOf(Routes.HOME, Routes.TODOS)
+            }
+        }
 
         Box(Modifier.fillMaxSize()) {
-            CompositionLocalProvider(LocalLocaleContext provides localeContext) {
-                var selectedTab by rememberSaveable { mutableIntStateOf(0) }
-                val stateHolder = rememberSaveableStateHolder()
-
-                Scaffold(
-                    containerColor = colors.scaffold,
-                    bottomBar = {
-                        NavigationBar(containerColor = colors.card) {
-                            TabSpec.entries.forEachIndexed { index, tab ->
-                                NavigationBarItem(
-                                    selected = selectedTab == index,
-                                    onClick = { selectedTab = index },
-                                    icon = {
-                                        Icon(
-                                            imageVector = if (selectedTab == index) tab.filled else tab.outlined,
-                                            contentDescription = appString(tab.label),
-                                        )
-                                    },
-                                    label = { Text(appString(tab.label)) },
-                                    colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = colors.primary,
-                                        selectedTextColor = colors.primary,
-                                        unselectedIconColor = colors.navUnselected,
-                                        unselectedTextColor = colors.navUnselected,
-                                        indicatorColor = colors.primary.copy(alpha = 0.12f),
-                                    ),
-                                )
-                            }
-                        }
-                    },
-                ) { padding ->
-                    Box(Modifier.padding(bottom = padding.calculateBottomPadding())) {
-                        stateHolder.SaveableStateProvider(selectedTab) {
-                            when (selectedTab) {
-                                0 -> com.azarai.goworkbro.ui.todo.TodoRoute(overlays)
-                                1 -> CountdownRoute()
-                                2 -> TodayRoute(overlays)
-                                else -> MeRoute(env)
-                            }
-                        }
+            AnimatedContent(
+                targetState = stack.last(),
+                modifier = Modifier.fillMaxSize().systemBarsPadding(),
+                transitionSpec = {
+                    if (targetState == Routes.HOME) {
+                        (slideInHorizontally(tween(260)) { -it / 3 } + fadeIn(tween(200))) togetherWith
+                            (slideOutHorizontally(tween(260)) { it / 3 } + fadeOut(tween(200)))
+                    } else {
+                        (slideInHorizontally(tween(260)) { it / 3 } + fadeIn(tween(200))) togetherWith
+                            (slideOutHorizontally(tween(260)) { -it / 3 } + fadeOut(tween(200)))
                     }
-                }
-
-                when (val current = overlay) {
-                    is Overlay.Timer -> TimerScreen(todoId = current.todoId, onClose = overlays::close)
-                    is Overlay.NewsReader -> com.azarai.goworkbro.ui.today.NewsReaderScreen(
-                        initialDate = current.date,
-                        onClose = overlays::close,
+                },
+                label = "nav",
+            ) { top ->
+                when (top) {
+                    Routes.TODOS -> TodoScreen(onBack = back, onOpenTimer = openTimer)
+                    Routes.HABITS -> HabitScreen(onBack = back)
+                    Routes.WATER -> WaterScreen(onBack = back)
+                    Routes.FITNESS -> FitnessScreen(onBack = back)
+                    Routes.ROUTINE_WAKE -> RoutineScreen(wake = true, onBack = back)
+                    Routes.ROUTINE_SLEEP -> RoutineScreen(wake = false, onBack = back)
+                    Routes.OVERVIEW -> OverviewScreen(
+                        onBack = back,
+                        onOpenSettings = { open(Routes.SETTINGS) },
                     )
-                    null -> Unit
+                    Routes.SETTINGS -> SettingsScreen(onBack = back)
+                    else -> HomeScreen(
+                        openRoute = open,
+                        onOpenActiveTimer = { showTimer = true },
+                        onOpenOverview = { open(Routes.OVERVIEW) },
+                        onSproutMeasured = { sproutCenter = it },
+                    )
                 }
+            }
+
+            // full-screen focus overlay, lives above the nav stack
+            if (showTimer && activeTimer != null) {
+                TimerScreen(vm = timerVm, onClose = { showTimer = false })
+            }
+
+            // cold-start sprout flight, above everything
+            if (showReveal) {
+                StartupReveal(targetCenter = sproutCenter) { showReveal = false }
             }
         }
     }
-}
-
-private enum class TabSpec(
-    val label: Int,
-    val filled: ImageVector,
-    val outlined: ImageVector,
-) {
-    TODO_TAB(R.string.tab_todo, Icons.Filled.CheckCircle, Icons.Outlined.CheckCircle),
-    COUNTDOWN_TAB(R.string.tab_countdown, Icons.Filled.HourglassBottom, Icons.Outlined.HourglassBottom),
-    TODAY_TAB(R.string.tab_today, Icons.Filled.Today, Icons.Outlined.Today),
-    ME_TAB(R.string.tab_me, Icons.Filled.Person, Icons.Outlined.Person),
 }

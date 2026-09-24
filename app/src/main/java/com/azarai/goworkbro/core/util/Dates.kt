@@ -1,10 +1,7 @@
 package com.azarai.goworkbro.core.util
 
-import java.time.Duration
-import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 /** Date helpers. All date keys are local-time `yyyy-MM-dd` strings. */
@@ -13,6 +10,7 @@ object Dates {
     const val SLEEP_ROW_CUTOFF_HOUR = 12
 
     private val KEY: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+    private val HHMM: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
     fun dateKeyOf(date: LocalDate): String = date.format(KEY)
 
@@ -39,30 +37,6 @@ object Dates {
         return if (canCarryOver) dateKeyOf(now.minusDays(1)) else calendarDate
     }
 
-    /**
-     * Date row used by a sleep check-in: before noon belongs to the current
-     * calendar row, from noon onward to the following row. This keeps sleep
-     * and wake times paired. Independent of the late-night boundary.
-     */
-    fun sleepRecordDateKey(
-        now: LocalDateTime,
-        cutoffHour: Int = SLEEP_ROW_CUTOFF_HOUR,
-    ): String = dateKeyOf(if (now.hour < cutoffHour) now else now.plusDays(1))
-
-    /** A wake-up check-in belongs to its wall-clock date. */
-    fun wakeRecordDateKey(now: LocalDateTime): String = dateKeyOf(now)
-
-    /**
-     * Resolves a time-only check-in to its most recent local occurrence: a
-     * selected clock time later than now refers to yesterday. Lets the user
-     * backfill last night's sleep without pre-closing the next day.
-     */
-    fun resolveCheckInDateTime(now: LocalDateTime, hour: Int, minute: Int): LocalDateTime {
-        var resolved = now.toLocalDate().atTime(hour, minute)
-        if (resolved.isAfter(now)) resolved = resolved.minusDays(1)
-        return resolved
-    }
-
     /** Parses `HH:mm` into decimal hours (e.g. "23:29" -> 23.4833…). */
     fun hoursFromTime(value: String?): Double? {
         if (value == null) return null
@@ -80,18 +54,6 @@ object Dates {
         return "%02d:%02d".format(totalMinutes / 60, totalMinutes % 60)
     }
 
-    /** Formats decimal hours (e.g. 7.5) as "7h 30m". */
-    fun formatDurationHours(value: Double): String {
-        val totalMinutes = Math.round(value * 60).toInt()
-        val h = totalMinutes / 60
-        val m = totalMinutes % 60
-        return when {
-            h == 0 -> "${m}m"
-            m == 0 -> "${h}h"
-            else -> "${h}h ${m}m"
-        }
-    }
-
     /** Formats seconds as `HH:MM:SS` or `MM:SS`. */
     fun formatSeconds(seconds: Int): String {
         val h = seconds / 3600
@@ -100,26 +62,48 @@ object Dates {
         return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%02d:%02d".format(m, s)
     }
 
+    /** Value/unit pair for durations: 45 -> ("45", "分钟"), 90 -> ("1.5", "小时"). */
+    fun minutesParts(minutes: Int): Pair<String, String> {
+        if (minutes < 60) return minutes.toString() to "分钟"
+        val hours = Math.round(minutes / 6.0) / 10.0
+        val value = if (hours % 1.0 == 0.0) hours.toInt().toString() else hours.toString()
+        return value to "小时"
+    }
+
+    /** "45 分钟" under an hour, otherwise hours with one decimal ("1.5 小时"). */
+    fun formatMinutesHuman(minutes: Int): String {
+        val (value, unit) = minutesParts(minutes)
+        return "$value $unit"
+    }
+
     fun nowIso(): String = DateTimeFormatter.ISO_LOCAL_DATE_TIME.format(LocalDateTime.now())
 
-    /** Parses a stored ISO local datetime; tolerates legacy ISO-8601 with 'Z'. */
-    fun parseIso(value: String): LocalDateTime = try {
-        LocalDateTime.parse(value)
-    } catch (_: Exception) {
-        runCatching { LocalDateTime.ofInstant(Instant.parse(value), ZoneId.systemDefault()) }
-            .getOrDefault(LocalDateTime.now())
-    }
+    fun isoDateTime(value: LocalDateTime): String =
+        DateTimeFormatter.ISO_LOCAL_DATE_TIME.format(value)
 
-    fun durationLabel(seconds: Int): String {
-        val h = seconds / 3600
-        val m = (seconds % 3600) / 60
-        return when {
-            h > 0 && m > 0 -> "${h}h${m}m"
-            h > 0 -> "${h}h"
-            else -> "${m}m"
+    fun parseDateTime(value: String): LocalDateTime = LocalDateTime.parse(value)
+
+    /**
+     * Last 7 days, oldest first, as (label, total) pairs for the week charts.
+     * [totals] is keyed by date; missing days count as zero.
+     */
+    fun weekSeries(today: LocalDate, totals: Map<String, Int>): List<Pair<String, Int>> =
+        (0..6).map { back ->
+            val day = today.minusDays((6 - back).toLong())
+            val label = if (back == 6) "今天" else "${day.monthValue}/${day.dayOfMonth}"
+            label to (totals[dateKeyOf(day)] ?: 0)
         }
-    }
 
-    fun minutesBetween(start: LocalDateTime, end: LocalDateTime): Long =
-        Duration.between(start, end).toMinutes()
+    /** The `HH:mm` format used by every stored time column. */
+    fun hhmm(dateTime: LocalDateTime): String = dateTime.format(HHMM)
+
+    fun hhmm(hour: Int, minute: Int): String = "%02d:%02d".format(hour, minute)
+
+    /** Hours between a sleep time and a wake time (wrap-aware), or null. */
+    fun sleepHours(sleepTime: String?, wakeTime: String?): Float? {
+        val sleep = hoursFromTime(sleepTime) ?: return null
+        val wake = hoursFromTime(wakeTime) ?: return null
+        val adjustedWake = if (wake <= sleep) wake + 24 else wake
+        return (adjustedWake - sleep).toFloat()
+    }
 }

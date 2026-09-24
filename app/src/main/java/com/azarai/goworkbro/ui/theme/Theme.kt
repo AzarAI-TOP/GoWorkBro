@@ -1,131 +1,152 @@
+@file:OptIn(androidx.compose.ui.text.ExperimentalTextApi::class)
+
 package com.azarai.goworkbro.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
+import androidx.compose.material3.Typography
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.azarai.goworkbro.R
 
-/** Theme mode persisted in user_settings (`theme_mode`). */
-object ThemeMode {
-    const val LIGHT = "light"
-    const val DARK = "dark"
-    const val SYSTEM = "system"
-}
-
-/** Extra named colors exposed alongside MaterialTheme.colorScheme (v1 parity). */
-data class AppColors(
-    val primary: Color,
-    val secondary: Color,
+/** Extra semantic colors that ride alongside the M3 scheme. */
+data class ForestExtras(
     val scaffold: Color,
     val card: Color,
     val cardBorder: Color,
     val inputFill: Color,
     val divider: Color,
-    val textPrimary: Color,
     val textSecondary: Color,
-    val textBody: Color,
-    val textMuted: Color,
-    val textFaint: Color,
-    val navUnselected: Color,
-    val chart: List<Color>,
+    val pastels: List<Color>,
 )
 
-val LightAppColors = AppColors(
-    primary = PrimaryLight,
-    secondary = LightSecondary,
-    scaffold = LightScaffold,
-    card = LightCard,
-    cardBorder = LightCardBorder,
-    inputFill = LightInputFill,
-    divider = LightDivider,
-    textPrimary = LightTextPrimary,
-    textSecondary = LightTextSecondary,
-    textBody = LightTextBody,
-    textMuted = LightTextMuted,
-    textFaint = LightTextFaint,
-    navUnselected = LightNavUnselected,
-    chart = ChartColors,
-)
-
-val DarkAppColors = AppColors(
-    primary = PrimaryDark,
-    secondary = DarkSecondary,
-    scaffold = DarkScaffold,
-    card = DarkCard,
-    cardBorder = DarkCardBorder,
-    inputFill = DarkInputFill,
-    divider = DarkDivider,
-    textPrimary = DarkTextPrimary,
-    textSecondary = DarkTextSecondary,
-    textBody = DarkTextBody,
-    textMuted = DarkTextMuted,
-    textFaint = DarkTextFaint,
-    navUnselected = DarkNavUnselected,
-    chart = ChartColors,
-)
-
-fun appColors(dark: Boolean): AppColors = if (dark) DarkAppColors else LightAppColors
-
-val AppShapes = Shapes(
-    small = RoundedCornerShape(8.dp),
-    medium = RoundedCornerShape(12.dp),
-    large = RoundedCornerShape(16.dp),
-    extraLarge = RoundedCornerShape(20.dp),
-)
-
-object AppTheme {
-    /** Local composition accessor for the extended palette. */
-    val colors: AppColors
-        @Composable get() = LocalAppColors.current
+val LocalForestExtras = staticCompositionLocalOf {
+    ForestExtras(
+        scaffold = ForestScaffoldLight,
+        card = ForestCardLight,
+        cardBorder = ForestCardBorderLight,
+        inputFill = ForestInputFillLight,
+        divider = ForestDividerLight,
+        textSecondary = ForestTextSecondaryLight,
+        pastels = PastelPalette,
+    )
 }
 
-/** Extended palette provider — set by [GoWorkBroTheme] so it follows the
- *  in-app theme mode, not just the system setting. */
-val LocalAppColors = androidx.compose.runtime.staticCompositionLocalOf {
-    LightAppColors
-}
+/** The cute rounded font shipped with the app. */
+val CuteFont = FontFamily(
+    Font(R.font.proto_regular, weight = FontWeight.Normal),
+    Font(R.font.proto_bold, weight = FontWeight.SemiBold),
+    Font(R.font.proto_bold, weight = FontWeight.Bold),
+)
 
-/** Theme wrapper applying font + extended colors; Material colorScheme carries
- *  the light/dark surfaces so M3 components style themselves correctly. */
+val ForestTypography = Typography(
+    headlineLarge = TextStyle(fontFamily = CuteFont, fontSize = 28.sp, fontWeight = FontWeight.Bold),
+    headlineMedium = TextStyle(fontFamily = CuteFont, fontSize = 22.sp, fontWeight = FontWeight.SemiBold),
+    titleLarge = TextStyle(fontFamily = CuteFont, fontSize = 19.sp, fontWeight = FontWeight.Bold),
+    titleMedium = TextStyle(fontFamily = CuteFont, fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+    titleSmall = TextStyle(fontFamily = CuteFont, fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
+    bodyLarge = TextStyle(fontFamily = CuteFont, fontSize = 16.sp),
+    bodyMedium = TextStyle(fontFamily = CuteFont, fontSize = 14.sp),
+    bodySmall = TextStyle(fontFamily = CuteFont, fontSize = 12.sp),
+    labelLarge = TextStyle(fontFamily = CuteFont, fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
+    labelMedium = TextStyle(fontFamily = CuteFont, fontSize = 12.sp, fontWeight = FontWeight.Medium),
+    labelSmall = TextStyle(fontFamily = CuteFont, fontSize = 10.sp, fontWeight = FontWeight.Medium),
+)
+
+val ForestShapes = Shapes(
+    small = RoundedCornerShape(10.dp),
+    medium = RoundedCornerShape(14.dp),
+    large = RoundedCornerShape(20.dp),
+    extraLarge = RoundedCornerShape(28.dp),
+)
+
+private val LightScheme: ColorScheme = lightColorScheme(
+    primary = ForestPrimary,
+    onPrimary = ForestOnPrimary,
+    primaryContainer = ForestPrimaryContainer,
+    onPrimaryContainer = ForestOnPrimaryContainer,
+    secondary = ForestSecondary,
+    onSecondary = ForestOnSecondary,
+    secondaryContainer = ForestSecondaryContainer,
+    onSecondaryContainer = ForestOnSecondaryContainer,
+    tertiary = ForestTertiary,
+    onTertiary = ForestOnTertiary,
+    tertiaryContainer = ForestTertiaryContainer,
+    onTertiaryContainer = ForestOnTertiaryContainer,
+    background = ForestScaffoldLight,
+    onBackground = ForestTextPrimaryLight,
+    surface = ForestCardLight,
+    onSurface = ForestTextPrimaryLight,
+    surfaceVariant = ForestCardBorderLight,
+    onSurfaceVariant = ForestTextSecondaryLight,
+    outlineVariant = ForestDividerLight,
+)
+
+private val DarkScheme: ColorScheme = darkColorScheme(
+    primary = ForestPrimaryDark,
+    onPrimary = ForestOnPrimaryDark,
+    primaryContainer = ForestPrimaryContainerDark,
+    onPrimaryContainer = ForestOnPrimaryContainerDark,
+    secondary = ForestSecondaryDark,
+    onSecondary = ForestOnSecondaryDark,
+    secondaryContainer = ForestSecondaryContainerDark,
+    onSecondaryContainer = ForestOnSecondaryContainerDark,
+    tertiary = ForestTertiaryDark,
+    onTertiary = ForestOnTertiaryDark,
+    tertiaryContainer = ForestTertiaryContainerDark,
+    onTertiaryContainer = ForestOnTertiaryContainerDark,
+    background = ForestScaffoldDark,
+    onBackground = ForestTextPrimaryDark,
+    surface = ForestCardDark,
+    onSurface = ForestTextPrimaryDark,
+    surfaceVariant = ForestCardBorderDark,
+    onSurfaceVariant = ForestTextSecondaryDark,
+    outlineVariant = ForestDividerDark,
+)
+
+/** Forest theme — light/night follows the system. */
 @Composable
-fun GoWorkBroTheme(
-    themeMode: String,
-    fontChoice: String,
-    content: @Composable () -> Unit,
-) {
-    val dark = when (themeMode) {
-        ThemeMode.LIGHT -> false
-        ThemeMode.DARK -> true
-        else -> isSystemInDarkTheme()
-    }
-    val extended = appColors(dark)
-    val colorScheme = if (dark) {
-        androidx.compose.material3.darkColorScheme(
-            primary = extended.primary,
-            secondary = extended.secondary,
-            background = extended.scaffold,
-            surface = extended.card,
-            surfaceVariant = extended.cardBorder,
-            outlineVariant = extended.divider,
+fun GoWorkBroTheme(content: @Composable () -> Unit) {
+    val dark = isSystemInDarkTheme()
+    val scheme = if (dark) DarkScheme else LightScheme
+    val extras = if (dark) {
+        ForestExtras(
+            scaffold = ForestScaffoldDark,
+            card = ForestCardDark,
+            cardBorder = ForestCardBorderDark,
+            inputFill = ForestInputFillDark,
+            divider = ForestDividerDark,
+            textSecondary = ForestTextSecondaryDark,
+            pastels = PastelPaletteDark,
         )
     } else {
-        androidx.compose.material3.lightColorScheme(
-            primary = extended.primary,
-            secondary = extended.secondary,
-            background = extended.scaffold,
-            surface = extended.card,
-            surfaceVariant = extended.cardBorder,
-            outlineVariant = extended.divider,
+        ForestExtras(
+            scaffold = ForestScaffoldLight,
+            card = ForestCardLight,
+            cardBorder = ForestCardBorderLight,
+            inputFill = ForestInputFillLight,
+            divider = ForestDividerLight,
+            textSecondary = ForestTextSecondaryLight,
+            pastels = PastelPalette,
         )
     }
-    androidx.compose.runtime.CompositionLocalProvider(LocalAppColors provides extended) {
+    androidx.compose.runtime.CompositionLocalProvider(LocalForestExtras provides extras) {
         MaterialTheme(
-            colorScheme = colorScheme,
-            typography = appTypography(fontChoice),
-            shapes = AppShapes,
+            colorScheme = scheme,
+            typography = ForestTypography,
+            shapes = ForestShapes,
             content = content,
         )
     }

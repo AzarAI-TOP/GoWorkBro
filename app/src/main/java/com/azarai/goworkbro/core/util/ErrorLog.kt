@@ -19,11 +19,6 @@ object ErrorLog {
         }
     }
 
-    fun log(context: Context, tag: String, throwable: Throwable) {
-        val dir = File(context.filesDir, "logs").apply { mkdirs() }
-        append(File(dir, "error.log"), tag, throwable)
-    }
-
     private fun append(file: File, tag: String, throwable: Throwable) {
         if (file.exists() && file.length() > MAX_BYTES) {
             file.writeText("")

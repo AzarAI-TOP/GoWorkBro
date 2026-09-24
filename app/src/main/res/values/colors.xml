@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="splash_bg_light">#F8F8FA</color>
-    <color name="splash_bg_dark">#121214</color>
+    <!-- Forest cream in light theme, deep forest night in dark theme. -->
+    <color name="splash_bg_light">#F6F3E7</color>
+    <color name="splash_bg_dark">#1A211C</color>
 </resources>
