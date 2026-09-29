@@ -217,7 +217,6 @@ fun HomeScreen(
 
     if (missedSleep) {
         MissedSleepDialog(
-            onDismiss = { missedSleep = false },
             onConfirm = { sleepAt ->
                 vm.checkInWakeWithSleep(sleepAt)
                 missedSleep = false

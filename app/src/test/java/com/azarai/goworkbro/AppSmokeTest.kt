@@ -179,6 +179,9 @@ class AppSmokeTest {
         rule.waitUntil(10_000) { exists("起床打卡") || exists("修改时间") }
         rule.onAllNodesWithText("打卡").onFirst().performScrollTo().performClick()
         rule.waitUntil(10_000) { exists("上次是什么时候睡的？") }
+        // the question must be answered: no 取消 escape hatch on the outer dialog
+        assertTrue(!exists("取消"))
+        assertTrue(exists("选时间"))
 
         rule.onNodeWithText("通宵了").performClick()
         rule.waitUntil(10_000) { exists("修改时间") && !exists("今天还没起床打卡") }

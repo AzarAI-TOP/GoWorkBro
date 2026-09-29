@@ -25,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import com.azarai.goworkbro.ui.theme.LocalForestExtras
 import java.time.Instant
 import java.time.LocalDate
@@ -34,12 +35,13 @@ import java.time.ZoneId
 
 /**
  * Shown when a wake check-in has no sleep to pair with (the user tapped 起床
- * twice in a row). Collects the missed bedtime, or marks an all-nighter.
+ * with no pending bedtime). The question must be answered: the dialog cannot
+ * be dismissed — the user either supplies the missed bedtime or marks an
+ * all-nighter, otherwise the night's duration could never be computed.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MissedSleepDialog(
-    onDismiss: () -> Unit,
     onConfirm: (LocalDateTime) -> Unit,
     onAllNighter: () -> Unit,
 ) {
@@ -84,17 +86,15 @@ fun MissedSleepDialog(
     }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {},
+        properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
         title = { Text("上次是什么时候睡的？") },
         text = { Text("这次起床打卡前面没有入睡记录，补一下才能算出这次的睡眠时长。") },
         confirmButton = {
             TextButton(onClick = { showPicker = true }) { Text("选时间") }
         },
         dismissButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = onAllNighter) { Text("通宵了") }
-                TextButton(onClick = onDismiss) { Text("取消") }
-            }
+            TextButton(onClick = onAllNighter) { Text("通宵了") }
         },
         containerColor = extras.card,
     )
