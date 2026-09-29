@@ -78,8 +78,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             Graph.store.observe(Store.Keys.WATER_GOAL_ML),
             Graph.store.observe(Store.Keys.FITNESS_GOAL_MIN),
         ) { w, f -> w to f },
-        logicalKey,
-    ) { (todos, habits), (routineEvents, dayStart), (waterToday, fitnessToday, focusToday), (waterGoalRaw, fitnessGoalRaw), _ ->
+        combine(logicalKey, pendingUpdate) { key, pending -> key to pending },
+    ) { (todos, habits), (routineEvents, dayStart), (waterToday, fitnessToday, focusToday), (waterGoalRaw, fitnessGoalRaw), (_, pendingUpdate) ->
         val now = LocalDateTime.now()
         val wakeToday = RoutineOps.eventOfCurrentDay(routineEvents, RoutineKind.WAKE, dayStart)
         val sleepToday = RoutineOps.eventOfCurrentDay(routineEvents, RoutineKind.SLEEP, dayStart)
@@ -97,7 +97,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             wakeNeedsSleepPrompt = !RoutineOps.hasPendingSleep(routineEvents),
             focusSessions = focusToday.sessions,
             focusMinutes = focusToday.minutes,
-            pendingUpdate = pendingUpdate.value,
+            pendingUpdate = pendingUpdate,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeState())
 

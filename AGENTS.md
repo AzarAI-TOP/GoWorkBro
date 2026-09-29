@@ -51,8 +51,10 @@ nav stack in `ui/AppRoot.kt`. Data is app-private Room (`goworkbro_v3.db`).
 - **Auto-update** — `core/Updater.kt` is the app's single networked surface:
   daily-throttled GitHub `releases/latest` check (skipped when the 设置 switch
   is off, and hard-skipped under Robolectric to keep tests hermetic),
-  DownloadManager into the private external Download dir, then a FileProvider
-  install intent fired from the home banner. Pending-APK version is derived
+  DownloadManager into the private external Download dir, then a
+  PackageInstaller session committed from the home banner (system
+  install-confirm UI; ACTION_VIEW+apk intents do not resolve reliably
+  on modern Android). Pending-APK version is derived
   from the file name (`GoWorkBro-update-<version>.apk`); stale APKs (<= the
   running version) are deleted on startup.
 

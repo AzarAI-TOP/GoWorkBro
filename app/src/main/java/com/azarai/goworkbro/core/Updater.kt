@@ -1,15 +1,16 @@
 package com.azarai.goworkbro.core
 
+import android.app.PendingIntent
 import android.app.DownloadManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageInstaller
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.widget.Toast
-import androidx.core.content.FileProvider
 import com.azarai.goworkbro.Graph
 import java.io.File
 import java.net.HttpURLConnection
@@ -23,8 +24,8 @@ import org.json.JSONObject
  * GitHub-release auto-updater — the ONE thing this otherwise offline app
  * uses the network for. Checks `releases/latest` via the public API, lets
  * DownloadManager fetch the APK into the app's private external Download
- * dir (no storage permission needed), and serves a FileProvider install
- * intent from the home banner.
+ * dir (no storage permission needed), then hands it to a PackageInstaller
+ * session from the home banner (the system shows the confirm UI).
  */
 object Updater {
 
@@ -188,7 +189,10 @@ object Updater {
     private fun versionOfApk(file: File): String =
         file.name.removePrefix(APK_PREFIX).removeSuffix(APK_SUFFIX)
 
-    /** Fires the system package installer for a downloaded APK. */
+    /** Fires the system install-confirm UI for a downloaded APK via a
+     *  PackageInstaller session (the deterministic path on modern Android:
+     *  ACTION_VIEW+apk resolution is unreliable); asks for the
+     *  install-unknown-apps toggle first when it hasn't been granted. */
     fun startInstall(context: Context) {
         val version = pendingInstallVersion.value ?: return
         val file = File(updatesDir(context), apkName(version))
@@ -196,10 +200,36 @@ object Updater {
             pendingInstallVersion.value = null
             return
         }
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-        val intent = Intent(Intent.ACTION_VIEW)
-            .setDataAndType(uri, "application/vnd.android-package-archive")
-            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-        runCatching { context.startActivity(intent) }
+        if (!context.packageManager.canRequestPackageInstalls()) {
+            Toast.makeText(context, "请先允许 GoWorkBro 安装未知应用，回来再点一次安装", Toast.LENGTH_LONG).show()
+            val settings = Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
+                .setData(Uri.parse("package:${context.packageName}"))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            runCatching { context.startActivity(settings) }
+            return
+        }
+        runCatching {
+            val installer = context.packageManager.packageInstaller
+            val session = installer.openSession(
+                installer.createSession(PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)),
+            )
+            session.use { s ->
+                s.openWrite("update", 0, -1).use { out ->
+                    file.inputStream().use { it.copyTo(out) }
+                }
+                val status = Intent(ACTION_INSTALL_STATUS).setPackage(context.packageName)
+                val pi = PendingIntent.getBroadcast(
+                    context,
+                    0,
+                    status,
+                    PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+                )
+                s.commit(pi.intentSender)
+            }
+        }.onFailure {
+            Toast.makeText(context, "安装启动失败：${it.message}", Toast.LENGTH_LONG).show()
+        }
     }
+
+    private const val ACTION_INSTALL_STATUS = "com.azarai.goworkbro.UPDATE_STATUS"
 }
