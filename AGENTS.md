@@ -75,6 +75,10 @@ nav stack in `ui/AppRoot.kt`. Data is app-private Room (`goworkbro_v3.db`).
 - `./gradlew :app:testDebugUnitTest` (all unit + Robolectric tests),
   `:app:assembleDebug`, `:app:assembleRelease` (`gradlew.bat` is the old
   Windows box — ignore it).
+- Emulator testing (local-only skill, gitignored): `.agents/skills/gwb-emu`
+  drives the headless local AVD — install/launch, tap-by-label, screenshots,
+  app-data reset, guest-clock faking for 04:00 day-boundary tests. Prefer it
+  over the phone for any manual verification or destructive-flow testing.
 
 ## Device automation (learned the hard way, 2026-09-24)
 

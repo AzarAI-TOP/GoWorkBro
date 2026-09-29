@@ -1,27 +1,23 @@
-# Miscellaneous
-*.class
-*.log
-*.pyc
-*.swp
-.DS_Store
-.buildlog/
-.history
-__pycache__/
-
-# IntelliJ / Android Studio
+# IDE / editor
 *.iml
-*.ipr
-*.iws
 .idea/
 .vscode/
 
-# Gradle / build
+# Gradle / build outputs
 .gradle/
 build/
+.kotlin/
 /local.properties
 .cxx
 .externalNativeBuild
 /captures
+*.apk
+*.aab
+*.log
+
+# OS noise
+.DS_Store
+*.swp
 
 # Signing — DO NOT COMMIT
 *.jks
@@ -31,6 +27,9 @@ key.properties
 # Local secrets — DO NOT COMMIT
 *.env
 
-# Local agent workspace
+# Local agent workspaces (AGENTS.md stays tracked)
 .zcode/
 .hermes/
+.claude/
+.pi/
+.agents/
