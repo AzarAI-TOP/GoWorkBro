@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Same cream paper as the splash background, so the launcher icon
+         reads as a miniature of the app's cold start. -->
+    <color name="ic_launcher_background">#F6F3E7</color>
+</resources>
