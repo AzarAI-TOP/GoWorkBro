@@ -3,6 +3,7 @@ package com.azarai.goworkbro
 import android.app.Application
 import android.content.Context
 import com.azarai.goworkbro.core.Store
+import com.azarai.goworkbro.core.Updater
 import com.azarai.goworkbro.core.db.AppDatabase
 import com.azarai.goworkbro.core.util.ErrorLog
 
@@ -11,6 +12,7 @@ class GoWorkBroApp : Application() {
         super.onCreate()
         Graph.init(this)
         ErrorLog.install(this)
+        Updater.install(this)
     }
 }
 

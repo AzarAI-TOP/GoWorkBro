@@ -1,7 +1,10 @@
 # GoWorkBro — Agent Guardrails
 
-Native Android app: Kotlin + Jetpack Compose + Room. **Fully offline, zero
-network, zero permissions.** Single user (Azar), UI strings hardcoded Chinese.
+Native Android app: Kotlin + Jetpack Compose + Room. **Offline-first,
+zero tracking** — the ONLY network use is the self-updater checking and
+downloading this repo's GitHub releases (`core/Updater.kt`); permissions
+are just INTERNET + REQUEST_INSTALL_PACKAGES for that. Single user (Azar),
+UI strings hardcoded Chinese.
 
 ## Architecture
 
@@ -38,12 +41,20 @@ nav stack in `ui/AppRoot.kt`. Data is app-private Room (`goworkbro_v3.db`).
   `observeDayByTodo`), the overview shows them as a per-todo donut.
 - **Wake/sleep** — `routine_events` (kind + absolute local time + all-nighter
   flag), paired by `core/RoutineOps.kt`: one night = a bedtime plus the next
-  wake. A wake with no pending bedtime asks the user for the missed bedtime
-  (time picker) or 通宵 (`ui/routine/MissedSleepDialog.kt`). Night keys: before
-  noon = the night in progress, from noon = the night starting tonight; a
-  paired night is keyed by its bedtime. Streaks/averages/7-night charts are all
-  derived from paired nights, home cards from "is there an event of that kind
-  inside the current logical day window".
+  wake. A wake with no pending bedtime FORCES the missed-bedtime question:
+  `ui/routine/MissedSleepDialog.kt` cannot be dismissed — bedtime or 通宵 are
+  the only exits. Night keys: before noon = the night in progress, from noon
+  = the night starting tonight; a paired night is keyed by its bedtime.
+  Streaks/averages/7-night charts are all derived from paired nights, home
+  cards from "is there an event of that kind inside the current logical day
+  window".
+- **Auto-update** — `core/Updater.kt` is the app's single networked surface:
+  daily-throttled GitHub `releases/latest` check (skipped when the 设置 switch
+  is off, and hard-skipped under Robolectric to keep tests hermetic),
+  DownloadManager into the private external Download dir, then a FileProvider
+  install intent fired from the home banner. Pending-APK version is derived
+  from the file name (`GoWorkBro-update-<version>.apk`); stale APKs (<= the
+  running version) are deleted on startup.
 
 ## Data safety — hard rules
 

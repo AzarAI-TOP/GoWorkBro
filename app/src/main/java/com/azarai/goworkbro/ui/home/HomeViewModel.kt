@@ -9,6 +9,7 @@ import com.azarai.goworkbro.core.RoutineKind
 import com.azarai.goworkbro.core.RoutineOps
 import com.azarai.goworkbro.core.RoutineStore
 import com.azarai.goworkbro.core.Store
+import com.azarai.goworkbro.core.Updater
 import com.azarai.goworkbro.core.util.Dates
 import java.time.LocalDateTime
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,6 +39,8 @@ data class HomeState(
     val focusMinutes: Int = 0,
     /** A wake check-in would need the missed bedtime first. */
     val wakeNeedsSleepPrompt: Boolean = false,
+    /** A downloaded update APK waiting for its install tap. */
+    val pendingUpdate: String? = null,
 )
 
 class HomeViewModel(app: Application) : AndroidViewModel(app) {
@@ -51,6 +54,15 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     private val waterToday = logicalKey.flatMapLatest { db.waterDao().observeByDate(it) }
     private val fitnessToday = logicalKey.flatMapLatest { db.fitnessDao().observeByDate(it) }
     private val focusToday = logicalKey.flatMapLatest { db.focusDao().observeDayStats(it) }
+
+    /** Version dismissed from the banner this session (install reminder). */
+    private val dismissedUpdate = MutableStateFlow<String?>(null)
+
+    private val pendingUpdate = combine(
+        Updater.pendingInstallVersion,
+        dismissedUpdate,
+    ) { pending, dismissed -> if (pending != null && pending != dismissed) pending else null }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val state: StateFlow<HomeState> = combine(
         combine(
@@ -85,8 +97,13 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             wakeNeedsSleepPrompt = !RoutineOps.hasPendingSleep(routineEvents),
             focusSessions = focusToday.sessions,
             focusMinutes = focusToday.minutes,
+            pendingUpdate = pendingUpdate.value,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeState())
+
+    fun dismissUpdate() {
+        dismissedUpdate.value = Updater.pendingInstallVersion.value
+    }
 
     fun checkInWake(onNeedsSleep: () -> Unit) {
         viewModelScope.launch {

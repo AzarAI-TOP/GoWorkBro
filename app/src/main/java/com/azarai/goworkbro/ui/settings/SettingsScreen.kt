@@ -1,5 +1,6 @@
 package com.azarai.goworkbro.ui.settings
 
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -11,9 +12,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
@@ -30,23 +33,46 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.azarai.goworkbro.ui.components.CuteTopBar
 import com.azarai.goworkbro.ui.theme.LocalForestExtras
 
-/** 设置页：目前只有「删除应用数据」一项，后续设置项也放这里。 */
+/** 设置页：更新、熬夜模式与数据清理。 */
 @Composable
 fun SettingsScreen(onBack: () -> Unit) {
     val vm: SettingsViewModel = viewModel()
     val extras = LocalForestExtras.current
     val lateNight by vm.lateNight.collectAsState()
+    val autoUpdate by vm.autoUpdate.collectAsState()
     var showDelete by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val version = remember { com.azarai.goworkbro.core.Updater.currentVersion(context) }
 
-    Column(Modifier.fillMaxSize()) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
+    ) {
         CuteTopBar(title = "设置", onBack = onBack)
 
         Spacer(Modifier.size(6.dp))
+        SettingSwitchRow(
+            title = "自动更新",
+            subtitle = "在 GitHub 上检查新版本并自动下载，下载完在主页一键安装",
+            checked = autoUpdate,
+            onCheckedChange = { vm.setAutoUpdate(it) },
+        )
+        Spacer(Modifier.size(10.dp))
+        SettingRow(
+            title = "检查更新",
+            subtitle = "立即去 GitHub 看看有没有新版本",
+            icon = Icons.Filled.SystemUpdate,
+            onClick = { vm.checkNow() },
+        )
+        InfoRow(title = "当前版本", value = "v$version")
+        Spacer(Modifier.size(10.dp))
         SettingSwitchRow(
             title = "熬夜模式",
             subtitle = "0 点到 4 点的打卡算作前一天",
@@ -112,6 +138,7 @@ private fun SettingRow(
     subtitle: String,
     onClick: () -> Unit,
     danger: Boolean = false,
+    icon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Filled.DeleteOutline,
 ) {
     val extras = LocalForestExtras.current
     Surface(
@@ -129,7 +156,7 @@ private fun SettingRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                Icons.Filled.DeleteOutline,
+                icon,
                 contentDescription = null,
                 tint = if (danger) MaterialTheme.colorScheme.error else extras.textSecondary,
             )
@@ -147,6 +174,33 @@ private fun SettingRow(
                 contentDescription = null,
                 tint = extras.textSecondary,
             )
+        }
+    }
+}
+
+/** Non-interactive label/value row (e.g. the running version). */
+@Composable
+private fun InfoRow(title: String, value: String) {
+    val extras = LocalForestExtras.current
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = extras.card,
+        border = androidx.compose.foundation.BorderStroke(1.5.dp, extras.cardBorder),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 18.dp),
+    ) {
+        Row(
+            Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            Text(value, style = MaterialTheme.typography.bodyMedium, color = extras.textSecondary)
         }
     }
 }

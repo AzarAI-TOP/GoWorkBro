@@ -18,6 +18,8 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -85,6 +87,7 @@ fun HomeScreen(
 
     val extras = LocalForestExtras.current
     val tick = rememberTick()
+    val context = androidx.compose.ui.platform.LocalContext.current
     Column(
         Modifier
             .fillMaxSize()
@@ -133,6 +136,19 @@ fun HomeScreen(
             )
         }
         Spacer(Modifier.height(10.dp))
+        // downloaded-update banner: tap to hand the APK to the system installer
+        androidx.compose.animation.AnimatedVisibility(visible = state.pendingUpdate != null) {
+            Column {
+                state.pendingUpdate?.let { v ->
+                    UpdateBanner(
+                        version = v,
+                        onInstall = { com.azarai.goworkbro.core.Updater.startInstall(context) },
+                        onDismiss = { vm.dismissUpdate() },
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+            }
+        }
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -283,6 +299,55 @@ private fun ActiveTimerBar(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+/** "new version downloaded" strip under the home header. */
+@Composable
+private fun UpdateBanner(version: String, onInstall: () -> Unit, onDismiss: () -> Unit) {
+    val extras = LocalForestExtras.current
+    Surface(
+        onClick = onInstall,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.primaryContainer,
+        border = androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            Modifier.padding(start = 14.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            androidx.compose.foundation.layout.Box(
+                Modifier.size(34.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Filled.SystemUpdate,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "新版本 v$version 已下载",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+                Text(
+                    "点这里安装更新",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                )
+            }
+            androidx.compose.material3.IconButton(onClick = onDismiss) {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = "忽略",
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
             }
         }
     }

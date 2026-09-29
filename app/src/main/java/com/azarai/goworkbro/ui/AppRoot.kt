@@ -71,6 +71,11 @@ fun AppRoot() {
     LaunchedEffect(Unit) {
         LogicalDay.flow.collect { Rollover.ensure(Graph.db, Graph.store) }
     }
+    // throttled daily check for GitHub releases (no-op under Robolectric)
+    val context = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(Unit) {
+        com.azarai.goworkbro.core.Updater.maybeAutoCheck(Graph.store, context)
+    }
 
     GoWorkBroTheme {
         var stack by rememberSaveable { mutableStateOf(listOf(Routes.HOME)) }

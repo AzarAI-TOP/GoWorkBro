@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Files served to the system installer: downloaded update APKs live in
+     getExternalFilesDir(DIRECTORY_DOWNLOADS). -->
+<paths>
+    <external-files-path
+        name="update_apks"
+        path="Download/" />
+</paths>

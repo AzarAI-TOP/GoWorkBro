@@ -22,6 +22,10 @@ class Store(private val dao: SettingsDao) {
         const val WATER_GOAL_ML = "water_goal_ml"
         const val WATER_CUPS = "water_cups"
         const val FITNESS_GOAL_MIN = "fitness_goal_min"
+        /** "false" opts out of GitHub update checks + downloads. */
+        const val AUTO_UPDATE = "auto_update"
+        /** Epoch ms of the last automatic update check. */
+        const val LAST_UPDATE_CHECK = "last_update_check"
     }
 
     suspend fun get(key: String): String? = dao.get(key)

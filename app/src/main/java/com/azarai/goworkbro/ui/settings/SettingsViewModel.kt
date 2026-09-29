@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.azarai.goworkbro.Graph
 import com.azarai.goworkbro.core.LogicalDay
 import com.azarai.goworkbro.core.Store
+import com.azarai.goworkbro.core.Updater
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
@@ -32,6 +33,19 @@ class SettingsViewModel : ViewModel() {
             Graph.store.set(Store.Keys.LATE_NIGHT_MODE, enabled.toString())
             LogicalDay.notifyResumed()
         }
+    }
+
+    /** Auto-update: check GitHub for new releases on app start, download them. */
+    val autoUpdate: StateFlow<Boolean> = Graph.store.observe(Store.Keys.AUTO_UPDATE)
+        .map { it != "false" }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    fun setAutoUpdate(enabled: Boolean) {
+        viewModelScope.launch { Graph.store.set(Store.Keys.AUTO_UPDATE, enabled.toString()) }
+    }
+
+    fun checkNow() {
+        viewModelScope.launch { Updater.checkNow(Graph.appContext) }
     }
 
     fun deleteData(kinds: Set<DataKind>) {
