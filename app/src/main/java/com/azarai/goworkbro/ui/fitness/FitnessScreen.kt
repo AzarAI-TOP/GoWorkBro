@@ -1,5 +1,6 @@
 package com.azarai.goworkbro.ui.fitness
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,14 +17,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.azarai.goworkbro.ui.components.CuteTopBar
@@ -35,14 +36,15 @@ import com.azarai.goworkbro.ui.components.WeekBars
 import com.azarai.goworkbro.ui.components.rememberTick
 import com.azarai.goworkbro.ui.theme.LocalForestExtras
 
-/** 健身打卡页：目标分钟、快捷 +10/+30、自定义、今日记录、近 7 天。 */
+/** 健身页：运动计时（时长只能靠计时获得）、目标分钟、今日记录、近 7 天。 */
 @Composable
 fun FitnessScreen(onBack: () -> Unit) {
     val vm: FitnessViewModel = viewModel()
     val state by vm.state.collectAsState()
+    val stopwatch by vm.stopwatch.collectAsState()
+    val elapsedMs by vm.stopwatchMs.collectAsState()
     val tick = rememberTick()
 
-    var customDialog by remember { mutableStateOf(false) }
     var editGoal by remember { mutableStateOf(false) }
 
     Column(
@@ -67,48 +69,14 @@ fun FitnessScreen(onBack: () -> Unit) {
         )
 
         Spacer(Modifier.height(18.dp))
-        SectionLabel("记一笔运动")
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 22.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            listOf(10, 30).forEach { min ->
-                Surface(
-                    onClick = { tick(); vm.log(min) },
-                    shape = RoundedCornerShape(18.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text(
-                        "+${min} 分钟",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier
-                            .padding(vertical = 12.dp)
-                            .fillMaxWidth(),
-                        textAlign = TextAlign.Center,
-                    )
-                }
-            }
-            Surface(
-                onClick = { customDialog = true },
-                shape = RoundedCornerShape(18.dp),
-                color = MaterialTheme.colorScheme.tertiaryContainer,
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(
-                    "自定义",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                    modifier = Modifier
-                        .padding(vertical = 12.dp)
-                        .fillMaxWidth(),
-                    textAlign = TextAlign.Center,
-                )
-            }
-        }
+        SectionLabel("运动计时")
+        StopwatchCard(
+            elapsedMs = elapsedMs,
+            running = stopwatch.startedAt != null,
+            started = stopwatch.accMs > 0 || stopwatch.startedAt != null,
+            onToggle = { tick(); vm.toggleStopwatch() },
+            onFinish = { tick(); vm.finishStopwatch() },
+        )
 
         Spacer(Modifier.height(18.dp))
         SectionLabel("今日记录")
@@ -120,7 +88,7 @@ fun FitnessScreen(onBack: () -> Unit) {
         ) {
             if (state.todayLogs.isEmpty()) {
                 Text(
-                    "今天还没有运动记录",
+                    "今天还没有运动记录，计时满 1 分钟才会入账哦",
                     style = MaterialTheme.typography.bodySmall,
                     color = LocalForestExtras.current.textSecondary,
                     modifier = Modifier.padding(vertical = 6.dp),
@@ -142,15 +110,6 @@ fun FitnessScreen(onBack: () -> Unit) {
         Spacer(Modifier.height(28.dp))
     }
 
-    if (customDialog) {
-        NumberInputDialog(
-            title = "运动了多少分钟？",
-            initialValue = "",
-            unit = "分钟",
-            onDismiss = { customDialog = false },
-            onConfirm = { m -> customDialog = false; tick(); vm.log(m) },
-        )
-    }
     if (editGoal) {
         NumberInputDialog(
             title = "每日运动目标",
@@ -159,5 +118,119 @@ fun FitnessScreen(onBack: () -> Unit) {
             onDismiss = { editGoal = false },
             onConfirm = { m -> editGoal = false; vm.setGoal(m) },
         )
+    }
+}
+
+/** mm:ss (or h:mm:ss past the hour), used by the stopwatch display. */
+private fun formatElapsed(ms: Long): String {
+    val totalSec = ms / 1_000
+    val h = totalSec / 3_600
+    val m = totalSec % 3_600 / 60
+    val s = totalSec % 60
+    return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%02d:%02d".format(m, s)
+}
+
+/**
+ * The workout stopwatch: minutes are earned by timing, never typed in.
+ * Idle shows one big start button; running/paused shows pause/resume + finish.
+ */
+@Composable
+private fun StopwatchCard(
+    elapsedMs: Long,
+    running: Boolean,
+    started: Boolean,
+    onToggle: () -> Unit,
+    onFinish: () -> Unit,
+) {
+    val extras = LocalForestExtras.current
+    Surface(
+        shape = RoundedCornerShape(22.dp),
+        color = extras.card,
+        border = BorderStroke(1.5.dp, extras.cardBorder),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 22.dp),
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                formatElapsed(elapsedMs),
+                style = MaterialTheme.typography.displayMedium,
+                fontWeight = FontWeight.Bold,
+                color = if (running) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                when {
+                    running -> "正在运动，去流汗吧 💪"
+                    started -> "已暂停，随时继续"
+                    else -> "点开始，动了才算数"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = extras.textSecondary,
+            )
+            Spacer(Modifier.height(14.dp))
+            if (!started) {
+                Surface(
+                    onClick = onToggle,
+                    shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        "开始运动",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp),
+                    )
+                }
+            } else {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Surface(
+                        onClick = onToggle,
+                        shape = RoundedCornerShape(50),
+                        color = extras.inputFill,
+                        border = BorderStroke(1.5.dp, extras.cardBorder),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(
+                            if (running) "暂停" else "继续",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 12.dp),
+                        )
+                    }
+                    Surface(
+                        onClick = onFinish,
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(
+                            "结束并记录",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 12.dp),
+                        )
+                    }
+                }
+            }
+        }
     }
 }

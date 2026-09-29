@@ -225,8 +225,13 @@ class AppSmokeTest {
         back()
 
         open("健身")
-        rule.waitUntil(5_000) { exists("记一笔运动") && exists("今日记录") && exists("近 7 天") }
-        assertTrue(exists("+10 分钟") && exists("+30 分钟") && exists("自定义"))
+        rule.waitUntil(5_000) { exists("运动计时") && exists("今日记录") && exists("近 7 天") }
+        assertTrue(exists("开始运动"))
+        // start and finish inside a minute: the workout is discarded, not logged
+        rule.onNodeWithText("开始运动").performClick()
+        rule.waitUntil(5_000) { exists("结束并记录") }
+        rule.onNodeWithText("结束并记录").performClick()
+        rule.waitUntil(5_000) { exists("开始运动") }
         back()
 
         open("起床")

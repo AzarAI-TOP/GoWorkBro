@@ -1,6 +1,7 @@
 package com.azarai.goworkbro.ui.fitness
 
 import android.app.Application
+import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.azarai.goworkbro.Graph
@@ -11,14 +12,17 @@ import com.azarai.goworkbro.core.db.FitnessLog
 import com.azarai.goworkbro.core.util.Dates
 import java.time.LocalDateTime
 import java.util.UUID
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -29,10 +33,16 @@ data class FitnessState(
     val week: List<Pair<String, Int>> = emptyList(),
 )
 
+/** A workout stopwatch stretch: accumulated ms plus the current run's start. */
+data class WorkoutStopwatch(
+    val accMs: Long = 0,
+    /** Wall clock of the running stretch; null while paused or idle. */
+    val startedAt: Long? = null,
+)
+
 class FitnessViewModel(app: Application) : AndroidViewModel(app) {
 
     private val db = Graph.db
-
 
     private val logicalKey = LogicalDay.flow.map { it.dateKey }.distinctUntilChanged()
 
@@ -61,7 +71,47 @@ class FitnessViewModel(app: Application) : AndroidViewModel(app) {
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FitnessState())
 
-    fun log(minutes: Int) {
+    // ---- workout stopwatch: minutes are earned by timing, never typed in ----
+
+    val stopwatch = MutableStateFlow(WorkoutStopwatch())
+
+    private val ticks = stopwatch
+        .flatMapLatest { s ->
+            if (s.startedAt != null) flow { while (true) { emit(Unit); delay(500) } } else flowOf(Unit)
+        }
+        .shareIn(viewModelScope, SharingStarted.Eagerly, replay = 1)
+
+    /** Live elapsed ms (ticking while running, frozen while paused). */
+    val stopwatchMs: StateFlow<Long> = ticks
+        .combine(stopwatch) { _, s -> elapsedOf(s) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
+
+    private fun elapsedOf(s: WorkoutStopwatch): Long =
+        s.accMs + (s.startedAt?.let { (System.currentTimeMillis() - it).coerceAtLeast(0) } ?: 0)
+
+    fun toggleStopwatch() {
+        val s = stopwatch.value
+        stopwatch.value = if (s.startedAt == null) {
+            s.copy(startedAt = System.currentTimeMillis())
+        } else {
+            s.copy(accMs = elapsedOf(s), startedAt = null)
+        }
+    }
+
+    /** End the workout: logs the timed minutes (a full minute is required). */
+    fun finishStopwatch() {
+        val ms = elapsedOf(stopwatch.value)
+        stopwatch.value = WorkoutStopwatch()
+        val minutes = (ms / 60_000).toInt()
+        if (minutes >= 1) {
+            log(minutes)
+            Toast.makeText(Graph.appContext, "已记录 $minutes 分钟运动", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(Graph.appContext, "不满 1 分钟，这次就不算数啦", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun log(minutes: Int) {
         if (minutes <= 0) return
         viewModelScope.launch {
             db.fitnessDao().insert(
