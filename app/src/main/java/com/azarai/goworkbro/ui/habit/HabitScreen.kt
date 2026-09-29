@@ -36,6 +36,7 @@ import com.azarai.goworkbro.ui.components.CuteTopBar
 import com.azarai.goworkbro.ui.components.EmptyHint
 import com.azarai.goworkbro.ui.components.IconPicker
 import com.azarai.goworkbro.ui.theme.LocalForestExtras
+import kotlin.random.Random
 
 /** Habit detail page: two-column grid of cute cards, tap = +1. */
 @Composable
@@ -114,8 +115,9 @@ private fun HabitEditDialog(
     var target by remember { mutableStateOf((initial?.targetCount ?: 1).toString()) }
     var unit by remember { mutableStateOf(initial?.unit ?: "次") }
     var icon by remember { mutableStateOf(initial?.icon ?: "sprout") }
-    var colorIndex by remember { mutableStateOf(initial?.colorIndex ?: 1) }
     val extras = LocalForestExtras.current
+    // new habits start on a random pastel so the grid feels alive from day one
+    var colorIndex by remember { mutableStateOf(initial?.colorIndex ?: Random.nextInt(extras.pastels.size)) }
     val targetNum = target.trim().toIntOrNull()
 
     AlertDialog(

@@ -41,6 +41,7 @@ import com.azarai.goworkbro.ui.components.CuteTopBar
 import com.azarai.goworkbro.ui.components.EmptyHint
 import com.azarai.goworkbro.ui.components.IconPicker
 import com.azarai.goworkbro.ui.theme.LocalForestExtras
+import kotlin.random.Random
 
 private val DURATION_PRESETS = listOf(10, 20, 30, 45)
 private const val CUSTOM = -1
@@ -132,7 +133,9 @@ private fun TodoEditDialog(
 ) {
     var title by remember { mutableStateOf(initial?.title ?: "") }
     var icon by remember { mutableStateOf(initial?.icon ?: "scroll") }
-    var colorIndex by remember { mutableStateOf(initial?.colorIndex ?: 0) }
+    val extras = LocalForestExtras.current
+    // new items start on a random pastel so the grid feels alive from day one
+    var colorIndex by remember { mutableStateOf(initial?.colorIndex ?: Random.nextInt(extras.pastels.size)) }
     var timing by remember { mutableStateOf(initial?.timing ?: TimingType.NONE) }
     // preset id (10/20/30/45) or CUSTOM
     var durationSel by remember {
@@ -142,7 +145,6 @@ private fun TodoEditDialog(
         mutableStateOf((initial?.durationMinutes?.takeIf { it !in DURATION_PRESETS } ?: 25).toString())
     }
     val durationMin = if (durationSel == CUSTOM) customDuration.trim().toIntOrNull() ?: 25 else durationSel
-    val extras = LocalForestExtras.current
 
     AlertDialog(
         onDismissRequest = onDismiss,
