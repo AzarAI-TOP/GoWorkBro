@@ -37,7 +37,20 @@ object CartoonIcons {
         Spec("flower", "小花"),
         Spec("sprout", "嫩芽"),
         Spec("file", "文件"),
+        Spec("heart", "爱心"),
+        Spec("bolt", "闪电"),
+        Spec("basketball", "篮球"),
+        Spec("coffee", "咖啡"),
+        Spec("cloud", "云朵"),
+        Spec("cherry", "樱桃"),
+        Spec("fish", "小鱼"),
+        Spec("gamepad", "手柄"),
+        Spec("bulb", "灯泡"),
+        Spec("gift", "礼物"),
     )
+
+    /** Chinese label for an icon key, null when unknown. */
+    fun labelOf(key: String): String? = all.firstOrNull { it.key == key }?.label
 
 }
 
@@ -78,6 +91,11 @@ private val PetalPink = Color(0xFFFFB3C7)
 private val FlowerCore = Color(0xFFFFE08A)
 private val Soil = Color(0xFFA97C50)
 private val Blush = Color(0xFFF5A3A3)
+private val BasketballOrange = Color(0xFFF58F5E)
+private val SteamGrey = Color(0xFFC4CFD8)
+private val CloudBlue = Color(0xFFE8F3FB)
+private val PadGrey = Color(0xFFDDE3EA)
+private val GiftLid = Color(0xFFF79FB5)
 
 /** Composable entry: draws the cartoon icon scaled to fill [modifier]. */
 @Composable
@@ -108,6 +126,16 @@ fun DrawScope.drawCartoonIcon(key: String) {
             "flower" -> drawFlower()
             "sprout" -> drawSprout()
             "file" -> drawFile()
+            "heart" -> drawHeart()
+            "bolt" -> drawBolt()
+            "basketball" -> drawBasketball()
+            "coffee" -> drawCoffee()
+            "cloud" -> drawCloud()
+            "cherry" -> drawCherry()
+            "fish" -> drawFish()
+            "gamepad" -> drawGamepad()
+            "bulb" -> drawBulb()
+            "gift" -> drawGift()
             else -> drawScroll()
         }
     }
@@ -570,4 +598,211 @@ private fun DrawScope.drawEllipseFill(color: Color, center: Offset, rx: Float, r
 
 private fun DrawScope.drawEllipseOutlineInk(center: Offset, rx: Float, ry: Float) {
     drawOval(Ink, topLeft = Offset(center.x - rx, center.y - ry), size = androidx.compose.ui.geometry.Size(rx * 2, ry * 2), style = stroke(4f))
+}
+
+private fun DrawScope.drawHeart() {
+    val body = Path().apply {
+        moveTo(50f, 86f)
+        cubicTo(18f, 62f, 12f, 38f, 27f, 26f)
+        cubicTo(38f, 17f, 48f, 23f, 50f, 33f)
+        cubicTo(52f, 23f, 62f, 17f, 73f, 26f)
+        cubicTo(88f, 38f, 82f, 62f, 50f, 86f)
+        close()
+    }
+    drawPath(body, AppleRed, style = Fill)
+    drawPath(body, Ink, style = stroke())
+    // shine
+    drawCircle(Color.White.copy(alpha = 0.55f), 4.4f, Offset(33f, 36f))
+    // face
+    eyes(Offset(42f, 48f), Offset(58f, 48f))
+    smile(Offset(50f, 53f), 6f)
+    blushAt(35f to 55f, 65f to 55f)
+    sparkle(Offset(80f, 18f), 4.5f, StarYellow)
+}
+
+private fun DrawScope.drawBolt() {
+    val body = Path().apply {
+        moveTo(58f, 10f)
+        lineTo(26f, 54f)
+        lineTo(45f, 54f)
+        lineTo(39f, 90f)
+        lineTo(76f, 42f)
+        lineTo(55f, 42f)
+        close()
+    }
+    drawPath(body, StarYellow, style = Fill)
+    drawPath(body, Ink, style = stroke())
+    // small face riding the wide lower middle
+    eyes(Offset(49f, 52f), Offset(60f, 52f), 2.6f)
+    smile(Offset(54f, 56f), 4f, Ink, 2.8f)
+    sparkle(Offset(84f, 26f), 4f, StarYellow)
+}
+
+private fun DrawScope.drawBasketball() {
+    outlinedCircle(BasketballOrange, Offset(50f, 52f), 33f)
+    // seams: horizontal + vertical lines, two side arcs
+    line(Offset(17f, 52f), Offset(83f, 52f), Ink, 3.4f)
+    line(Offset(50f, 19f), Offset(50f, 85f), Ink, 3.4f)
+    drawArc(Ink, 130f, 100f, false, Offset(26f, 30f), androidx.compose.ui.geometry.Size(28f, 44f), style = Stroke(width = 3.4f, cap = StrokeCap.Round))
+    drawArc(Ink, 130f, 100f, false, Offset(46f, 30f), androidx.compose.ui.geometry.Size(28f, 44f), style = Stroke(width = 3.4f, cap = StrokeCap.Round))
+    // face sits over the center seam
+    eyes(Offset(43f, 42f), Offset(57f, 42f), 2.8f)
+    smile(Offset(50f, 47f), 5f, Ink, 3f)
+    blushAt(37f to 46f, 63f to 46f)
+}
+
+private fun DrawScope.drawCoffee() {
+    // steam curls
+    line(Offset(42f, 22f), Offset(40f, 10f), SteamGrey, 4f)
+    line(Offset(58f, 22f), Offset(56f, 10f), SteamGrey, 4f)
+    // handle
+    drawArc(Ink, 250f, -200f, false, Offset(64f, 38f), androidx.compose.ui.geometry.Size(26f, 30f), style = Stroke(width = 5f, cap = StrokeCap.Round))
+    // cup body
+    val body = Path().apply {
+        moveTo(26f, 32f)
+        lineTo(70f, 32f)
+        lineTo(66f, 80f)
+        cubicTo(65f, 86f, 60f, 88f, 48f, 88f)
+        cubicTo(36f, 88f, 31f, 86f, 30f, 80f)
+        close()
+    }
+    drawPath(body, Paper, style = Fill)
+    drawPath(body, Ink, style = stroke())
+    // coffee surface
+    clipPath(body) {
+        drawRect(Soil, topLeft = Offset(20f, 32f), size = androidx.compose.ui.geometry.Size(60f, 10f))
+    }
+    line(Offset(26f, 32f), Offset(70f, 32f), Ink, 5f)
+    // face
+    eyes(Offset(41f, 58f), Offset(55f, 58f))
+    smile(Offset(48f, 63f), 5.5f)
+    blushAt(35f to 65f, 61f to 65f)
+}
+
+private fun DrawScope.drawCloud() {
+    val body = Path().apply {
+        moveTo(20f, 68f)
+        cubicTo(10f, 68f, 8f, 54f, 18f, 50f)
+        cubicTo(14f, 32f, 34f, 22f, 44f, 32f)
+        cubicTo(50f, 18f, 72f, 20f, 76f, 34f)
+        cubicTo(88f, 32f, 94f, 48f, 86f, 56f)
+        cubicTo(92f, 66f, 84f, 74f, 74f, 70f)
+        close()
+    }
+    drawPath(body, CloudBlue, style = Fill)
+    drawPath(body, Ink, style = stroke())
+    // face
+    eyes(Offset(40f, 50f), Offset(56f, 50f))
+    smile(Offset(48f, 55f), 6f)
+    blushAt(33f to 57f, 63f to 57f)
+    sparkle(Offset(84f, 16f), 4.5f, StarYellow)
+}
+
+private fun DrawScope.drawCherry() {
+    // stems meeting at the top
+    line(Offset(50f, 14f), Offset(36f, 52f), Soil, 4.4f)
+    line(Offset(50f, 14f), Offset(66f, 44f), Soil, 4.4f)
+    // leaf on the stem joint
+    rotate(30f, pivot = Offset(58f, 18f)) {
+        drawEllipseFill(LeafGreen, Offset(58f, 18f), 11f, 5.5f)
+        drawEllipseOutlineInk(Offset(58f, 18f), 11f, 5.5f)
+    }
+    // two cherries
+    listOf(Offset(34f, 64f) to 16f, Offset(66f, 56f) to 14f).forEach { (c, r) ->
+        outlinedCircle(AppleRed, c, r)
+        drawCircle(Color.White.copy(alpha = 0.5f), r * 0.28f, Offset(c.x - r * 0.35f, c.y - r * 0.35f))
+    }
+    // face on the bigger cherry
+    eyes(Offset(29f, 63f), Offset(39f, 63f), 2.7f)
+    smile(Offset(34f, 67f), 4f, Ink, 2.8f)
+    sparkle(Offset(84f, 26f), 4.5f, StarYellow)
+}
+
+private fun DrawScope.drawFish() {
+    // tail
+    val tail = Path().apply {
+        moveTo(66f, 52f)
+        lineTo(86f, 36f)
+        lineTo(86f, 68f)
+        close()
+    }
+    drawPath(tail, WaterDeep, style = Fill)
+    drawPath(tail, Ink, style = stroke(4f))
+    // top fin
+    val fin = Path().apply {
+        moveTo(40f, 38f)
+        cubicTo(44f, 26f, 56f, 26f, 58f, 36f)
+        close()
+    }
+    drawPath(fin, WaterDeep, style = Fill)
+    drawPath(fin, Ink, style = stroke(3.6f))
+    // body
+    outlinedCircle(Water, Offset(45f, 52f), 26f)
+    // face: one eye + gill arc + smile
+    eyes(Offset(33f, 48f), Offset(45f, 48f), 3f)
+    drawArc(Ink, 300f, 120f, false, Offset(51f, 46f), androidx.compose.ui.geometry.Size(16f, 16f), style = Stroke(width = 2.8f, cap = StrokeCap.Round))
+    blushAt(35f to 56f, 47f to 56f)
+    // bubbles
+    drawCircle(WaterDeep, 3f, Offset(84f, 18f))
+    drawCircle(WaterDeep, 4.4f, Offset(78f, 10f))
+}
+
+private fun DrawScope.drawGamepad() {
+    // body
+    outlinedRoundRect(PadGrey, 12f, 34f, 88f, 72f, 20f)
+    // dpad cross on the left
+    line(Offset(30f, 46f), Offset(30f, 60f), Ink, 4.4f)
+    line(Offset(23f, 53f), Offset(37f, 53f), Ink, 4.4f)
+    // action buttons on the right
+    outlinedCircle(AppleRed, Offset(66f, 47f), 5.2f)
+    outlinedCircle(Water, Offset(76f, 55f), 5.2f)
+    outlinedCircle(FlameYellow, Offset(66f, 63f), 5.2f)
+    outlinedCircle(LeafGreen, Offset(56f, 55f), 5.2f)
+    // start/select dots in the middle
+    drawCircle(Ink, 2f, Offset(46f, 53f))
+    sparkle(Offset(88f, 22f), 4.5f, StarYellow)
+}
+
+private fun DrawScope.drawBulb() {
+    // rays
+    listOf(Offset(50f, 10f) to Offset(50f, 4f), Offset(24f, 18f) to Offset(19f, 13f), Offset(76f, 18f) to Offset(81f, 13f)).forEach { (a, b) ->
+        line(a, b, SunRay, 4.4f)
+    }
+    // bulb glass
+    outlinedCircle(StarYellow, Offset(50f, 44f), 24f)
+    // filament
+    line(Offset(44f, 52f), Offset(47f, 57f), Ink, 2.8f)
+    line(Offset(47f, 57f), Offset(50f, 52f), Ink, 2.8f)
+    line(Offset(50f, 52f), Offset(53f, 57f), Ink, 2.8f)
+    line(Offset(53f, 57f), Offset(56f, 52f), Ink, 2.8f)
+    // screw base
+    outlinedRoundRect(Ferrule, 41f, 66f, 59f, 82f, 4f)
+    line(Offset(43f, 72f), Offset(57f, 72f), Ink, 2.6f)
+    line(Offset(43f, 77f), Offset(57f, 77f), Ink, 2.6f)
+    // face on the glass
+    eyes(Offset(43f, 40f), Offset(57f, 40f), 2.8f)
+    smile(Offset(50f, 45f), 5.5f)
+    blushAt(37f to 45f, 63f to 45f)
+}
+
+private fun DrawScope.drawGift() {
+    // box
+    outlinedRoundRect(PetalPink, 25f, 44f, 75f, 86f, 6f)
+    // lid (slightly wider)
+    outlinedRoundRect(GiftLid, 20f, 34f, 80f, 48f, 6f)
+    // vertical ribbon
+    drawRoundRectAndroid(FlowerCore, 45f, 34f, 55f, 86f, 0f)
+    line(Offset(45f, 48f), Offset(45f, 86f), Ink, 3f)
+    line(Offset(55f, 48f), Offset(55f, 86f), Ink, 3f)
+    // bow: two loops + knot
+    drawEllipseFill(FlowerCore, Offset(41f, 28f), 9f, 6f)
+    drawEllipseOutlineInk(Offset(41f, 28f), 9f, 6f)
+    drawEllipseFill(FlowerCore, Offset(59f, 28f), 9f, 6f)
+    drawEllipseOutlineInk(Offset(59f, 28f), 9f, 6f)
+    outlinedCircle(FlowerCore, Offset(50f, 30f), 5.2f)
+    // face on the box front
+    eyes(Offset(38f, 64f), Offset(62f, 64f), 2.8f)
+    smile(Offset(50f, 68f), 6f)
+    blushAt(31f to 70f, 69f to 70f)
+    sparkle(Offset(86f, 20f), 4.5f, StarYellow)
 }

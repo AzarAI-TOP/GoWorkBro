@@ -31,6 +31,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.azarai.goworkbro.core.db.Habit
 import com.azarai.goworkbro.ui.components.AddActionButton
 import com.azarai.goworkbro.ui.components.ColorDots
+import com.azarai.goworkbro.ui.components.CartoonIcons
 import com.azarai.goworkbro.ui.components.CuteItemCard
 import com.azarai.goworkbro.ui.components.CuteTopBar
 import com.azarai.goworkbro.ui.components.EmptyHint
@@ -164,7 +165,11 @@ private fun HabitEditDialog(
                         modifier = Modifier.weight(1f),
                     )
                 }
-                Text("选个图标", style = MaterialTheme.typography.labelMedium, color = extras.textSecondary)
+                Text(
+                    "选个图标" + (CartoonIcons.labelOf(icon)?.let { " · $it" } ?: ""),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = extras.textSecondary,
+                )
                 IconPicker(selected = icon, onSelect = { icon = it })
                 Text("选个颜色", style = MaterialTheme.typography.labelMedium, color = extras.textSecondary)
                 ColorDots(selected = colorIndex, onSelect = { colorIndex = it })

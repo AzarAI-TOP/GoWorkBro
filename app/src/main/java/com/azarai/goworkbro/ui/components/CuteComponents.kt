@@ -221,7 +221,8 @@ fun EmptyHint(icon: String, text: String, modifier: Modifier = Modifier) {
     }
 }
 
-/** Grid picker for cartoon icons, used inside create/edit dialogs. */
+/** Grid picker for cartoon icons, used inside create/edit dialogs. Scrolls
+ *  once the catalog outgrows the four visible rows. */
 @Composable
 fun IconPicker(selected: String, onSelect: (String) -> Unit) {
     val extras = LocalForestExtras.current
@@ -230,7 +231,7 @@ fun IconPicker(selected: String, onSelect: (String) -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
         modifier = Modifier.height(202.dp),
-        userScrollEnabled = false,
+        userScrollEnabled = true,
     ) {
         items(CartoonIcons.all.size) { index ->
             val spec = CartoonIcons.all[index]
