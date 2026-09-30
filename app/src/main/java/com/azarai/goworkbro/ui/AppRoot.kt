@@ -22,12 +22,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.azarai.goworkbro.Graph
 import com.azarai.goworkbro.core.LogicalDay
 import com.azarai.goworkbro.core.Rollover
+import com.azarai.goworkbro.core.Updater
 import com.azarai.goworkbro.ui.fitness.FitnessScreen
 import com.azarai.goworkbro.ui.habit.HabitScreen
 import com.azarai.goworkbro.ui.home.HomeScreen
@@ -71,10 +73,10 @@ fun AppRoot() {
     LaunchedEffect(Unit) {
         LogicalDay.flow.collect { Rollover.ensure(Graph.db, Graph.store) }
     }
-    // throttled daily check for GitHub releases (no-op under Robolectric)
-    val context = androidx.compose.ui.platform.LocalContext.current
+    // throttled daily GitHub-release check; rescans any downloaded APK first
+    val context = LocalContext.current
     LaunchedEffect(Unit) {
-        com.azarai.goworkbro.core.Updater.maybeAutoCheck(Graph.store, context)
+        Updater.maybeAutoCheck(Graph.store, context)
     }
 
     GoWorkBroTheme {

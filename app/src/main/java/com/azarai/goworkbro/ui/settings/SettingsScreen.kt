@@ -1,5 +1,6 @@
 package com.azarai.goworkbro.ui.settings
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -33,13 +34,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.azarai.goworkbro.core.Updater
 import com.azarai.goworkbro.ui.components.CuteTopBar
 import com.azarai.goworkbro.ui.theme.LocalForestExtras
 
-/** 设置页：更新、熬夜模式与数据清理。 */
+/** Settings page: updates, late-night mode and the data wipe. */
 @Composable
 fun SettingsScreen(onBack: () -> Unit) {
     val vm: SettingsViewModel = viewModel()
@@ -48,7 +52,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     val autoUpdate by vm.autoUpdate.collectAsState()
     var showDelete by remember { mutableStateOf(false) }
     val context = LocalContext.current
-    val version = remember { com.azarai.goworkbro.core.Updater.currentVersion(context) }
+    val version = remember { Updater.currentVersion(context) }
 
     Column(
         Modifier
@@ -83,8 +87,9 @@ fun SettingsScreen(onBack: () -> Unit) {
         SettingRow(
             title = "删除应用数据",
             subtitle = "按类型清理待办、打卡与记录",
-            danger = true,
+            icon = Icons.Filled.DeleteOutline,
             onClick = { showDelete = true },
+            danger = true,
         )
     }
 
@@ -99,6 +104,28 @@ fun SettingsScreen(onBack: () -> Unit) {
     }
 }
 
+/** Shared settings-row scaffold: rounded card, optional tap, row content. */
+@Composable
+private fun SettingCard(
+    vertical: Dp = 12.dp,
+    onClick: (() -> Unit)? = null,
+    content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit,
+) {
+    val extras = LocalForestExtras.current
+    val shape = RoundedCornerShape(18.dp)
+    val modifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 18.dp)
+        .let { if (onClick == null) it else it.clip(shape).clickable(onClick = onClick) }
+    Surface(shape = shape, color = extras.card, border = BorderStroke(1.5.dp, extras.cardBorder), modifier = modifier) {
+        Row(
+            Modifier.padding(horizontal = 16.dp, vertical = vertical),
+            verticalAlignment = Alignment.CenterVertically,
+            content = content,
+        )
+    }
+}
+
 @Composable
 private fun SettingSwitchRow(
     title: String,
@@ -107,28 +134,16 @@ private fun SettingSwitchRow(
     onCheckedChange: (Boolean) -> Unit,
 ) {
     val extras = LocalForestExtras.current
-    Surface(
-        shape = RoundedCornerShape(18.dp),
-        color = extras.card,
-        border = androidx.compose.foundation.BorderStroke(1.5.dp, extras.cardBorder),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 18.dp),
-    ) {
-        Row(
-            Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = extras.textSecondary)
-            }
-            androidx.compose.material3.Switch(checked = checked, onCheckedChange = onCheckedChange)
+    SettingCard(vertical = 10.dp) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = extras.textSecondary)
         }
+        androidx.compose.material3.Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 
@@ -136,72 +151,45 @@ private fun SettingSwitchRow(
 private fun SettingRow(
     title: String,
     subtitle: String,
+    icon: ImageVector,
     onClick: () -> Unit,
     danger: Boolean = false,
-    icon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Filled.DeleteOutline,
 ) {
     val extras = LocalForestExtras.current
-    Surface(
-        shape = RoundedCornerShape(18.dp),
-        color = extras.card,
-        border = androidx.compose.foundation.BorderStroke(1.5.dp, extras.cardBorder),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 18.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .clickable(onClick = onClick),
-    ) {
-        Row(
-            Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = if (danger) MaterialTheme.colorScheme.error else extras.textSecondary,
+    SettingCard(vertical = 14.dp, onClick = onClick) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = if (danger) MaterialTheme.colorScheme.error else extras.textSecondary,
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                color = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
             )
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-                )
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = extras.textSecondary)
-            }
-            Icon(
-                Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                tint = extras.textSecondary,
-            )
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = extras.textSecondary)
         }
+        Icon(
+            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = extras.textSecondary,
+        )
     }
 }
 
 /** Non-interactive label/value row (e.g. the running version). */
 @Composable
 private fun InfoRow(title: String, value: String) {
-    val extras = LocalForestExtras.current
-    Surface(
-        shape = RoundedCornerShape(18.dp),
-        color = extras.card,
-        border = androidx.compose.foundation.BorderStroke(1.5.dp, extras.cardBorder),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 18.dp),
-    ) {
-        Row(
-            Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                title,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f),
-            )
-            Text(value, style = MaterialTheme.typography.bodyMedium, color = extras.textSecondary)
-        }
+    SettingCard {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        Text(value, style = MaterialTheme.typography.bodyMedium, color = LocalForestExtras.current.textSecondary)
     }
 }
 

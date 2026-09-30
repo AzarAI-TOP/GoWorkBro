@@ -52,6 +52,10 @@ object CartoonIcons {
     /** Chinese label for an icon key, null when unknown. */
     fun labelOf(key: String): String? = all.firstOrNull { it.key == key }?.label
 
+    /** Dialog header for the picker, e.g. "选个图标 · 小花". */
+    fun pickerHeader(key: String): String =
+        labelOf(key)?.let { "选个图标 · $it" } ?: "选个图标"
+
 }
 
 // ---------------------------------------------------------------------------

@@ -24,9 +24,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.text.style.TextAlign
+import com.azarai.goworkbro.core.util.Dates
 import com.azarai.goworkbro.ui.components.CuteTopBar
 import com.azarai.goworkbro.ui.components.GoalHero
 import com.azarai.goworkbro.ui.components.LogEntryRow
@@ -36,7 +39,8 @@ import com.azarai.goworkbro.ui.components.WeekBars
 import com.azarai.goworkbro.ui.components.rememberTick
 import com.azarai.goworkbro.ui.theme.LocalForestExtras
 
-/** 健身页：运动计时（时长只能靠计时获得）、目标分钟、今日记录、近 7 天。 */
+/** Fitness page: the stopwatch (minutes can only be earned by timing),
+ *  the daily goal, today's entries and the last 7 days. */
 @Composable
 fun FitnessScreen(onBack: () -> Unit) {
     val vm: FitnessViewModel = viewModel()
@@ -121,13 +125,33 @@ fun FitnessScreen(onBack: () -> Unit) {
     }
 }
 
-/** mm:ss (or h:mm:ss past the hour), used by the stopwatch display. */
-private fun formatElapsed(ms: Long): String {
-    val totalSec = ms / 1_000
-    val h = totalSec / 3_600
-    val m = totalSec % 3_600 / 60
-    val s = totalSec % 60
-    return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%02d:%02d".format(m, s)
+/** Rounded pill action button used by the stopwatch card. */
+@Composable
+private fun PillButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    container: Color = MaterialTheme.colorScheme.primary,
+    content: Color = MaterialTheme.colorScheme.onPrimary,
+    border: BorderStroke? = null,
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(50),
+        color = container,
+        border = border,
+        modifier = modifier,
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.titleMedium,
+            color = content,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp),
+        )
+    }
 }
 
 /**
@@ -158,7 +182,7 @@ private fun StopwatchCard(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                formatElapsed(elapsedMs),
+                Dates.formatSeconds((elapsedMs / 1_000).toInt()),
                 style = MaterialTheme.typography.displayMedium,
                 fontWeight = FontWeight.Bold,
                 color = if (running) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
@@ -175,60 +199,21 @@ private fun StopwatchCard(
             )
             Spacer(Modifier.height(14.dp))
             if (!started) {
-                Surface(
-                    onClick = onToggle,
-                    shape = RoundedCornerShape(50),
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(
-                        "开始运动",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 12.dp),
-                    )
-                }
+                PillButton("开始运动", onToggle, Modifier.fillMaxWidth())
             } else {
                 Row(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Surface(
-                        onClick = onToggle,
-                        shape = RoundedCornerShape(50),
-                        color = extras.inputFill,
+                    PillButton(
+                        if (running) "暂停" else "继续",
+                        onToggle,
+                        Modifier.weight(1f),
+                        container = extras.inputFill,
+                        content = MaterialTheme.colorScheme.onBackground,
                         border = BorderStroke(1.5.dp, extras.cardBorder),
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text(
-                            if (running) "暂停" else "继续",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 12.dp),
-                        )
-                    }
-                    Surface(
-                        onClick = onFinish,
-                        shape = RoundedCornerShape(50),
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text(
-                            "结束并记录",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 12.dp),
-                        )
-                    }
+                    )
+                    PillButton("结束并记录", onFinish, Modifier.weight(1f))
                 }
             }
         }

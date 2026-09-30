@@ -38,11 +38,11 @@ import com.azarai.goworkbro.ui.components.AddActionButton
 import com.azarai.goworkbro.ui.components.ColorDots
 import com.azarai.goworkbro.ui.components.CartoonIcons
 import com.azarai.goworkbro.ui.components.CuteItemCard
+import com.azarai.goworkbro.ui.components.randomColorIndex
 import com.azarai.goworkbro.ui.components.CuteTopBar
 import com.azarai.goworkbro.ui.components.EmptyHint
 import com.azarai.goworkbro.ui.components.IconPicker
 import com.azarai.goworkbro.ui.theme.LocalForestExtras
-import kotlin.random.Random
 
 private val DURATION_PRESETS = listOf(10, 20, 30, 45)
 private const val CUSTOM = -1
@@ -135,8 +135,7 @@ private fun TodoEditDialog(
     var title by remember { mutableStateOf(initial?.title ?: "") }
     var icon by remember { mutableStateOf(initial?.icon ?: "scroll") }
     val extras = LocalForestExtras.current
-    // new items start on a random pastel so the grid feels alive from day one
-    var colorIndex by remember { mutableStateOf(initial?.colorIndex ?: Random.nextInt(extras.pastels.size)) }
+    var colorIndex by remember { mutableStateOf(initial?.colorIndex ?: randomColorIndex()) }
     var timing by remember { mutableStateOf(initial?.timing ?: TimingType.NONE) }
     // preset id (10/20/30/45) or CUSTOM
     var durationSel by remember {
@@ -228,7 +227,7 @@ private fun TodoEditDialog(
                     }
                 }
                 Text(
-                    "选个图标" + (CartoonIcons.labelOf(icon)?.let { " · $it" } ?: ""),
+                    CartoonIcons.pickerHeader(icon),
                     style = MaterialTheme.typography.labelMedium,
                     color = extras.textSecondary,
                 )

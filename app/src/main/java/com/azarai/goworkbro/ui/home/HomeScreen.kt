@@ -1,10 +1,14 @@
 package com.azarai.goworkbro.ui.home
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.IconButton
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -87,7 +91,6 @@ fun HomeScreen(
 
     val extras = LocalForestExtras.current
     val tick = rememberTick()
-    val context = androidx.compose.ui.platform.LocalContext.current
     Column(
         Modifier
             .fillMaxSize()
@@ -136,13 +139,13 @@ fun HomeScreen(
             )
         }
         Spacer(Modifier.height(10.dp))
-        // downloaded-update banner: tap to hand the APK to the system installer
-        androidx.compose.animation.AnimatedVisibility(visible = state.pendingUpdate != null) {
+        // downloaded-update banner: tap commits a PackageInstaller session
+        AnimatedVisibility(visible = state.pendingUpdate != null) {
             Column {
                 state.pendingUpdate?.let { v ->
                     UpdateBanner(
                         version = v,
-                        onInstall = { com.azarai.goworkbro.core.Updater.startInstall(context) },
+                        onInstall = { vm.installUpdate() },
                         onDismiss = { vm.dismissUpdate() },
                     )
                 }

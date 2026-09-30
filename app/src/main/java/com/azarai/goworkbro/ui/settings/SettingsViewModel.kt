@@ -44,8 +44,14 @@ class SettingsViewModel : ViewModel() {
         viewModelScope.launch { Graph.store.set(Store.Keys.AUTO_UPDATE, enabled.toString()) }
     }
 
+    private val checking = java.util.concurrent.atomic.AtomicBoolean(false)
+
     fun checkNow() {
-        viewModelScope.launch { Updater.checkNow(Graph.appContext) }
+        // one HTTP round-trip at a time; a double tap must not double-download
+        if (!checking.compareAndSet(false, true)) return
+        viewModelScope.launch {
+            try { Updater.checkNow(Graph.appContext) } finally { checking.set(false) }
+        }
     }
 
     fun deleteData(kinds: Set<DataKind>) {

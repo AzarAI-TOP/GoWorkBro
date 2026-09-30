@@ -22,7 +22,6 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -75,14 +74,12 @@ class FitnessViewModel(app: Application) : AndroidViewModel(app) {
 
     val stopwatch = MutableStateFlow(WorkoutStopwatch())
 
-    private val ticks = stopwatch
+    /** Live elapsed ms: ticks while running, frozen while paused, and the
+     *  500ms loop only runs while something collects (no eager wakeups). */
+    val stopwatchMs: StateFlow<Long> = stopwatch
         .flatMapLatest { s ->
             if (s.startedAt != null) flow { while (true) { emit(Unit); delay(500) } } else flowOf(Unit)
         }
-        .shareIn(viewModelScope, SharingStarted.Eagerly, replay = 1)
-
-    /** Live elapsed ms (ticking while running, frozen while paused). */
-    val stopwatchMs: StateFlow<Long> = ticks
         .combine(stopwatch) { _, s -> elapsedOf(s) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
 

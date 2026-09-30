@@ -105,6 +105,10 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         dismissedUpdate.value = Updater.pendingInstallVersion.value
     }
 
+    fun installUpdate() {
+        viewModelScope.launch { Updater.startInstall(Graph.appContext) }
+    }
+
     fun checkInWake(onNeedsSleep: () -> Unit) {
         viewModelScope.launch {
             if (db.routineDao().latest()?.kind == RoutineKind.SLEEP) {

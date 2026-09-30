@@ -62,6 +62,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.azarai.goworkbro.ui.theme.LocalForestExtras
+import com.azarai.goworkbro.ui.theme.PastelPalette
+import kotlin.random.Random
+
+/** Random pastel slot for newly created items (both palettes hold 8 entries;
+ *  CuteItemCard mods the index anyway). */
+fun randomColorIndex(): Int = Random.nextInt(PastelPalette.size)
 
 /** Rounded card with a soft border and springy press feedback.
  *  Long-press (when [onLongClick] is given) is the edit gesture. */

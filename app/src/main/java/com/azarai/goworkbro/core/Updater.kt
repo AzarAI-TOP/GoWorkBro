@@ -8,7 +8,6 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageInstaller
 import android.net.Uri
-import android.os.Build
 import android.os.Environment
 import android.widget.Toast
 import com.azarai.goworkbro.Graph
@@ -102,7 +101,10 @@ object Updater {
      * hermetic (the JVM would happily hit the real API).
      */
     suspend fun maybeAutoCheck(store: Store, context: Context) {
-        if (Build.FINGERPRINT.contains("robolectric", ignoreCase = true)) return
+        if (Graph.testing) return
+        // pick up an APK that finished downloading after the process died;
+        // stale ones (<= the running version) are deleted
+        withContext(Dispatchers.IO) { refreshPendingApk(context) }
         if (store.get(Store.Keys.AUTO_UPDATE) == "false") return
         val last = store.get(Store.Keys.LAST_UPDATE_CHECK)?.toLongOrNull() ?: 0L
         val now = System.currentTimeMillis()
@@ -113,14 +115,15 @@ object Updater {
         download(context, release)
     }
 
-    /** Manual path (设置 → 检查更新): immediate check with toast feedback. */
+    /** Manual path (the settings row): immediate check with toast feedback. */
     suspend fun checkNow(context: Context) {
+        val current = currentVersion(context)
         val release = fetchLatest()
         when {
             release == null ->
                 Toast.makeText(context, "检查更新失败，网络不好？稍后再试", Toast.LENGTH_SHORT).show()
-            !isNewer(release.version, currentVersion(context)) ->
-                Toast.makeText(context, "已经是最新版本 ${currentVersion(context)} 啦", Toast.LENGTH_SHORT).show()
+            !isNewer(release.version, current) ->
+                Toast.makeText(context, "已经是最新版本 $current 啦", Toast.LENGTH_SHORT).show()
             else -> {
                 Toast.makeText(context, "发现新版本 v${release.version}，开始下载", Toast.LENGTH_SHORT).show()
                 download(context, release)
@@ -143,14 +146,9 @@ object Updater {
     fun updatesDir(context: Context): File? =
         context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
 
-    /**
-     * Registers the download-complete listener and scans the download dir:
-     * a leftover APK newer than the running build re-arms the install banner
-     * (covers downloads that finished while the process was dead), stale ones
-     * are deleted.
-     */
+    /** Registers the download-complete listener. The APK dir scan runs from
+     *  [maybeAutoCheck] so no disk I/O lands on the main thread at startup. */
     fun install(context: Context) {
-        refreshPendingApk(context)
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context, intent: Intent) {
                 if (intent.action != DownloadManager.ACTION_DOWNLOAD_COMPLETE) return
@@ -193,7 +191,7 @@ object Updater {
      *  PackageInstaller session (the deterministic path on modern Android:
      *  ACTION_VIEW+apk resolution is unreliable); asks for the
      *  install-unknown-apps toggle first when it hasn't been granted. */
-    fun startInstall(context: Context) {
+    suspend fun startInstall(context: Context) {
         val version = pendingInstallVersion.value ?: return
         val file = File(updatesDir(context), apkName(version))
         if (!file.exists()) {
@@ -206,6 +204,7 @@ object Updater {
                 .setData(Uri.parse("package:${context.packageName}"))
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             runCatching { context.startActivity(settings) }
+                .onFailure { Toast.makeText(context, "打不开安装设置：${it.message}", Toast.LENGTH_LONG).show() }
             return
         }
         runCatching {
@@ -213,18 +212,21 @@ object Updater {
             val session = installer.openSession(
                 installer.createSession(PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)),
             )
-            session.use { s ->
-                s.openWrite("update", 0, -1).use { out ->
-                    file.inputStream().use { it.copyTo(out) }
+            // multi-MB stream copy: keep it off the main thread
+            withContext(Dispatchers.IO) {
+                session.use { s ->
+                    s.openWrite("update", 0, -1).use { out ->
+                        file.inputStream().use { it.copyTo(out) }
+                    }
+                    val status = Intent(ACTION_INSTALL_STATUS).setPackage(context.packageName)
+                    val pi = PendingIntent.getBroadcast(
+                        context,
+                        0,
+                        status,
+                        PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+                    )
+                    s.commit(pi.intentSender)
                 }
-                val status = Intent(ACTION_INSTALL_STATUS).setPackage(context.packageName)
-                val pi = PendingIntent.getBroadcast(
-                    context,
-                    0,
-                    status,
-                    PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-                )
-                s.commit(pi.intentSender)
             }
         }.onFailure {
             Toast.makeText(context, "安装启动失败：${it.message}", Toast.LENGTH_LONG).show()

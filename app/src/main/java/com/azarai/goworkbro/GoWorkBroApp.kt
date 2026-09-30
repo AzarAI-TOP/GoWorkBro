@@ -21,6 +21,10 @@ object Graph {
     lateinit var appContext: Context
         private set
 
+    /** True while Robolectric runs the app: networked helpers opt out. */
+    var testing = false
+        private set
+
     private var dbInstance: AppDatabase? = null
     private var storeInstance: Store? = null
 
@@ -41,6 +45,7 @@ object Graph {
         dbInstance = null
         storeInstance = null
         AppDatabase.clearForTesting()
+        testing = true
         init(context)
     }
 }
