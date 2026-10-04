@@ -21,6 +21,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,10 +50,23 @@ private const val CUSTOM = -1
 
 /** Todo detail page: two-column grid of cute cards. */
 @Composable
-fun TodoScreen(onBack: () -> Unit, onOpenTimer: (Todo) -> Unit) {
+fun TodoScreen(
+    onBack: () -> Unit,
+    onOpenTimer: (Todo) -> Unit,
+    autoOpenAdd: Boolean = false,
+    onAutoAddConsumed: () -> Unit = {},
+) {
     val vm: TodoViewModel = viewModel()
     val todos by vm.todos.collectAsState()
     var editing by remember { mutableStateOf<EditingTodo?>(null) }
+
+    // arrived via the 新建待办 launcher shortcut: open the add dialog once
+    LaunchedEffect(autoOpenAdd) {
+        if (autoOpenAdd) {
+            editing = EditingTodo(null)
+            onAutoAddConsumed()
+        }
+    }
 
     Column(Modifier.fillMaxSize()) {
         CuteTopBar(

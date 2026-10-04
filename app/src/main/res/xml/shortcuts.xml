@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long-press launcher shortcuts. The intents hit MainActivity, which
+     forwards the action to AppRoot (see core/Shortcuts.kt). -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="new_todo"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_todo"
+        android:shortcutShortLabel="@string/shortcut_new_todo"
+        android:shortcutLongLabel="@string/shortcut_new_todo">
+        <intent
+            android:action="com.azarai.goworkbro.action.NEW_TODO"
+            android:targetPackage="com.azarai.goworkbro"
+            android:targetClass="com.azarai.goworkbro.MainActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="wake_checkin"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_wake"
+        android:shortcutShortLabel="@string/shortcut_wake_checkin"
+        android:shortcutLongLabel="@string/shortcut_wake_checkin">
+        <intent
+            android:action="com.azarai.goworkbro.action.CHECKIN_WAKE"
+            android:targetPackage="com.azarai.goworkbro"
+            android:targetClass="com.azarai.goworkbro.MainActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="sleep_checkin"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_sleep"
+        android:shortcutShortLabel="@string/shortcut_sleep_checkin"
+        android:shortcutLongLabel="@string/shortcut_sleep_checkin">
+        <intent
+            android:action="com.azarai.goworkbro.action.CHECKIN_SLEEP"
+            android:targetPackage="com.azarai.goworkbro"
+            android:targetClass="com.azarai.goworkbro.MainActivity" />
+    </shortcut>
+</shortcuts>

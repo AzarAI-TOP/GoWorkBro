@@ -48,6 +48,13 @@ nav stack in `ui/AppRoot.kt`. Data is app-private Room (`goworkbro_v3.db`).
   Streaks/averages/7-night charts are all derived from paired nights, home
   cards from "is there an event of that kind inside the current logical day
   window".
+- **Launcher shortcuts** — static XML (`res/xml/shortcuts.xml`): 新建待办 /
+  起床打卡 / 睡眠打卡. Intents hit `MainActivity`, which keeps the action in
+  a `mutableStateOf` handed to `AppRoot` (`core/Shortcuts.kt` has the action
+  constants); AppRoot performs it once — NEW_TODO pushes the todo page and
+  auto-opens the add dialog, the check-ins mirror the home quick-打卡
+  (duplicate-guarded against the current logical day; a wake with no pending
+  bedtime raises the root-level MissedSleepDialog).
 - **Auto-update** — `core/Updater.kt` is the app's single networked surface:
   daily-throttled GitHub `releases/latest` check (skipped when the 设置 switch
   is off, and hard-skipped under Robolectric to keep tests hermetic),

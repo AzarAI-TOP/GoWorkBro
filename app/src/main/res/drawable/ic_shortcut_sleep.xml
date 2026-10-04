@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launcher shortcut: 睡眠打卡. The app cartoon moon (CartoonIcon "moon"),
+     redrawn as a vector — same crescent, sleepy face and sparkles. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="100"
+    android:viewportHeight="100">
+
+    <!-- crescent -->
+    <path
+        android:fillColor="#FFE08A"
+        android:pathData="M66,12 C40,12 22,28 22,50 C22,72 40,88 66,88 C48,82 37,67 37,50 C37,33 48,18 66,12 Z" />
+    <path
+        android:strokeColor="#5B4A3F"
+        android:strokeWidth="4.5"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000"
+        android:pathData="M66,12 C40,12 22,28 22,50 C22,72 40,88 66,88 C48,82 37,67 37,50 C37,33 48,18 66,12 Z" />
+
+    <!-- sleepy face inside the crescent -->
+    <path
+        android:fillColor="#5B4A3F"
+        android:pathData="M24.7,45 a2.3,2.3 0 1 0 4.6,0 a2.3,2.3 0 1 0 -4.6,0 Z M31.7,45 a2.3,2.3 0 1 0 4.6,0 a2.3,2.3 0 1 0 -4.6,0 Z" />
+    <path
+        android:strokeColor="#5B4A3F"
+        android:strokeWidth="2.8"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M33.45,50.06 A3.6,3.6 0 0 1 27.55,50.06" />
+
+    <!-- sparkles -->
+    <path
+        android:fillColor="#FFD75E"
+        android:pathData="M74,22.5 C74.99,27.01 74.99,27.01 79.5,28 C74.99,28.99 74.99,28.99 74,33.5 C73.01,28.99 73.01,28.99 68.5,28 C73.01,27.01 73.01,27.01 74,22.5 Z M80,52 C80.72,55.28 80.72,55.28 84,56 C80.72,56.72 80.72,56.72 80,60 C79.28,56.72 79.28,56.72 76,56 C79.28,55.28 79.28,55.28 80,52 Z M70,71 C70.54,73.46 70.54,73.46 73,74 C70.54,74.54 70.54,74.54 70,77 C69.46,74.54 69.46,74.54 67,74 C69.46,73.46 69.46,73.46 70,71 Z" />
+</vector>
