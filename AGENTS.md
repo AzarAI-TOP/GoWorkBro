@@ -104,9 +104,27 @@ hand-rolled nav stack in `ui/AppRoot.kt`. Data is app-private Room
   only, and the directory is NOT writable, hence `compileSdk = 36`,
   `buildToolsVersion = "36.0.0"` and `local.properties` → `sdk.dir`. Do not
   rely on Gradle auto-installing SDK pieces.
-- `./gradlew :app:testDebugUnitTest` (all unit + Robolectric tests),
-  `:app:assembleDebug`, `:app:assembleRelease` (`gradlew.bat` is the old
-  Windows box — ignore it).
+- `scripts/test.sh fast|ui|all` — test TIERS, run the right amount:
+  - `fast` (≈4s): pure-JVM logic classes. Run on every logic change.
+  - `ui` (≈12s): Robolectric UI/VM classes. Run when a screen or VM
+    changed, and before committing.
+  - `all`: everything with a 15-min hard timeout (a hung test must never
+    eat a session again). One full round before a commit is enough.
+- Builds: `:app:assembleDebug`, `:app:assembleRelease` (`gradlew.bat` is
+  the old Windows box — ignore it).
+- Testing discipline (all learned the hard way, 2026-10-09):
+  - Never `runBlocking { flow.first { … } }` without a timeout — one
+    unsatisfied predicate deadlocks the whole executor.
+  - Bare-VM tests must pump the main looper themselves
+    (`shadowOf(Looper.getMainLooper()).idle()`) — viewModelScope is
+    Main.immediate and nothing else drives it.
+  - Keep Compose-test assertions SAME-PAGE; cross-page data-roundtrip
+    assertions (write on page A, assert on home) are flaky in Robolectric —
+    verify those once on the emulator (`.agents/skills/gwb-emu`) instead.
+  - Do NOT enable `maxParallelFutures`: Graph/LogicalDay are static
+    singletons shared across classes in one classloader; parallel classes
+    poison each other's day/db.
+  - New test classes get sorted into a tier in `scripts/test.sh`.
 - Emulator testing (local-only skill, gitignored): `.agents/skills/gwb-emu`
   drives the headless local AVD — install/launch, tap-by-label, screenshots,
   app-data reset, guest-clock faking for 04:00 day-boundary tests. Prefer it
