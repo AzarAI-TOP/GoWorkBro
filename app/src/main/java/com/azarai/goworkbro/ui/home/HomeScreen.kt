@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -48,7 +49,6 @@ import com.azarai.goworkbro.ui.components.CuteCard
 import com.azarai.goworkbro.ui.components.CuteProgressBar
 import com.azarai.goworkbro.ui.components.IconBubble
 import com.azarai.goworkbro.core.util.Dates
-import com.azarai.goworkbro.ui.routine.MissedSleepDialog
 import com.azarai.goworkbro.ui.components.rememberTick
 import com.azarai.goworkbro.ui.theme.LocalForestExtras
 import java.time.LocalDate
@@ -73,17 +73,17 @@ private fun dateLine(now: LocalDateTime = LocalDateTime.now()): String {
 private fun focusLine(sessions: Int, minutes: Int): String =
     "$sessions 次专注 - 共专注 ${Dates.formatMinutesHuman(minutes)}"
 
-/** The single home page: a 2 x 3 grid of the six modules. */
+/** The single home page: a 2 x 3 grid — four square modules + one wide sleep card. */
 @Composable
 fun HomeScreen(
     openRoute: (String) -> Unit,
     onOpenActiveTimer: () -> Unit,
     onOpenOverview: () -> Unit = {},
+    onRecordSleep: () -> Unit = {},
     onSproutMeasured: (androidx.compose.ui.geometry.Offset) -> Unit = {},
 ) {
     val vm: HomeViewModel = viewModel()
     val state by vm.state.collectAsState()
-    var missedSleep by remember { mutableStateOf(false) }
     val timerVm: com.azarai.goworkbro.ui.timer.TimerViewModel = viewModel()
     val activeTimer by timerVm.active.collectAsState()
     val elapsed by timerVm.elapsed.collectAsState()
@@ -195,25 +195,49 @@ fun HomeScreen(
                     onClick = { openRoute(Routes.FITNESS) },
                 )
             }
-            item {
-                ModuleCard(
-                    icon = "sun", title = "起床", pastelIndex = 6,
-                    onClick = { openRoute(Routes.ROUTINE_WAKE) },
-                    status = state.wakeTime ?: "还没起床打卡",
-                    checkedTime = state.wakeTime,
-                    onQuickCheck = { tick(); vm.checkInWake { missedSleep = true } },
-                    quickCheckLabel = "起床打卡",
-                )
-            }
-            item {
-                ModuleCard(
-                    icon = "moon", title = "睡觉", pastelIndex = 4,
-                    onClick = { openRoute(Routes.ROUTINE_SLEEP) },
-                    status = state.sleepTime ?: "还没睡觉打卡",
-                    checkedTime = state.sleepTime,
-                    onQuickCheck = { tick(); vm.checkInSleep() },
-                    quickCheckLabel = "睡觉打卡",
-                )
+            item(span = { GridItemSpan(2) }) {
+                CuteCard(
+                    onClick = { openRoute(Routes.SLEEP) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(96.dp),
+                ) {
+                    Row(
+                        Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        IconBubble("moon", extras.pastels[4], 44.dp, bob = true)
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("睡眠", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                            Spacer(Modifier.height(3.dp))
+                            Text(
+                                state.todaySleepText?.let { "已睡 $it" } ?: "今天还没记录",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (state.todaySleepText != null) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    extras.textSecondary
+                                },
+                            )
+                        }
+                        Surface(
+                            onClick = { tick(); onRecordSleep() },
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(50),
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.semantics { contentDescription = "记录睡眠" },
+                        ) {
+                            Text(
+                                "记录",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 5.dp),
+                            )
+                        }
+                    }
+                }
             }
         }
         // running focus task mini-card
@@ -232,19 +256,6 @@ fun HomeScreen(
             }
         }
         Spacer(Modifier.height(6.dp))
-    }
-
-    if (missedSleep) {
-        MissedSleepDialog(
-            onConfirm = { sleepAt ->
-                vm.checkInWakeWithSleep(sleepAt)
-                missedSleep = false
-            },
-            onAllNighter = {
-                vm.checkInWakeAllNighter()
-                missedSleep = false
-            },
-        )
     }
 }
 

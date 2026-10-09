@@ -18,7 +18,7 @@ enum class DataKind(val label: String) {
     HABITS("习惯"),
     WATER("喝水记录"),
     FITNESS("健身记录"),
-    ROUTINE("起床与睡觉记录"),
+    SLEEP("睡眠记录"),
 }
 
 class SettingsViewModel : ViewModel() {
@@ -66,7 +66,7 @@ class SettingsViewModel : ViewModel() {
                     DataKind.HABITS -> dao.clearHabits()
                     DataKind.WATER -> dao.clearWaterLogs()
                     DataKind.FITNESS -> dao.clearFitnessLogs()
-                    DataKind.ROUTINE -> dao.clearRoutineEvents()
+                    DataKind.SLEEP -> dao.clearSleepRecords()
                 }
             }
         }

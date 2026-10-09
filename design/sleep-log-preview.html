@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>睡眠记录 · 定稿交互预览 (feature/sleep-log)</title>
+<style>
+  :root{
+    --bg:#F6F3E7; --card:#FFFEF9; --border:#E4DEC9; --divider:#EAE4D2;
+    --text:#33402F; --sub:#77836F; --primary:#5E9C6B; --on-primary:#fff;
+    --primary-c:#D9EDD6; --on-primary-c:#1E3A26; --secondary-c:#E7F2D8;
+    --tertiary:#B08552; --tertiary-c:#F2E3CB; --on-tertiary-c:#43331B;
+    --input:#EFEAD9; --bezel:#20261f;
+  }
+  [data-theme="dark"]{
+    --bg:#1A211C; --card:#232B25; --border:#39443B; --divider:#313B33;
+    --text:#E6EBE0; --sub:#9FAC97; --primary:#9CD3A3; --on-primary:#12291A;
+    --primary-c:#375940; --on-primary-c:#CDEACF; --secondary-c:#3E5232;
+    --tertiary:#D9B489; --tertiary-c:#57432A; --on-tertiary-c:#F2DFC2;
+    --input:#2B342D; --bezel:#0e120f;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    font-family:-apple-system,"Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--bg); color:var(--text); padding:28px 20px 60px;
+  }
+  .page{max-width:1200px; margin:0 auto;}
+
+  /* ---------- header ---------- */
+  .hdr{display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap;}
+  .hdr h1{font-size:26px;}
+  .hdr .sub{color:var(--sub); margin-top:6px; font-size:14px;}
+  .theme-btn{
+    border:1px solid var(--border); background:var(--card); color:var(--text);
+    border-radius:50%; width:44px; height:44px; font-size:20px; cursor:pointer; flex:none;
+  }
+  .panel{
+    background:var(--card); border:1px solid var(--border); border-radius:16px;
+    padding:16px 18px; margin-top:18px; font-size:14px; line-height:1.75;
+  }
+  .panel h3{font-size:15px; margin-bottom:6px;}
+  .panel .muted{color:var(--sub);}
+  .panel ul{padding-left:18px;}
+  code{
+    background:var(--input); border-radius:6px; padding:1px 6px;
+    font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px;
+  }
+  .cols{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:14px; margin-top:14px;}
+
+  /* home grid strip */
+  .home-strip{display:flex; align-items:center; gap:18px; flex-wrap:wrap;}
+  .home-grid{display:grid; grid-template-columns:repeat(3,86px); gap:10px;}
+  .tile{
+    height:76px; border-radius:14px; background:var(--card); border:1px solid var(--border);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+    font-size:13px;
+  }
+  .tile .em{font-size:22px;}
+  .tile.merged{background:var(--primary-c); border-color:var(--primary); color:var(--on-primary-c); font-weight:700;}
+  .tile.ghost{border-style:dashed; color:var(--sub); background:transparent;}
+  .home-note{flex:1; min-width:240px; color:var(--sub); font-size:13.5px; line-height:1.8;}
+
+  /* ---------- detail: phone + rules ---------- */
+  .detail{display:flex; gap:30px; justify-content:center; align-items:flex-start; flex-wrap:wrap; margin-top:30px;}
+  .rules{flex:1; min-width:300px; max-width:440px;}
+  .rules .panel{margin-top:0;}
+
+  /* ---------- phone ---------- */
+  .phone{
+    width:392px; max-width:100%; background:var(--bezel); border-radius:42px;
+    padding:12px; box-shadow:0 18px 40px rgba(0,0,0,.28); flex:none;
+  }
+  .screen{
+    background:var(--bg); border-radius:32px; overflow:hidden; height:792px;
+    display:flex; flex-direction:column; position:relative;
+  }
+  .statusbar{
+    display:flex; justify-content:space-between; padding:10px 22px 4px;
+    font-size:12px; color:var(--sub); font-weight:600;
+  }
+  .appbar{display:flex; align-items:center; gap:10px; padding:8px 16px 10px; font-size:17px; font-weight:700;}
+  .appbar .back{color:var(--primary); font-size:20px; line-height:1;}
+  .body{flex:1; overflow-y:auto; padding:6px 18px 20px; scrollbar-width:none;}
+  .body::-webkit-scrollbar{display:none;}
+
+  .hero{display:flex; flex-direction:column; align-items:center; padding-top:6px;}
+  .bubble{
+    width:86px; height:86px; border-radius:50%; background:var(--primary-c);
+    display:flex; align-items:center; justify-content:center; font-size:40px;
+  }
+  .hero .h-big{font-size:22px; font-weight:800; margin-top:10px; color:var(--primary); font-variant-numeric:tabular-nums;}
+  .hero .h-sub{font-size:13px; color:var(--sub); margin-top:3px; font-variant-numeric:tabular-nums;}
+
+  .pill{
+    margin-top:14px; background:var(--primary); color:var(--on-primary);
+    border-radius:50px; padding:12px 42px; font-size:16px; font-weight:700;
+    border:none; cursor:pointer;
+  }
+  .pill.ghost{background:transparent; color:var(--primary); border:1.5px solid var(--primary);}
+
+  .stats{display:flex; gap:9px; margin-top:16px;}
+  .stat{
+    flex:1; background:var(--card); border:1px solid var(--border); border-radius:13px;
+    padding:9px 4px; text-align:center;
+  }
+  .stat .v{font-size:15px; font-weight:800;}
+  .stat .k{font-size:11px; color:var(--sub); margin-top:2px;}
+
+  .card{
+    background:var(--card); border:1px solid var(--border); border-radius:16px;
+    padding:14px; margin-top:14px;
+  }
+  .card h4{font-size:13px; color:var(--sub); font-weight:600; margin-bottom:10px;}
+
+  /* bar chart */
+  .bars{display:flex; align-items:flex-end; gap:8px; height:96px; padding:0 4px;}
+  .bar{flex:1; display:flex; flex-direction:column; justify-content:flex-end; height:100%; gap:4px;}
+  .bar i{
+    display:block; border-radius:6px 6px 3px 3px; background:var(--primary);
+    min-height:6px; position:relative;
+  }
+  .bar.miss i{background:var(--border);}
+  .bar span{text-align:center; font-size:10.5px; color:var(--sub);}
+  .target{position:relative; margin-top:-96px; height:96px; pointer-events:none;}
+  .target::after{
+    content:""; position:absolute; left:0; right:0; top:34%;
+    border-top:1.5px dashed var(--tertiary);
+  }
+
+  /* bottom-sheet dialog (真实弹窗模拟) */
+  .overlay{position:absolute; inset:0; z-index:5; pointer-events:none;}
+  .overlay.open{pointer-events:auto;}
+  .scrim{position:absolute; inset:0; background:rgba(0,0,0,.45); opacity:0; transition:opacity .18s;}
+  .overlay.open .scrim{opacity:1;}
+  .bsheet{
+    position:absolute; left:8px; right:8px; bottom:8px;
+    background:var(--card); border:1.5px solid var(--primary); border-radius:20px;
+    padding:8px 16px 14px; transform:translateY(115%); transition:transform .22s ease-out;
+  }
+  .overlay.open .bsheet{transform:translateY(0);}
+  .grabber{width:36px; height:4px; border-radius:2px; background:var(--divider); margin:2px auto 12px;}
+  .bs-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
+  .bs-head h3{font-size:15px; text-align:left; margin:0;}
+  .bs-x{background:none; border:none; color:var(--sub); font-size:14px; cursor:pointer; padding:4px 8px;}
+  .bsheet .pill{display:block; width:100%; text-align:center; margin-top:12px;}
+
+  /* wheel */
+  .wheel{
+    overflow-y:auto; scrollbar-width:none; position:relative;
+    background:var(--input); border-radius:14px;
+    scroll-snap-type:y mandatory;
+  }
+  .wheel::-webkit-scrollbar{display:none;}
+  .wheel.solo{width:100%; height:132px;}
+  .w-item{
+    height:44px; display:flex; align-items:center; justify-content:center;
+    font-size:18px; font-weight:600; color:var(--sub); scroll-snap-align:center;
+    font-variant-numeric:tabular-nums;
+  }
+  .w-item.on{color:var(--text); font-weight:800; font-size:20px;}
+  .a-date{
+    text-align:center; color:var(--sub); font-size:13.5px; margin-top:10px;
+    font-variant-numeric:tabular-nums;
+  }
+
+  .toast{
+    display:none; position:absolute; left:50%; bottom:18px; transform:translateX(-50%);
+    background:var(--primary); color:var(--on-primary); border-radius:50px;
+    padding:8px 20px; font-size:13px; font-weight:700; white-space:nowrap;
+  }
+
+  footer{margin-top:34px; color:var(--sub); font-size:12.5px; text-align:center;}
+</style>
+</head>
+<body>
+<div class="page" data-theme-root>
+
+<!-- ======================= header ======================= -->
+<div class="hdr">
+  <div>
+    <h1>🌙 睡眠记录 · 定稿交互预览</h1>
+    <div class="sub">两步滚轮弹窗(原方案 A 演进版) · branch <code>feature/sleep-log</code> · 右上角切换明暗主题</div>
+  </div>
+  <button class="theme-btn" id="themeBtn" title="切换明暗">☀️</button>
+</div>
+
+<div class="panel">
+  <h3>这次改造砍掉的时序复杂度</h3>
+  <div class="cols">
+    <ul>
+      <li>❌ 事件流<b>配对</b>逻辑(<code>RoutineOps.pair</code>:bedtime 找下一个 wake)</li>
+      <li>❌ "夜键"noon 规则(<code>nightKeyOf</code>:中午 12 点前后属于不同的夜)</li>
+    </ul>
+    <ul>
+      <li>❌ <b>pending bedtime</b> 进行中状态 + 强制 <code>MissedSleepDialog</code>(不可关闭)</li>
+      <li>✅ 换成一行一条的 <code>sleep_records</code>:入睡 + 醒来,一次写完,永不追问</li>
+    </ul>
+  </div>
+</div>
+
+<div class="panel">
+  <h3>顺带:首页 2×3 网格 6 格 → 5 格</h3>
+  <div class="home-strip">
+    <div class="home-grid">
+      <div class="tile"><span class="em">📝</span>待办</div>
+      <div class="tile"><span class="em">🌱</span>习惯</div>
+      <div class="tile"><span class="em">💧</span>喝水</div>
+      <div class="tile"><span class="em">💪</span>健身</div>
+      <div class="tile merged"><span class="em">🌙</span>睡眠</div>
+      <div class="tile ghost"><span class="em">?</span>待定</div>
+    </div>
+    <div class="home-note">
+      起床 + 睡觉两格合并为一格「睡眠」。空出的第 6 格可选:留白、放"专注统计"入口、或睡眠格加宽占两格。
+    </div>
+  </div>
+</div>
+
+<!-- ======================= phone + rules ======================= -->
+<div class="detail">
+  <div class="phone"><div class="screen">
+    <div class="statusbar"><span>07:28</span><span>📶 🔋86%</span></div>
+    <div class="appbar"><span class="back">‹</span>睡眠记录</div>
+    <div class="body">
+      <div class="hero">
+        <div class="bubble">🌙</div>
+        <div class="h-big" id="a-hero-dur">7h 35m</div>
+        <div class="h-sub" id="a-hero-sub">10月X日 23:35 → 10月Y日 07:10 · 已记录</div>
+        <button class="pill" id="a-open">记录睡眠</button>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="v">7h12m</div><div class="k">平均时长</div></div>
+        <div class="stat"><div class="v">23:47</div><div class="k">平均入睡</div></div>
+        <div class="stat"><div class="v">4 天</div><div class="k">连续达标</div></div>
+      </div>
+
+      <div class="card">
+        <h4>近 7 晚(虚线 = 7h 目标)</h4>
+        <div class="bars">
+          <div class="bar"><i style="height:62%"></i><span>一</span></div>
+          <div class="bar"><i style="height:78%"></i><span>二</span></div>
+          <div class="bar"><i style="height:55%"></i><span>三</span></div>
+          <div class="bar miss"><i style="height:12%"></i><span>四</span></div>
+          <div class="bar"><i style="height:84%"></i><span>五</span></div>
+          <div class="bar"><i style="height:70%"></i><span>六</span></div>
+          <div class="bar"><i style="height:88%"></i><span>日</span></div>
+        </div>
+        <div class="target"></div>
+      </div>
+    </div>
+    <div class="overlay" id="a-overlay">
+      <div class="scrim" id="a-scrim"></div>
+      <div class="bsheet">
+        <div class="grabber"></div>
+        <div id="a-step1">
+          <div class="bs-head"><h3>第 1 步 · 睡眠时间</h3><button class="bs-x" data-close>✕</button></div>
+          <div class="wheel solo" id="a-w1"></div>
+          <div class="a-date" id="a-wd1"></div>
+          <button class="pill" id="a-c1">确认睡眠时间</button>
+        </div>
+        <div id="a-step2" style="display:none">
+          <div class="bs-head"><h3>第 2 步 · 起床时间</h3><button class="bs-x" data-close>✕</button></div>
+          <div class="wheel solo" id="a-w2"></div>
+          <div class="a-date" id="a-wd2"></div>
+          <button class="pill" id="a-c2">确认起床时间</button>
+        </div>
+      </div>
+    </div>
+    <div class="toast">已记录 ✓</div>
+  </div></div>
+
+  <div class="rules">
+    <div class="panel">
+      <h3>交互规则(定稿)</h3>
+      <ul>
+        <li>打开弹窗:<b>醒来默认 = 当前时间</b>(15min 取整),<b>入睡默认 = 往前推 7h</b>,用户滚动精校</li>
+        <li>第 1 步 · 睡眠时间:滚轮范围 <b>昨天 18:00 → 今天 12:00</b></li>
+        <li>轮下居中<b>浅色日期</b>,滚过 00:00 自动跳到次日(往回滚自动退回)</li>
+        <li>第 2 步 · 起床时间:滚轮范围 <b>入睡 + 30min → 今天 18:00</b>,默认当前时间</li>
+        <li>顺序约束天然成立:第 2 轮起点 = 第 1 步结果 +30min,<b>不可能出现负时长,无需校验</b></li>
+        <li>确认起床 → 一条记录完成:入睡 datetime + 醒来 datetime + 派生时长</li>
+        <li>粒度 15min;滚轮到边界即停,不循环</li>
+      </ul>
+    </div>
+    <div class="panel" style="margin-top:14px">
+      <h3>落地实现注记</h3>
+      <ul>
+        <li>Room 新表 <code>sleep_records(id, sleep_at, wake_at)</code>;Migration v3→v4 用现有 <code>RoutineOps.pair()</code> 把 <code>routine_events</code> 一次性转成记录,然后停写旧表</li>
+        <li>删除:<code>MissedSleepDialog</code>、pending bedtime 状态、nightKey noon 规则</li>
+        <li>首页两格合并为「睡眠」;shortcuts.xml 的起床/睡眠打卡两条 → 合并为「记录睡眠」</li>
+        <li>统计(平均时长/平均入睡/连续达标/7 夜柱状图)全部从 sleep_records 直接派生</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<footer>定稿预览 · feature/sleep-log · 打开方式:xdg-open design/sleep-log-preview.html</footer>
+</div>
+
+<script>
+/* ---------- theme ---------- */
+const themeBtn = document.getElementById('themeBtn');
+themeBtn.onclick = () => {
+  const dark = document.documentElement.getAttribute('data-theme') !== 'dark';
+  document.documentElement.setAttribute('data-theme', dark ? 'dark' : '');
+  themeBtn.textContent = dark ? '🌙' : '☀️';
+};
+
+/* ---------- shared helpers ---------- */
+function fmt(mins){ const h = Math.floor((mins%1440)/60), m = mins%60; return h + ':' + String(m).padStart(2,'0'); }
+function fmtDur(mins){ return Math.floor(mins/60) + 'h ' + String(mins%60).padStart(2,'0') + 'm'; }
+const ITEM = 44, WHEEL_H = 132;   /* wheel row height / viewport height */
+function flash(btn){
+  const t = btn.closest('.screen').querySelector('.toast');
+  t.style.display = 'block';
+  setTimeout(()=>{ t.style.display='none'; }, 1100);
+}
+
+/* ---------- two-step wheel flow (sleep → wake → done) ---------- */
+const A_BASE = (function(){ const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()-1); return d; })(); /* 锚点 = 昨天 00:00 */
+function nowAbs(){ return Math.round((Date.now() - A_BASE.getTime()) / 60000 / 15) * 15; }
+function aDate(abs){ const d = new Date(A_BASE.getTime() + abs*60000); return (d.getMonth()+1) + '月' + d.getDate() + '日'; }
+const A_S_MIN = 18*60, A_S_MAX = 36*60, A_W_MAX = 42*60; /* 入睡 昨18:00→今12:00;醒 最晚今18:00 */
+const w1 = document.getElementById('a-w1'), w2 = document.getElementById('a-w2');
+let aS = 0, aW = 0;
+
+function buildAWheel(el, from, to, def, dateEl){
+  let html = '<div class="w-item" style="height:' + (WHEEL_H-ITEM)/2 + 'px;scroll-snap-align:start"></div>';
+  for(let m = from; m <= to; m += 15) html += '<div class="w-item">' + fmt(m) + '</div>';
+  html += '<div class="w-item" style="height:' + (WHEEL_H-ITEM)/2 + 'px;scroll-snap-align:end"></div>';
+  el.innerHTML = html;
+  el.scrollTop = (def - from) / 15 * ITEM;
+  const paint = () => {
+    const idx = Math.round(el.scrollTop / ITEM);
+    el.querySelectorAll('.w-item').forEach((it,i)=>it.classList.toggle('on', i === idx+1));
+    dateEl.textContent = aDate(from + idx*15);   /* 日期随滚轮跨天自动变 */
+  };
+  el.onscroll = () => requestAnimationFrame(paint);
+  paint();
+}
+const overlay = document.getElementById('a-overlay');
+function aStart(){
+  document.getElementById('a-step1').style.display = '';
+  document.getElementById('a-step2').style.display = 'none';
+  const defS = Math.max(A_S_MIN, Math.min(A_S_MAX, nowAbs() - 7*60)); /* 默认:当前时间往前推 7h */
+  buildAWheel(w1, A_S_MIN, A_S_MAX, defS, document.getElementById('a-wd1'));
+}
+function aOpen(){ aStart(); overlay.classList.add('open'); }
+function aClose(){ overlay.classList.remove('open'); }
+document.getElementById('a-scrim').onclick = aClose;
+document.querySelectorAll('[data-close]').forEach(b => b.onclick = aClose);
+document.getElementById('a-open').onclick = aOpen;
+document.getElementById('a-c1').onclick = () => {
+  aS = A_S_MIN + Math.round(w1.scrollTop / ITEM) * 15;
+  const defW = Math.min(A_W_MAX, Math.max(nowAbs(), aS + 30)); /* 默认醒来 = 当前时间 */
+  buildAWheel(w2, aS + 30, A_W_MAX, defW, document.getElementById('a-wd2'));
+  document.getElementById('a-step1').style.display = 'none';
+  document.getElementById('a-step2').style.display = '';
+};
+document.getElementById('a-c2').onclick = () => {
+  aW = aS + 30 + Math.round(w2.scrollTop / ITEM) * 15;
+  aClose();
+  document.getElementById('a-hero-dur').textContent = fmtDur(aW - aS);
+  document.getElementById('a-hero-sub').textContent = aDate(aS) + ' ' + fmt(aS) + ' → ' + aDate(aW) + ' ' + fmt(aW) + ' · 已记录';
+  flash(document.getElementById('a-open'));
+};
+</script>
+</body>
+</html>

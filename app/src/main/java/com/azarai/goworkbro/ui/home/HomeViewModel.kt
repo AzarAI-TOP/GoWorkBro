@@ -5,13 +5,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.azarai.goworkbro.Graph
 import com.azarai.goworkbro.core.LogicalDay
-import com.azarai.goworkbro.core.RoutineKind
-import com.azarai.goworkbro.core.RoutineOps
-import com.azarai.goworkbro.core.RoutineStore
+import com.azarai.goworkbro.core.SleepOps
 import com.azarai.goworkbro.core.Store
 import com.azarai.goworkbro.core.Updater
-import com.azarai.goworkbro.core.util.Dates
-import java.time.LocalDateTime
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -33,12 +29,10 @@ data class HomeState(
     val waterGoal: Int = Store.DEFAULT_WATER_GOAL,
     val fitnessMin: Int = 0,
     val fitnessGoal: Int = Store.DEFAULT_FITNESS_GOAL,
-    val wakeTime: String? = null,
-    val sleepTime: String? = null,
+    /** Duration of the record filed under today's night slot, e.g. "7h 5m". */
+    val todaySleepText: String? = null,
     val focusSessions: Int = 0,
     val focusMinutes: Int = 0,
-    /** A wake check-in would need the missed bedtime first. */
-    val wakeNeedsSleepPrompt: Boolean = false,
     /** A downloaded update APK waiting for its install tap. */
     val pendingUpdate: String? = null,
 )
@@ -70,19 +64,16 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             db.habitDao().observeAll(),
         ) { todos, habits -> todos to habits },
         combine(
-            db.routineDao().observeAll(),
+            db.sleepDao().observeAll(),
             LogicalDay.flow.map { it.start }.distinctUntilChanged(),
-        ) { events, start -> events to start },
+        ) { records, _ -> records },
         combine(waterToday, fitnessToday, focusToday) { w, f, fo -> Triple(w, f, fo) },
         combine(
             Graph.store.observe(Store.Keys.WATER_GOAL_ML),
             Graph.store.observe(Store.Keys.FITNESS_GOAL_MIN),
         ) { w, f -> w to f },
         combine(logicalKey, pendingUpdate) { key, pending -> key to pending },
-    ) { (todos, habits), (routineEvents, dayStart), (waterToday, fitnessToday, focusToday), (waterGoalRaw, fitnessGoalRaw), (_, pendingUpdate) ->
-        val now = LocalDateTime.now()
-        val wakeToday = RoutineOps.eventOfCurrentDay(routineEvents, RoutineKind.WAKE, dayStart)
-        val sleepToday = RoutineOps.eventOfCurrentDay(routineEvents, RoutineKind.SLEEP, dayStart)
+    ) { (todos, habits), sleepRecords, (waterToday, fitnessToday, focusToday), (waterGoalRaw, fitnessGoalRaw), (logicalKey, pendingUpdate) ->
         HomeState(
             todoUndone = todos.count { !it.isDone },
             todoTotal = todos.size,
@@ -92,9 +83,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             waterGoal = waterGoalRaw?.toIntOrNull() ?: Store.DEFAULT_WATER_GOAL,
             fitnessMin = fitnessToday.sumOf { it.minutes },
             fitnessGoal = fitnessGoalRaw?.toIntOrNull() ?: Store.DEFAULT_FITNESS_GOAL,
-            wakeTime = wakeToday?.let { Dates.hhmm(Dates.parseDateTime(it.at)) },
-            sleepTime = sleepToday?.let { Dates.hhmm(Dates.parseDateTime(it.at)) },
-            wakeNeedsSleepPrompt = !RoutineOps.hasPendingSleep(routineEvents),
+            todaySleepText = SleepOps.forSlot(sleepRecords, logicalKey)
+                ?.let { SleepOps.formatDuration(it.minutes) },
             focusSessions = focusToday.sessions,
             focusMinutes = focusToday.minutes,
             pendingUpdate = pendingUpdate,
@@ -107,27 +97,5 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     fun installUpdate() {
         viewModelScope.launch { Updater.startInstall(Graph.appContext) }
-    }
-
-    fun checkInWake(onNeedsSleep: () -> Unit) {
-        viewModelScope.launch {
-            if (db.routineDao().latest()?.kind == RoutineKind.SLEEP) {
-                RoutineStore.checkInWake()
-            } else {
-                onNeedsSleep()
-            }
-        }
-    }
-
-    fun checkInWakeWithSleep(sleepAt: LocalDateTime) {
-        viewModelScope.launch { RoutineStore.checkInWakeWithSleep(sleepAt) }
-    }
-
-    fun checkInWakeAllNighter() {
-        viewModelScope.launch { RoutineStore.checkInWakeAllNighter() }
-    }
-
-    fun checkInSleep() {
-        viewModelScope.launch { RoutineStore.checkInSleep() }
     }
 }

@@ -11,19 +11,19 @@ import androidx.sqlite.db.SupportSQLiteDatabase
     entities = [
         Todo::class,
         Habit::class,
-        RoutineEvent::class,
+        SleepRecord::class,
         WaterLog::class,
         FitnessLog::class,
         FocusLog::class,
         SettingRow::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun todoDao(): TodoDao
     abstract fun habitDao(): HabitDao
-    abstract fun routineDao(): RoutineDao
+    abstract fun sleepDao(): SleepDao
     abstract fun waterDao(): WaterDao
     abstract fun fitnessDao(): FitnessDao
     abstract fun focusDao(): FocusDao
@@ -45,7 +45,7 @@ abstract class AppDatabase : RoomDatabase() {
 
         private fun build(context: Context, name: String): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, name)
-                .addMigrations(MIGRATION_2_3)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
                 .fallbackToDestructiveMigration()
                 .fallbackToDestructiveMigrationOnDowngrade()
                 .build()
@@ -78,6 +78,25 @@ abstract class AppDatabase : RoomDatabase() {
                         "FROM day_records WHERE wake_time IS NOT NULL",
                 )
                 db.execSQL("DROP TABLE day_records")
+            }
+        }
+
+        /**
+         * v4 replaces the wake/sleep check-in event stream with one complete
+         * row per night (`sleep_records`). The old routine data is deliberately
+         * dropped — the user abandoned it — but a real Migration must still
+         * exist: without it an on-device upgrade crashes with "a migration
+         * from 3 to 4 was required but not found".
+         */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP TABLE IF EXISTS routine_events")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `sleep_records` (`id` TEXT NOT NULL, " +
+                        "`sleep_at` TEXT NOT NULL, `wake_at` TEXT NOT NULL, PRIMARY KEY(`id`))",
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_sleep_records_sleep_at` ON `sleep_records` (`sleep_at`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_sleep_records_wake_at` ON `sleep_records` (`wake_at`)")
             }
         }
 

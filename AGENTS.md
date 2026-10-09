@@ -9,9 +9,10 @@ UI strings hardcoded Chinese.
 ## Architecture
 
 **v3 (2026-09 rewrite — the Flutter/Supabase v1 and the v2 "news" era are
-gone).** One home page, no tabs: a 2×3 grid of six modules — 待办 / 习惯 /
-喝水 / 健身 / 起床 / 睡觉 — each pushing a detail screen onto the hand-rolled
-nav stack in `ui/AppRoot.kt`. Data is app-private Room (`goworkbro_v3.db`).
+gone).** One home page, no tabs: a 2×3 grid — 待办 / 习惯 / 喝水 / 健身 as
+square tiles plus one double-width 「睡眠」 card — each pushing a detail
+screen onto the hand-rolled nav stack in `ui/AppRoot.kt`. Data is app-private
+Room (`goworkbro_v3.db`).
 
 - `ui/home/` — the grid, the running-focus mini card, the today-focus line.
 - `ui/todo/`, `ui/habit/` — two-column card grids: tap = act, long-press = edit.
@@ -21,7 +22,7 @@ nav stack in `ui/AppRoot.kt`. Data is app-private Room (`goworkbro_v3.db`).
   minute passed; a round that ends while the overlay is open drops the user on
   the todo list. Timer state is in-memory on purpose (dies with the process).
 - `ui/water/`, `ui/fitness/` — goal hero + quick logs + today list + 7-day bars.
-- `ui/routine/`, `ui/overview/`, `ui/settings/` — see the subsystems below.
+- `ui/sleep/`, `ui/overview/`, `ui/settings/` — see the subsystems below.
 - `ui/components/` — hand-drawn Canvas cartoons (`CartoonIcon.kt`, 16 icons:
   extend `CartoonIcons.all` + one draw function), cards/charts/dialogs,
   `rememberTick()` haptics, the cold-start sprout flight (`StartupReveal.kt`).
@@ -39,22 +40,26 @@ nav stack in `ui/AppRoot.kt`. Data is app-private Room (`goworkbro_v3.db`).
   (`Rollover.logicalToday`), never the calendar day, and are kept forever:
   home/overview read them per logical day (`FocusDao.observeDayStats` /
   `observeDayByTodo`), the overview shows them as a per-todo donut.
-- **Wake/sleep** — `routine_events` (kind + absolute local time + all-nighter
-  flag), paired by `core/RoutineOps.kt`: one night = a bedtime plus the next
-  wake. A wake with no pending bedtime FORCES the missed-bedtime question:
-  `ui/routine/MissedSleepDialog.kt` cannot be dismissed — bedtime or 通宵 are
-  the only exits. Night keys: before noon = the night in progress, from noon
-  = the night starting tonight; a paired night is keyed by its bedtime.
-  Streaks/averages/7-night charts are all derived from paired nights, home
-  cards from "is there an event of that kind inside the current logical day
-  window".
+- **Sleep records (v3.2)** — `sleep_records`: ONE row per night
+  (`sleep_at` + `wake_at`, written complete or not at all). No pairing, no
+  pending state, no forced dialogs. Recording UI: two-step wheel bottom
+  sheet (`ui/sleep/SleepScreen.kt`) — step 1 bedtime (default now−7h, wheel
+  昨天 18:00→今天 12:00), step 2 wake (default now, wheel 睡眠+30min→今天
+  18:00), 15-min steps, wheels stop at their ends (no wrap), light date
+  label under the wheel auto-crosses midnight. Stats in `core/SleepOps.kt`:
+  a record's night slot = its WAKE morning (wakes before 04:00 belong to the
+  previous evening; a daytime 07:00→15:00 recovery sleep shares the slot of
+  the all-nighter it recovers from); earliest sleep wins a slot; streak =
+  consecutive ≥7h slots, an unrecorded today doesn't break it; averages wrap
+  bedtimes past midnight. Migration v3→v4 DROPS `routine_events` on purpose
+  (user abandoned the check-in history) — but a real Migration object must
+  exist or on-device upgrades crash.
 - **Launcher shortcuts** — static XML (`res/xml/shortcuts.xml`): 新建待办 /
-  起床打卡 / 睡眠打卡. Intents hit `MainActivity`, which keeps the action in
+  记录睡眠. Intents hit `MainActivity`, which keeps the action in
   a `mutableStateOf` handed to `AppRoot` (`core/Shortcuts.kt` has the action
   constants); AppRoot performs it once — NEW_TODO pushes the todo page and
-  auto-opens the add dialog, the check-ins mirror the home quick-打卡
-  (duplicate-guarded against the current logical day; a wake with no pending
-  bedtime raises the root-level MissedSleepDialog).
+  auto-opens the add dialog, LOG_SLEEP pushes the sleep page with the
+  two-step record sheet already open.
 - **Auto-update** — `core/Updater.kt` is the app's single networked surface:
   daily-throttled GitHub `releases/latest` check (skipped when the 设置 switch
   is off, and hard-skipped under Robolectric to keep tests hermetic),

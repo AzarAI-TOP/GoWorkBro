@@ -4,11 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.azarai.goworkbro.Graph
 import com.azarai.goworkbro.core.LogicalDay
-import com.azarai.goworkbro.core.RoutineOps
-import com.azarai.goworkbro.core.util.Dates
+import com.azarai.goworkbro.core.SleepOps
 import com.azarai.goworkbro.ui.components.PieSlice
 import com.azarai.goworkbro.ui.components.SleepPoint
-import java.time.LocalDateTime
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -39,34 +37,39 @@ class OverviewViewModel : ViewModel() {
     private val todayByTodo = logicalKey.flatMapLatest { db.focusDao().observeDayByTodo(it) }
 
     val state: StateFlow<OverviewState> = combine(
-        db.focusDao().observeTotalStats(),
-        todayStats,
-        todayByTodo,
-        db.todoDao().observeAll(),
-        db.routineDao().observeAll(),
-    ) { total, day, byTodo, todos, routineEvents ->
-        val byId = todos.associateBy { it.id }
-        val pie = byTodo
-            .map { row ->
-                val todo = byId[row.todoId]
-                PieSlice(
-                    label = todo?.title ?: "已删除的任务",
-                    minutes = row.minutes,
-                    colorIndex = todo?.colorIndex ?: 0,
-                )
-            }
-            .sortedByDescending { it.minutes }
-
-        val sleep = RoutineOps.lastNights(RoutineOps.pair(routineEvents), RoutineOps.currentNightKey())
-            .map { (label, session) -> SleepPoint(label = label, hours = session?.hours) }
-
+        combine(
+            db.focusDao().observeTotalStats(),
+            todayStats,
+            todayByTodo,
+            db.todoDao().observeAll(),
+        ) { total, day, byTodo, todos ->
+            val byId = todos.associateBy { it.id }
+            val pie = byTodo
+                .map { row ->
+                    val todo = byId[row.todoId]
+                    PieSlice(
+                        label = todo?.title ?: "已删除的任务",
+                        minutes = row.minutes,
+                        colorIndex = todo?.colorIndex ?: 0,
+                    )
+                }
+                .sortedByDescending { it.minutes }
+            Triple(total, day, pie)
+        },
+        combine(
+            db.sleepDao().observeAll(),
+            logicalKey,
+        ) { records, todaySlot -> SleepOps.lastNights(records, todaySlot) },
+    ) { (total, day, pie), nights ->
         OverviewState(
             totalSessions = total.sessions,
             totalMinutes = total.minutes,
             todaySessions = day.sessions,
             todayMinutes = day.minutes,
             pie = pie,
-            sleep = sleep,
+            sleep = nights.map { (label, r) ->
+                SleepPoint(label = label, hours = r?.let { it.minutes / 60f })
+            },
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), OverviewState())
 }

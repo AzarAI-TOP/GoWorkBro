@@ -4,6 +4,5 @@
 
     <!-- Launcher app shortcuts (res/xml/shortcuts.xml) -->
     <string name="shortcut_new_todo">新建待办</string>
-    <string name="shortcut_wake_checkin">起床打卡</string>
-    <string name="shortcut_sleep_checkin">睡眠打卡</string>
+    <string name="shortcut_log_sleep">记录睡眠</string>
 </resources>

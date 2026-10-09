@@ -14,6 +14,8 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.longClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -52,7 +54,7 @@ class AppSmokeTest {
 
     private fun homeReady() {
         rule.waitForIdle()
-        rule.waitUntil(20_000) { exists("待办") && exists("睡觉") }
+        rule.waitUntil(20_000) { exists("待办") && exists("睡眠") }
     }
 
     @Test
@@ -64,9 +66,9 @@ class AppSmokeTest {
     }
 
     @Test
-    fun homeShowsSixModules() {
+    fun homeShowsAllModules() {
         homeReady()
-        listOf("待办", "习惯", "喝水", "健身", "起床", "睡觉").forEach {
+        listOf("待办", "习惯", "喝水", "健身", "睡眠").forEach {
             assertTrue("missing module card: $it", exists(it))
         }
     }
@@ -171,38 +173,28 @@ class AppSmokeTest {
     }
 
     @Test
-    fun wakeCheckInWithoutSleepAsksForBedtime() {
+    fun recordSleepTwoStepSheetWritesOneRow() {
         homeReady()
-        // HOME's quick buttons sit inside a clickable card, which Robolectric's
-        // semantics clicks don't reach — drive the same flow from the page.
-        rule.onAllNodesWithText("起床").onFirst().performClick()
-        rule.waitUntil(10_000) { exists("起床打卡") || exists("修改时间") }
-        rule.onAllNodesWithText("打卡").onFirst().performScrollTo().performClick()
-        rule.waitUntil(10_000) { exists("上次是什么时候睡的？") }
-        // the question must be answered: no 取消 escape hatch on the outer dialog
-        assertTrue(!exists("取消"))
-        assertTrue(exists("选时间"))
+        rule.onAllNodesWithText("睡眠").onFirst().performClick()
+        rule.waitUntil(10_000) { exists("记录睡眠") }
+        rule.onNodeWithText("记录睡眠").performScrollTo().performClick()
+        rule.waitUntil(10_000) { exists("第 1 步 · 睡眠时间") }
 
-        rule.onNodeWithText("通宵了").performClick()
-        rule.waitUntil(10_000) { exists("修改时间") && !exists("今天还没起床打卡") }
-    }
+        // step 1 keeps its default (now - 7h): confirm as-is
+        rule.onNodeWithText("确认睡眠时间").performClick()
+        rule.waitUntil(10_000) { exists("第 2 步 · 起床时间") }
 
-    @Test
-    fun sleepThenWakePairsWithoutPrompt() {
-        homeReady()
-        // record a bedtime, then a wake: the two pair up, so nothing is asked
-        rule.onAllNodesWithText("睡觉").onFirst().performClick()
-        rule.waitUntil(10_000) { exists("睡觉打卡") }
-        rule.onAllNodesWithText("打卡").onFirst().performScrollTo().performClick()
-        rule.waitUntil(10_000) { exists("修改时间") }
-
-        rule.onAllNodesWithContentDescription("返回").onFirst().performClick()
-        rule.waitUntil(10_000) { exists("待办") && exists("睡觉") }
-        rule.onAllNodesWithText("起床").onFirst().performClick()
-        rule.waitUntil(10_000) { exists("起床打卡") }
-        rule.onAllNodesWithText("打卡").onFirst().performScrollTo().performClick()
-        rule.waitUntil(10_000) { exists("修改时间") }
-        assertTrue(!exists("上次是什么时候睡的？"))
+        // step 2 keeps its default (now): confirming writes ONE complete row.
+        // The default wake/sleep clamp to the wheel window, so only the
+        // structural invariant is asserted: one row, positive duration.
+        // (The hero/home-card refresh after the write is verified on the
+        // emulator — Robolectric's Room-flow replay across the sheet is not
+        // a reliable witness for it.)
+        rule.onNodeWithText("确认起床时间").performClick()
+        rule.waitUntil(10_000) { !exists("第 2 步 · 起床时间") }
+        val rows = runBlocking { Graph.db.sleepDao().observeAll().first() }
+        org.junit.Assert.assertEquals(1, rows.size)
+        org.junit.Assert.assertTrue(rows.single().minutes >= 30)
     }
 
     @Test
@@ -237,13 +229,8 @@ class AppSmokeTest {
         rule.waitUntil(5_000) { exists("开始运动") }
         back()
 
-        open("起床")
-        rule.waitUntil(5_000) { exists("最近 7 天") && exists("修改时间") }
-        assertTrue(exists("连续") && exists("累计"))
-        back()
-
-        open("睡觉")
-        rule.waitUntil(5_000) { exists("最近 7 天") }
+        open("睡眠")
+        rule.waitUntil(5_000) { exists("睡眠记录") } // appbar title is always on screen
         back()
 
         // overview -> settings -> back out of both
@@ -254,7 +241,7 @@ class AppSmokeTest {
         back()
         rule.waitUntil(5_000) { exists("今日专注时间占比") }
         back(scrollable = true)
-        rule.waitUntil(5_000) { exists("待办") && exists("睡觉") }
+        rule.waitUntil(5_000) { exists("待办") && exists("睡眠") }
     }
 
     @Test

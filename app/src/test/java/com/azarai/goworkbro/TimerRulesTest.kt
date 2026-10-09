@@ -4,9 +4,11 @@ import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.azarai.goworkbro.core.db.Todo
+import com.azarai.goworkbro.core.util.Dates
 import com.azarai.goworkbro.ui.timer.ActiveTimer
 import com.azarai.goworkbro.ui.timer.TimerViewModel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -28,6 +30,11 @@ class TimerRulesTest {
     @Before
     fun setup() {
         Graph.rebindForTesting(ApplicationProvider.getApplicationContext())
+        // LogicalDay is a static singleton shared across test methods — its
+        // running flow still points at the PREVIOUS method's db. Kick it so
+        // the next emission re-reads today from the fresh store (the same
+        // thing the activity's ON_RESUME does in the real app).
+        com.azarai.goworkbro.core.LogicalDay.notifyResumed()
         runBlocking { Graph.db.todoDao().upsert(todo) }
     }
 
@@ -44,38 +51,33 @@ class TimerRulesTest {
     }
 
     @Test
-    fun homeQuickCheckInsUseTheRoutineStream() {
-        val vm = com.azarai.goworkbro.ui.home.HomeViewModel(ApplicationProvider.getApplicationContext())
-        var needsSleep = false
-
-        vm.checkInSleep()
-        waitUntilEvents(1)
-        assertEquals(listOf("sleep"), kinds())
-
-        // a wake now pairs with that bedtime, so no prompt is requested
-        vm.checkInWake { needsSleep = true }
-        waitUntilEvents(2)
-        assertEquals(false, needsSleep)
-        assertEquals(listOf("sleep", "wake"), kinds())
-
-        // a second wake has nothing to pair with -> the UI must ask
-        vm.checkInWake { needsSleep = true }
-        waitUntilEvents(3)
-        assertEquals(true, needsSleep)
-
-        vm.checkInWakeAllNighter()
-        waitUntilEvents(4)
-        assertEquals(1, runBlocking { Graph.db.routineDao().getAll() }.count { it.noSleep })
-    }
-
-    private fun kinds() = runBlocking { Graph.db.routineDao().getAll() }.sortedBy { it.at }.map { it.kind }
-
-    private fun waitUntilEvents(expected: Int) {
-        repeat(60) {
-            shadowOf(Looper.getMainLooper()).idle()
-            if (runBlocking { Graph.db.routineDao().getAll().size } >= expected) return
-            Thread.sleep(40)
+    fun homeCardShowsTodaysSleepDuration() {
+        runBlocking {
+            val today = java.time.LocalDate.now()
+            Graph.db.sleepDao().insert(
+                com.azarai.goworkbro.core.db.SleepRecord(
+                    id = "s1",
+                    sleepAt = Dates.isoDateTime(today.minusDays(1).atTime(23, 30)),
+                    wakeAt = Dates.isoDateTime(today.atTime(7, 30)),
+                ),
+            )
         }
+        val vm = com.azarai.goworkbro.ui.home.HomeViewModel(ApplicationProvider.getApplicationContext())
+        // viewModelScope runs on Main.immediate — in a bare VM test nothing
+        // pumps the looper, so collect with Unconfined and idle the main
+        // looper by hand (same pattern the old check-in tests used).
+        var seen: com.azarai.goworkbro.ui.home.HomeState? = null
+        val collector = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined).launch {
+            vm.state.first { it.todaySleepText != null }.let { seen = it }
+        }
+        val deadline = System.currentTimeMillis() + 10_000
+        while (seen == null && System.currentTimeMillis() < deadline) {
+            shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(50)
+        }
+        collector.cancel()
+        org.junit.Assert.assertNotNull("todaySleepText never arrived", seen)
+        assertEquals("8h 0m", seen!!.todaySleepText)
     }
 
     @Test

@@ -14,24 +14,13 @@
             android:targetClass="com.azarai.goworkbro.MainActivity" />
     </shortcut>
     <shortcut
-        android:shortcutId="wake_checkin"
-        android:enabled="true"
-        android:icon="@drawable/ic_shortcut_wake"
-        android:shortcutShortLabel="@string/shortcut_wake_checkin"
-        android:shortcutLongLabel="@string/shortcut_wake_checkin">
-        <intent
-            android:action="com.azarai.goworkbro.action.CHECKIN_WAKE"
-            android:targetPackage="com.azarai.goworkbro"
-            android:targetClass="com.azarai.goworkbro.MainActivity" />
-    </shortcut>
-    <shortcut
-        android:shortcutId="sleep_checkin"
+        android:shortcutId="log_sleep"
         android:enabled="true"
         android:icon="@drawable/ic_shortcut_sleep"
-        android:shortcutShortLabel="@string/shortcut_sleep_checkin"
-        android:shortcutLongLabel="@string/shortcut_sleep_checkin">
+        android:shortcutShortLabel="@string/shortcut_log_sleep"
+        android:shortcutLongLabel="@string/shortcut_log_sleep">
         <intent
-            android:action="com.azarai.goworkbro.action.CHECKIN_SLEEP"
+            android:action="com.azarai.goworkbro.action.LOG_SLEEP"
             android:targetPackage="com.azarai.goworkbro"
             android:targetClass="com.azarai.goworkbro.MainActivity" />
     </shortcut>

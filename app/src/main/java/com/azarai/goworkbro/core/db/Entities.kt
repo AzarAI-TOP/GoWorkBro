@@ -4,6 +4,9 @@ import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.azarai.goworkbro.core.util.Dates
+import java.time.Duration
+import java.time.LocalDateTime
 
 /** Timing modes for a todo. */
 enum class TimingType(val raw: String, val label: String) {
@@ -54,20 +57,22 @@ data class Habit(
 }
 
 /**
- * One wake or sleep check-in, stamped with its absolute local time. Sleep
- * sessions are derived by pairing a sleep with the next wake
- * (see [com.azarai.goworkbro.core.RoutineOps.pair]).
+ * One night of sleep as a single complete row: when the user fell asleep
+ * and when they woke up. No pairing and no pending state — the row only
+ * exists once both ends are known (the two-step record sheet enforces it).
  */
-@Entity(tableName = "routine_events", indices = [Index("at"), Index("kind")])
-data class RoutineEvent(
+@Entity(tableName = "sleep_records", indices = [Index("sleep_at"), Index("wake_at")])
+data class SleepRecord(
     @PrimaryKey val id: String,
-    /** "sleep" or "wake". */
-    val kind: String,
-    /** ISO local datetime of the check-in. */
-    @ColumnInfo(name = "at") val at: String,
-    /** True when this wake followed an all-nighter (nothing to pair with). */
-    @ColumnInfo(name = "no_sleep") val noSleep: Boolean = false,
-)
+    /** ISO local datetime of falling asleep. */
+    @ColumnInfo(name = "sleep_at") val sleepAt: String,
+    /** ISO local datetime of waking up (always after [sleepAt]). */
+    @ColumnInfo(name = "wake_at") val wakeAt: String,
+) {
+    val sleep: LocalDateTime get() = Dates.parseDateTime(sleepAt)
+    val wake: LocalDateTime get() = Dates.parseDateTime(wakeAt)
+    val minutes: Int get() = Duration.between(sleep, wake).toMinutes().toInt()
+}
 
 /** One drink of water. */
 @Entity(tableName = "water_logs", indices = [Index("log_date")])

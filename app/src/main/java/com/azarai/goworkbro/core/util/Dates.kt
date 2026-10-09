@@ -98,12 +98,4 @@ object Dates {
     fun hhmm(dateTime: LocalDateTime): String = dateTime.format(HHMM)
 
     fun hhmm(hour: Int, minute: Int): String = "%02d:%02d".format(hour, minute)
-
-    /** Hours between a sleep time and a wake time (wrap-aware), or null. */
-    fun sleepHours(sleepTime: String?, wakeTime: String?): Float? {
-        val sleep = hoursFromTime(sleepTime) ?: return null
-        val wake = hoursFromTime(wakeTime) ?: return null
-        val adjustedWake = if (wake <= sleep) wake + 24 else wake
-        return (adjustedWake - sleep).toFloat()
-    }
 }

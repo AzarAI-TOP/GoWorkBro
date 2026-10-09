@@ -36,20 +36,14 @@ interface HabitDao {
 }
 
 @Dao
-interface RoutineDao {
-    @Query("SELECT * FROM routine_events ORDER BY at DESC")
-    fun observeAll(): Flow<List<RoutineEvent>>
+interface SleepDao {
+    @Query("SELECT * FROM sleep_records ORDER BY wake_at DESC")
+    fun observeAll(): Flow<List<SleepRecord>>
 
-    @Query("SELECT * FROM routine_events ORDER BY at DESC LIMIT 1")
-    suspend fun latest(): RoutineEvent?
+    @Insert
+    suspend fun insert(record: SleepRecord)
 
-    @Query("SELECT * FROM routine_events")
-    suspend fun getAll(): List<RoutineEvent>
-
-    @Upsert
-    suspend fun upsert(event: RoutineEvent)
-
-    @Query("DELETE FROM routine_events WHERE id = :id")
+    @Query("DELETE FROM sleep_records WHERE id = :id")
     suspend fun deleteById(id: String)
 }
 
@@ -137,8 +131,8 @@ interface MaintenanceDao {
     @Query("DELETE FROM fitness_logs")
     suspend fun clearFitnessLogs()
 
-    @Query("DELETE FROM routine_events")
-    suspend fun clearRoutineEvents()
+    @Query("DELETE FROM sleep_records")
+    suspend fun clearSleepRecords()
 }
 
 @Dao

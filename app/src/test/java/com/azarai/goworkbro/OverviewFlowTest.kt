@@ -69,18 +69,11 @@ class OverviewFlowTest {
             Graph.db.focusDao().insert(FocusLog("f2", todo.id, today, 20))
             // a night of sleep so the duration chart has data (23:30 -> 07:30 = 8h)
             val night = java.time.LocalDate.now().minusDays(1)
-            Graph.db.routineDao().upsert(
-                com.azarai.goworkbro.core.db.RoutineEvent(
-                    id = "e1",
-                    kind = com.azarai.goworkbro.core.RoutineKind.SLEEP,
-                    at = Dates.isoDateTime(night.atTime(23, 30)),
-                ),
-            )
-            Graph.db.routineDao().upsert(
-                com.azarai.goworkbro.core.db.RoutineEvent(
-                    id = "e2",
-                    kind = com.azarai.goworkbro.core.RoutineKind.WAKE,
-                    at = Dates.isoDateTime(java.time.LocalDate.now().atTime(7, 30)),
+            Graph.db.sleepDao().insert(
+                com.azarai.goworkbro.core.db.SleepRecord(
+                    id = "s1",
+                    sleepAt = Dates.isoDateTime(night.atTime(23, 30)),
+                    wakeAt = Dates.isoDateTime(java.time.LocalDate.now().atTime(7, 30)),
                 ),
             )
         }
