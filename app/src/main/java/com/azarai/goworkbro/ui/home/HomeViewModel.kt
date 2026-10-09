@@ -4,10 +4,12 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.azarai.goworkbro.Graph
+import com.azarai.goworkbro.core.CountdownOps
 import com.azarai.goworkbro.core.LogicalDay
 import com.azarai.goworkbro.core.SleepOps
 import com.azarai.goworkbro.core.Store
 import com.azarai.goworkbro.core.Updater
+import com.azarai.goworkbro.core.db.Countdown
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -29,8 +31,10 @@ data class HomeState(
     val waterGoal: Int = Store.DEFAULT_WATER_GOAL,
     val fitnessMin: Int = 0,
     val fitnessGoal: Int = Store.DEFAULT_FITNESS_GOAL,
-    /** Duration of the record filed under today's night slot, e.g. "7h 5m". */
+    /** Duration of today's total sleep, e.g. "7h 5m". */
     val todaySleepText: String? = null,
+    /** Countdown items, for the home tile's live label. */
+    val countdowns: List<Countdown> = emptyList(),
     val focusSessions: Int = 0,
     val focusMinutes: Int = 0,
     /** A downloaded update APK waiting for its install tap. */
@@ -66,14 +70,15 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         combine(
             db.sleepDao().observeAll(),
             LogicalDay.flow.map { it.start }.distinctUntilChanged(),
-        ) { records, _ -> records },
+            db.countdownDao().observeAll(),
+        ) { records, _, countdowns -> records to countdowns },
         combine(waterToday, fitnessToday, focusToday) { w, f, fo -> Triple(w, f, fo) },
         combine(
             Graph.store.observe(Store.Keys.WATER_GOAL_ML),
             Graph.store.observe(Store.Keys.FITNESS_GOAL_MIN),
         ) { w, f -> w to f },
         combine(logicalKey, pendingUpdate) { key, pending -> key to pending },
-    ) { (todos, habits), sleepRecords, (waterToday, fitnessToday, focusToday), (waterGoalRaw, fitnessGoalRaw), (logicalKey, pendingUpdate) ->
+    ) { (todos, habits), (sleepRecords, countdowns), (waterToday, fitnessToday, focusToday), (waterGoalRaw, fitnessGoalRaw), (logicalKey, pendingUpdate) ->
         HomeState(
             todoUndone = todos.count { !it.isDone },
             todoTotal = todos.size,
@@ -83,8 +88,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             waterGoal = waterGoalRaw?.toIntOrNull() ?: Store.DEFAULT_WATER_GOAL,
             fitnessMin = fitnessToday.sumOf { it.minutes },
             fitnessGoal = fitnessGoalRaw?.toIntOrNull() ?: Store.DEFAULT_FITNESS_GOAL,
-            todaySleepText = SleepOps.forSlot(sleepRecords, logicalKey)
-                ?.let { SleepOps.formatDuration(it.minutes) },
+            todaySleepText = SleepOps.dailyMinutes(sleepRecords, logicalKey)
+                .takeIf { it > 0 }?.let { SleepOps.formatDuration(it) },
+            countdowns = countdowns,
             focusSessions = focusToday.sessions,
             focusMinutes = focusToday.minutes,
             pendingUpdate = pendingUpdate,

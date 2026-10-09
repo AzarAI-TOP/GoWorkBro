@@ -68,7 +68,7 @@ class AppSmokeTest {
     @Test
     fun homeShowsAllModules() {
         homeReady()
-        listOf("待办", "习惯", "喝水", "健身", "睡眠").forEach {
+        listOf("待办", "习惯", "喝水", "健身", "倒计时", "睡眠").forEach {
             assertTrue("missing module card: $it", exists(it))
         }
     }
@@ -198,6 +198,22 @@ class AppSmokeTest {
     }
 
     @Test
+    fun countdownAddFlow() {
+        homeReady()
+        rule.onAllNodesWithText("倒计时").onFirst().performClick()
+        rule.waitUntil(10_000) { hasDesc("添加") }
+        rule.onNodeWithContentDescription("添加").performClick()
+        rule.waitUntil(10_000) { exists("新倒计时") }
+        // default target (tomorrow, same time) is fine — just title + save
+        rule.onNode(hasSetTextAction()).performTextInput("DDL")
+        rule.onNodeWithText("保存").performClick()
+        rule.waitUntil(10_000) { exists("DDL") }
+        val countdowns = runBlocking { Graph.db.countdownDao().observeAll().first() }
+        org.junit.Assert.assertEquals(1, countdowns.size)
+        // (the home tile's live label is verified on the emulator)
+    }
+
+    @Test
     fun everyModuleScreenRenders() {
         homeReady()
         fun open(name: String) {
@@ -227,6 +243,11 @@ class AppSmokeTest {
         rule.waitUntil(5_000) { exists("结束并记录") }
         rule.onNodeWithText("结束并记录").performClick()
         rule.waitUntil(5_000) { exists("开始运动") }
+        back()
+
+        open("倒计时")
+        rule.waitUntil(5_000) { exists("倒计时") }
+        assertTrue(exists("加一个倒计时，掐着秒等它到"))
         back()
 
         open("睡眠")

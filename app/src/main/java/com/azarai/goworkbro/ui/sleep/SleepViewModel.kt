@@ -8,8 +8,8 @@ import com.azarai.goworkbro.core.LogicalDay
 import com.azarai.goworkbro.core.SleepOps
 import com.azarai.goworkbro.core.SleepStore
 import com.azarai.goworkbro.core.db.SleepRecord
-import com.azarai.goworkbro.core.util.Dates
 import com.azarai.goworkbro.ui.components.SleepPoint
+import java.time.LocalDateTime
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -19,39 +19,42 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 data class SleepState(
-    /** The record filed under today's slot, if the night is already in. */
-    val today: SleepRecord? = null,
-    /** The newest record overall (for the "上次" line). */
+    /** Total minutes slept on today's logical day (naps included). */
+    val todayMinutes: Int = 0,
+    /** How many sleeps today's total is made of. */
+    val todayCount: Int = 0,
+    /** The newest record overall (for the "最近" line). */
     val last: SleepRecord? = null,
+    /** Total records kept. */
+    val totalRecords: Int = 0,
     val avgMinutes: Int? = null,
-    val avgSleepLabel: String = "--:--",
     val streakDays: Int = 0,
-    /** Last 7 night slots, oldest first, for the duration chart. */
+    /** Last 7 days of totals, oldest first, for the duration chart. */
     val points: List<SleepPoint> = emptyList(),
 )
 
-/** 睡眠记录页的状态：一条记录一行，全部统计直接派生。 */
+/** 睡眠记录页的状态：一条记录一觉（夜睡午睡同理），统计全部按天合计。 */
 class SleepViewModel(app: Application) : AndroidViewModel(app) {
 
     val state: StateFlow<SleepState> = combine(
         Graph.db.sleepDao().observeAll(),
         LogicalDay.flow.map { it.dateKey }.distinctUntilChanged(),
-    ) { records, todaySlot ->
+    ) { records, today ->
         SleepState(
-            today = SleepOps.forSlot(records, todaySlot),
+            todayMinutes = SleepOps.dailyMinutes(records, today),
+            todayCount = SleepOps.recordsOfDay(records, today).size,
             last = records.firstOrNull(),
+            totalRecords = records.size,
             avgMinutes = SleepOps.averageMinutes(records),
-            avgSleepLabel = SleepOps.averageSleepMinutes(records)
-                ?.let { Dates.formatHours(it / 60.0) } ?: "--:--",
-            streakDays = SleepOps.streak(records, todaySlot),
-            points = SleepOps.lastNights(records, todaySlot).map { (label, r) ->
-                SleepPoint(label = label, hours = r?.let { it.minutes / 60f })
+            streakDays = SleepOps.streak(records, today),
+            points = SleepOps.lastDays(records, today).map { (label, minutes) ->
+                SleepPoint(label = label, hours = if (minutes > 0) minutes / 60f else null)
             },
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SleepState())
 
     /** A record only ever lands complete — both wheels were confirmed. */
-    fun record(sleepAt: java.time.LocalDateTime, wakeAt: java.time.LocalDateTime) {
+    fun record(sleepAt: LocalDateTime, wakeAt: LocalDateTime) {
         viewModelScope.launch { SleepStore.record(sleepAt, wakeAt) }
     }
 

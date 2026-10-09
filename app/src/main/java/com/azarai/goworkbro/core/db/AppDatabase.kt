@@ -15,9 +15,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         WaterLog::class,
         FitnessLog::class,
         FocusLog::class,
+        Countdown::class,
         SettingRow::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -27,6 +28,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun waterDao(): WaterDao
     abstract fun fitnessDao(): FitnessDao
     abstract fun focusDao(): FocusDao
+    abstract fun countdownDao(): CountdownDao
     abstract fun maintenanceDao(): MaintenanceDao
     abstract fun settingsDao(): SettingsDao
 
@@ -45,7 +47,7 @@ abstract class AppDatabase : RoomDatabase() {
 
         private fun build(context: Context, name: String): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, name)
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .fallbackToDestructiveMigration()
                 .fallbackToDestructiveMigrationOnDowngrade()
                 .build()
@@ -97,6 +99,19 @@ abstract class AppDatabase : RoomDatabase() {
                 )
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_sleep_records_sleep_at` ON `sleep_records` (`sleep_at`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_sleep_records_wake_at` ON `sleep_records` (`wake_at`)")
+            }
+        }
+
+        /** v5 adds the countdown module (one row per countdown item). */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `countdowns` (`id` TEXT NOT NULL, " +
+                        "`title` TEXT NOT NULL, `target_at` TEXT NOT NULL, " +
+                        "`color_index` INTEGER NOT NULL, `created_at` TEXT NOT NULL, " +
+                        "PRIMARY KEY(`id`))",
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_countdowns_target_at` ON `countdowns` (`target_at`)")
             }
         }
 

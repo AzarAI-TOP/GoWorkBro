@@ -1,6 +1,7 @@
 package com.azarai.goworkbro.ui.sleep
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -29,9 +30,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.azarai.goworkbro.core.SleepOps
@@ -42,10 +44,9 @@ import com.azarai.goworkbro.ui.components.SleepDurationChart
 import com.azarai.goworkbro.ui.components.TimeWheel
 import com.azarai.goworkbro.ui.components.rememberTick
 import com.azarai.goworkbro.ui.theme.LocalForestExtras
-import java.time.LocalDate
 import java.time.LocalDateTime
 
-/** 睡眠记录页：hero + 统计 + 近 7 晚 + 两步滚轮记录弹窗。 */
+/** 睡眠记录页：hero（今天合计）+ 统计 + 近 7 天 + 两步滚轮记录弹窗。 */
 @Composable
 fun SleepScreen(
     onBack: () -> Unit,
@@ -91,9 +92,9 @@ fun SleepScreen(
             IconBubble("moon", extras.pastels[4], 92.dp, bob = true)
             Spacer(Modifier.height(10.dp))
             Text(
-                state.today?.let { SleepOps.formatDuration(it.minutes) } ?: "今天还没记录",
+                if (state.todayCount > 0) "今天 ${SleepOps.formatDuration(state.todayMinutes)}" else "今天还没记录",
                 style = MaterialTheme.typography.headlineMedium,
-                color = if (state.today != null) {
+                color = if (state.todayCount > 0) {
                     MaterialTheme.colorScheme.primary
                 } else {
                     MaterialTheme.colorScheme.onBackground
@@ -103,9 +104,10 @@ fun SleepScreen(
             Spacer(Modifier.height(4.dp))
             Text(
                 state.last?.let { r ->
-                    "${SleepOps.dateLabel(r.sleep)} ${Dates.hhmm(r.sleep)} → " +
-                        "${SleepOps.dateLabel(r.wake)} ${Dates.hhmm(r.wake)}"
-                } ?: "醒来后记一晚：先滚睡眠时间，再滚起床时间",
+                    val head = if (state.todayCount > 1) "今天 ${state.todayCount} 觉 · 最近 " else ""
+                    head + SleepOps.dateLabel(r.sleep) + " ${Dates.hhmm(r.sleep)} → " +
+                        SleepOps.dateLabel(r.wake) + " ${Dates.hhmm(r.wake)}"
+                } ?: "刚睡醒?两步记一觉:先滚睡眠时间,再滚起床时间",
                 style = MaterialTheme.typography.bodySmall,
                 color = extras.textSecondary,
             )
@@ -137,20 +139,20 @@ fun SleepScreen(
                 .padding(horizontal = 22.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            StatCard("平均时长", state.avgMinutes?.let { SleepOps.formatDuration(it) } ?: "--", Modifier.weight(1f))
-            StatCard("平均入睡", state.avgSleepLabel, Modifier.weight(1f))
-            StatCard("连续达标", "${state.streakDays} 晚", Modifier.weight(1f))
+            StatCard("平均每觉", state.avgMinutes?.let { SleepOps.formatDuration(it) } ?: "--", Modifier.weight(1f))
+            StatCard("连续达标", "${state.streakDays} 天", Modifier.weight(1f))
+            StatCard("累计记录", "${state.totalRecords} 觉", Modifier.weight(1f))
         }
 
         // chart
         Spacer(Modifier.height(14.dp))
         Text(
-            "近 7 晚（虚线目标 7h）",
+            "近 7 天 · 每天合计（虚线目标 7h）",
             style = MaterialTheme.typography.titleSmall,
             color = extras.textSecondary,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
         )
-        androidx.compose.foundation.layout.Box(Modifier.padding(horizontal = 18.dp)) {
+        Box(Modifier.padding(horizontal = 18.dp)) {
             SleepDurationChart(points = state.points)
         }
         Spacer(Modifier.height(20.dp))
@@ -179,7 +181,7 @@ fun SleepScreen(
             dismissButton = {
                 TextButton(onClick = { confirmDelete = false }) { Text("取消") }
             },
-            title = { Text("删除最近一条？") },
+            title = { Text("删除最近一觉？") },
             text = {
                 state.last?.let { r ->
                     Text(
@@ -194,10 +196,11 @@ fun SleepScreen(
 }
 
 /**
- * Two-step record flow (the settled design): wheel the bedtime, confirm,
- * wheel the wake time, confirm — the record is written once, complete.
- * Defaults: wake = now, sleep = 7h before now; the wake wheel starts at
- * sleep + 30min so a negative duration is structurally impossible.
+ * Two-step record flow: wheel the sleep start, confirm, wheel the wake time,
+ * confirm — the record is written once, complete. A sleep is just a sleep:
+ * the only hard bound is "never the future" — sleep wheels run from now−48h
+ * to now−15min (default now−7h), the wake wheel from sleep+15min to now
+ * (default now). Naps and nights are the same gesture.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -207,17 +210,15 @@ private fun SleepRecordSheet(
 ) {
     val extras = LocalForestExtras.current
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val today = remember { LocalDate.now() }
-    val now = remember { LocalDateTime.now() }
-    val sleepFrom = today.minusDays(1).atTime(18, 0)
-    val sleepTo = today.atTime(12, 0)
-    val wakeMax = today.atTime(18, 0)
+    val now = remember { SleepOps.floorStep(LocalDateTime.now()) }
+    val sleepFrom = remember { now.minusHours(48) }
+    val sleepTo = remember { now.minusMinutes(15) }
 
     var step by remember { mutableStateOf(1) }
     var sleepAt by remember {
-        mutableStateOf(SleepOps.roundToStep(now.minusHours(7)).coerceIn(sleepFrom, sleepTo))
+        mutableStateOf(now.minusHours(7).coerceIn(sleepFrom, sleepTo))
     }
-    var wakeAt by remember { mutableStateOf(SleepOps.roundToStep(now).coerceIn(sleepAt, wakeMax)) }
+    var wakeAt by remember { mutableStateOf(now) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -240,15 +241,13 @@ private fun SleepRecordSheet(
                 )
                 LightDateLabel(sleepAt)
                 ConfirmPill("确认睡眠时间") {
-                    val defaultWake = SleepOps.roundToStep(now)
-                        .coerceIn(sleepAt.plusMinutes(30), wakeMax)
-                    wakeAt = defaultWake
+                    wakeAt = now
                     step = 2
                 }
             } else {
                 TimeWheel(
-                    from = sleepAt.plusMinutes(30),
-                    to = wakeMax,
+                    from = sleepAt.plusMinutes(15),
+                    to = now,
                     initial = wakeAt,
                     onSelected = { wakeAt = it },
                 )
@@ -284,7 +283,7 @@ private fun ConfirmPill(label: String, onClick: () -> Unit) {
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onPrimary,
             modifier = Modifier.padding(vertical = 12.dp).fillMaxWidth(),
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            textAlign = TextAlign.Center,
         )
     }
 }

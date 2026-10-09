@@ -33,3 +33,6 @@ key.properties
 .claude/
 .pi/
 .agents/
+
+# release signing ( regenerated 2026-10, old keystore lost)
+app/goworkbro-release.jks

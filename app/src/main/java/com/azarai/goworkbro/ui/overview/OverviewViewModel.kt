@@ -59,16 +59,16 @@ class OverviewViewModel : ViewModel() {
         combine(
             db.sleepDao().observeAll(),
             logicalKey,
-        ) { records, todaySlot -> SleepOps.lastNights(records, todaySlot) },
-    ) { (total, day, pie), nights ->
+        ) { records, today -> SleepOps.lastDays(records, today) },
+    ) { (total, day, pie), days ->
         OverviewState(
             totalSessions = total.sessions,
             totalMinutes = total.minutes,
             todaySessions = day.sessions,
             todayMinutes = day.minutes,
             pie = pie,
-            sleep = nights.map { (label, r) ->
-                SleepPoint(label = label, hours = r?.let { it.minutes / 60f })
+            sleep = days.map { (label, minutes) ->
+                SleepPoint(label = label, hours = if (minutes > 0) minutes / 60f else null)
             },
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), OverviewState())

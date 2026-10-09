@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -91,6 +90,19 @@ fun HomeScreen(
 
     val extras = LocalForestExtras.current
     val tick = rememberTick()
+    // countdown tile label is minute-precise — refresh it twice a minute
+    var minuteTick by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(30_000)
+            minuteTick++
+        }
+    }
+    val nowCd = java.time.LocalDateTime.now()
+    fun countdownStatus(): String =
+        com.azarai.goworkbro.core.CountdownOps.nextOf(state.countdowns, nowCd)
+            ?.let { com.azarai.goworkbro.core.CountdownOps.shortLabel(it.target, nowCd) }
+            ?: "去添加一个吧"
     Column(
         Modifier
             .fillMaxSize()
@@ -195,49 +207,20 @@ fun HomeScreen(
                     onClick = { openRoute(Routes.FITNESS) },
                 )
             }
-            item(span = { GridItemSpan(2) }) {
-                CuteCard(
+            item {
+                ModuleCard(
+                    icon = "clock", title = "倒计时", pastelIndex = 7,
+                    onClick = { openRoute(Routes.COUNTDOWN) },
+                    status = countdownStatus(),
+                )
+            }
+            item {
+                ModuleCard(
+                    icon = "moon", title = "睡眠", pastelIndex = 4,
                     onClick = { openRoute(Routes.SLEEP) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(96.dp),
-                ) {
-                    Row(
-                        Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        IconBubble("moon", extras.pastels[4], 44.dp, bob = true)
-                        Spacer(Modifier.width(10.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text("睡眠", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-                            Spacer(Modifier.height(3.dp))
-                            Text(
-                                state.todaySleepText?.let { "已睡 $it" } ?: "今天还没记录",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (state.todaySleepText != null) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    extras.textSecondary
-                                },
-                            )
-                        }
-                        Surface(
-                            onClick = { tick(); onRecordSleep() },
-                            shape = androidx.compose.foundation.shape.RoundedCornerShape(50),
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.semantics { contentDescription = "记录睡眠" },
-                        ) {
-                            Text(
-                                "记录",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 5.dp),
-                            )
-                        }
-                    }
-                }
+                    status = state.todaySleepText?.let { "已睡 $it" } ?: "今天还没记录",
+                    checkedTime = state.todaySleepText,
+                )
             }
         }
         // running focus task mini-card

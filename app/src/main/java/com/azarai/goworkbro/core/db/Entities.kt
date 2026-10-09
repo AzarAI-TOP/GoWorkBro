@@ -74,6 +74,20 @@ data class SleepRecord(
     val minutes: Int get() = Duration.between(sleep, wake).toMinutes().toInt()
 }
 
+/** One countdown item: a title plus the instant it expires. */
+@Entity(tableName = "countdowns", indices = [Index("target_at")])
+data class Countdown(
+    @PrimaryKey val id: String,
+    val title: String,
+    /** ISO local datetime the countdown expires at. */
+    @ColumnInfo(name = "target_at") val targetAt: String,
+    /** Index into the pastel palette used for the icon circle. */
+    @ColumnInfo(name = "color_index") val colorIndex: Int = 0,
+    @ColumnInfo(name = "created_at") val createdAt: String = "",
+) {
+    val target: LocalDateTime get() = Dates.parseDateTime(targetAt)
+}
+
 /** One drink of water. */
 @Entity(tableName = "water_logs", indices = [Index("log_date")])
 data class WaterLog(

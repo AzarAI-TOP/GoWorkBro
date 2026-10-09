@@ -51,14 +51,14 @@ class TimerRulesTest {
     }
 
     @Test
-    fun homeCardShowsTodaysSleepDuration() {
+    fun homeCardShowsTodaysSleepTotal() {
         runBlocking {
             val today = java.time.LocalDate.now()
             Graph.db.sleepDao().insert(
                 com.azarai.goworkbro.core.db.SleepRecord(
                     id = "s1",
-                    sleepAt = Dates.isoDateTime(today.minusDays(1).atTime(23, 30)),
-                    wakeAt = Dates.isoDateTime(today.atTime(7, 30)),
+                    sleepAt = Dates.isoDateTime(today.atTime(13, 0)),
+                    wakeAt = Dates.isoDateTime(today.atTime(14, 30)),
                 ),
             )
         }
@@ -77,7 +77,7 @@ class TimerRulesTest {
         }
         collector.cancel()
         org.junit.Assert.assertNotNull("todaySleepText never arrived", seen)
-        assertEquals("8h 0m", seen!!.todaySleepText)
+        assertEquals("1h 30m", seen!!.todaySleepText)
     }
 
     @Test

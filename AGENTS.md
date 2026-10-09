@@ -9,10 +9,10 @@ UI strings hardcoded Chinese.
 ## Architecture
 
 **v3 (2026-09 rewrite — the Flutter/Supabase v1 and the v2 "news" era are
-gone).** One home page, no tabs: a 2×3 grid — 待办 / 习惯 / 喝水 / 健身 as
-square tiles plus one double-width 「睡眠」 card — each pushing a detail
-screen onto the hand-rolled nav stack in `ui/AppRoot.kt`. Data is app-private
-Room (`goworkbro_v3.db`).
+gone).** One home page, no tabs: a 2×3 grid of six modules — 待办 / 习惯 /
+喝水 / 健身 / 倒计时 / 睡眠 — each pushing a detail screen onto the
+hand-rolled nav stack in `ui/AppRoot.kt`. Data is app-private Room
+(`goworkbro_v3.db`).
 
 - `ui/home/` — the grid, the running-focus mini card, the today-focus line.
 - `ui/todo/`, `ui/habit/` — two-column card grids: tap = act, long-press = edit.
@@ -22,7 +22,7 @@ Room (`goworkbro_v3.db`).
   minute passed; a round that ends while the overlay is open drops the user on
   the todo list. Timer state is in-memory on purpose (dies with the process).
 - `ui/water/`, `ui/fitness/` — goal hero + quick logs + today list + 7-day bars.
-- `ui/sleep/`, `ui/overview/`, `ui/settings/` — see the subsystems below.
+- `ui/sleep/`, `ui/countdown/`, `ui/overview/`, `ui/settings/` — see the subsystems below.
 - `ui/components/` — hand-drawn Canvas cartoons (`CartoonIcon.kt`, 16 icons:
   extend `CartoonIcons.all` + one draw function), cards/charts/dialogs,
   `rememberTick()` haptics, the cold-start sprout flight (`StartupReveal.kt`).
@@ -40,20 +40,25 @@ Room (`goworkbro_v3.db`).
   (`Rollover.logicalToday`), never the calendar day, and are kept forever:
   home/overview read them per logical day (`FocusDao.observeDayStats` /
   `observeDayByTodo`), the overview shows them as a per-todo donut.
-- **Sleep records (v3.2)** — `sleep_records`: ONE row per night
-  (`sleep_at` + `wake_at`, written complete or not at all). No pairing, no
-  pending state, no forced dialogs. Recording UI: two-step wheel bottom
-  sheet (`ui/sleep/SleepScreen.kt`) — step 1 bedtime (default now−7h, wheel
-  昨天 18:00→今天 12:00), step 2 wake (default now, wheel 睡眠+30min→今天
-  18:00), 15-min steps, wheels stop at their ends (no wrap), light date
-  label under the wheel auto-crosses midnight. Stats in `core/SleepOps.kt`:
-  a record's night slot = its WAKE morning (wakes before 04:00 belong to the
-  previous evening; a daytime 07:00→15:00 recovery sleep shares the slot of
-  the all-nighter it recovers from); earliest sleep wins a slot; streak =
-  consecutive ≥7h slots, an unrecorded today doesn't break it; averages wrap
-  bedtimes past midnight. Migration v3→v4 DROPS `routine_events` on purpose
-  (user abandoned the check-in history) — but a real Migration object must
-  exist or on-device upgrades crash.
+- **Sleep records (v3.3)** — `sleep_records`: ONE row per SLEEP — a nap and
+  a night are the same thing, a day can hold any number of them. Recording
+  UI: two-step wheel bottom sheet (`ui/sleep/SleepScreen.kt`) — step 1
+  sleep start (default now−7h, wheel now−48h → now−15min), step 2 wake
+  (default now, wheel sleep+15min → now); the ONLY hard bound is "never
+  the future". 15-min steps, wheels stop at their ends (no wrap), light
+  date label under the wheel auto-crosses midnight. Stats in
+  `core/SleepOps.kt`: a record is filed under the logical day it STARTED
+  on (00:00–04:00 bedtimes belong to the previous evening); per-day totals
+  (home card + hero "今天 X"), ≥7h-per-day streak (an unrecorded today
+  doesn't break it), per-sleep average. Migration v3→v4 DROPPED
+  `routine_events` on purpose (user abandoned the check-in history) but a
+  real Migration object must exist or on-device upgrades crash.
+- **Countdowns (v3.3)** — `countdowns` (title + target ISO datetime +
+  pastel color). `ui/countdown/` lists items with live remaining labels
+  (`core/CountdownOps.kt`: "X 天 HH:mm" past a day, ticking "HH:mm:ss"
+  inside one, 已到时 after); the home tile shows the nearest item's short
+  label, refreshed twice a minute. Add/edit = title field + date picker →
+  time picker; migration v4→v5 created the table.
 - **Launcher shortcuts** — static XML (`res/xml/shortcuts.xml`): 新建待办 /
   记录睡眠. Intents hit `MainActivity`, which keeps the action in
   a `mutableStateOf` handed to `AppRoot` (`core/Shortcuts.kt` has the action
@@ -86,10 +91,12 @@ Room (`goworkbro_v3.db`).
   1 to 2 was required but not found"); v2→v3 has a real conversion in
   `AppDatabase.MIGRATION_2_3` — copy that pattern.
 - `app/key.properties` + `app/goworkbro-release.jks` are gitignored signing
-  secrets; never read or print their contents. They are currently NOT on this
-  Linux machine (they lived on the old Windows box), so `assembleRelease`
-  silently falls back to debug signing — call that out in release notes until
-  the keystore is restored.
+  secrets; never read or print their contents. The ORIGINAL keystore was
+  lost with the old Windows box; a NEW one was generated 2026-10-09
+  (CN=GoWorkBro, O=azarai.top, validity 10000 days). The new signature does
+  NOT interinstall with anything ≤ v3.2.0 (those were debug-signed) —
+  upgrading requires an uninstall (data wipe). From v3.3.0 on, releases are
+  properly signed and interinstall with each other.
 
 ## Toolchain (this machine = Linux)
 

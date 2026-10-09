@@ -35,6 +35,7 @@ import com.azarai.goworkbro.ui.habit.HabitScreen
 import com.azarai.goworkbro.ui.home.HomeScreen
 import com.azarai.goworkbro.ui.overview.OverviewScreen
 import com.azarai.goworkbro.ui.settings.SettingsScreen
+import com.azarai.goworkbro.ui.countdown.CountdownScreen
 import com.azarai.goworkbro.ui.sleep.SleepScreen
 import com.azarai.goworkbro.ui.theme.GoWorkBroTheme
 import com.azarai.goworkbro.ui.todo.TodoScreen
@@ -51,6 +52,7 @@ object Routes {
     const val WATER = "water"
     const val FITNESS = "fitness"
     const val SLEEP = "sleep"
+    const val COUNTDOWN = "countdown"
     const val OVERVIEW = "overview"
     const val SETTINGS = "settings"
 }
@@ -158,6 +160,7 @@ fun AppRoot(
                         autoOpenRecord = pendingAutoRecord,
                         onAutoRecordConsumed = { pendingAutoRecord = false },
                     )
+                    Routes.COUNTDOWN -> CountdownScreen(onBack = back)
                     Routes.OVERVIEW -> OverviewScreen(
                         onBack = back,
                         onOpenSettings = { open(Routes.SETTINGS) },

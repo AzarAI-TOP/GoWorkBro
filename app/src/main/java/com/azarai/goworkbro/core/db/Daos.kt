@@ -48,6 +48,18 @@ interface SleepDao {
 }
 
 @Dao
+interface CountdownDao {
+    @Query("SELECT * FROM countdowns ORDER BY target_at")
+    fun observeAll(): Flow<List<Countdown>>
+
+    @Upsert
+    suspend fun upsert(item: Countdown)
+
+    @Query("DELETE FROM countdowns WHERE id = :id")
+    suspend fun deleteById(id: String)
+}
+
+@Dao
 interface WaterDao {
     @Query("SELECT * FROM water_logs WHERE log_date = :date ORDER BY logged_at")
     fun observeByDate(date: String): Flow<List<WaterLog>>
@@ -133,6 +145,9 @@ interface MaintenanceDao {
 
     @Query("DELETE FROM sleep_records")
     suspend fun clearSleepRecords()
+
+    @Query("DELETE FROM countdowns")
+    suspend fun clearCountdowns()
 }
 
 @Dao

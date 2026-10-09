@@ -47,6 +47,7 @@ object CartoonIcons {
         Spec("gamepad", "手柄"),
         Spec("bulb", "灯泡"),
         Spec("gift", "礼物"),
+        Spec("clock", "时钟"),
     )
 
     /** Chinese label for an icon key, null when unknown. */
@@ -140,6 +141,7 @@ fun DrawScope.drawCartoonIcon(key: String) {
             "gamepad" -> drawGamepad()
             "bulb" -> drawBulb()
             "gift" -> drawGift()
+            "clock" -> drawClock()
             else -> drawScroll()
         }
     }
@@ -809,4 +811,21 @@ private fun DrawScope.drawGift() {
     smile(Offset(50f, 68f), 6f)
     blushAt(31f to 70f, 69f to 70f)
     sparkle(Offset(86f, 20f), 4.5f, StarYellow)
+}
+
+private val ClockFace = Color(0xFFFCF3D9)
+
+private fun DrawScope.drawClock() {
+    val face = Offset(50f, 56f)
+    // little top knob
+    drawLine(Ink, Offset(50f, 14f), Offset(50f, 24f), strokeWidth = 5f, cap = StrokeCap.Round)
+    outlinedCircle(ClockFace, face, 32f)
+    // tick dots at 12 / 3 / 6 / 9
+    listOf(Offset(50f, 30f), Offset(76f, 56f), Offset(50f, 82f), Offset(24f, 56f)).forEach {
+        drawCircle(Ink, 2.6f, it)
+    }
+    // hands, 10:10 pose
+    drawLine(Ink, face, Offset(38f, 42f), 5f, cap = StrokeCap.Round)
+    drawLine(Ink, face, Offset(66f, 48f), 4f, cap = StrokeCap.Round)
+    drawCircle(Ink, 3f, face)
 }
