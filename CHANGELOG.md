@@ -6,6 +6,8 @@ All notable changes to GoWorkBro are documented here. Format follows
 
 ## [Unreleased]
 
+## [3.4.0] - 2026-10-12
+
 数据安全与性能加固：备份/恢复上线、更新链路校验、首页不再背负全部历史。
 
 ### Added
