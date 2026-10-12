@@ -59,4 +59,27 @@ class UpdaterTest {
         assertNull(Updater.parseRelease("not json"))
         assertNull(Updater.parseRelease("""{"assets": []}"""))
     }
+
+    @Test
+    fun `sha256 asset is picked up when present`() {
+        val withSha = """{"tag_name":"v3.1.0","assets":[
+            {"name":"GoWorkBro-v3.1.0.apk","browser_download_url":"https://x/apk"},
+            {"name":"GoWorkBro-v3.1.0.sha256","browser_download_url":"https://x/sha"}]}"""
+        assertEquals("https://x/sha", Updater.parseRelease(withSha)!!.sha256Url)
+
+        val withoutSha = """{"tag_name":"v3.1.0","assets":[
+            {"name":"GoWorkBro-v3.1.0.apk","browser_download_url":"https://x/apk"}]}"""
+        assertNull(Updater.parseRelease(withoutSha)!!.sha256Url)
+    }
+
+    @Test
+    fun `sha256sum file text is normalized to bare lowercase hex`() {
+        val hex = "a".repeat(64)
+        // sha256sum-style: "<hex>  <filename>\n"
+        assertEquals(hex, Updater.normalizeSha256File("$hex  GoWorkBro-v3.1.0.apk\n"))
+        assertEquals(hex, Updater.normalizeSha256File(hex.uppercase()))
+        assertNull(Updater.normalizeSha256File("z".repeat(64))) // not hex
+        assertNull(Updater.normalizeSha256File("short"))
+        assertNull(Updater.normalizeSha256File(""))
+    }
 }

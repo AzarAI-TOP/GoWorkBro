@@ -17,6 +17,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.SettingsBackupRestore
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
@@ -38,12 +40,15 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.azarai.goworkbro.core.Backup
 import com.azarai.goworkbro.core.Updater
 import com.azarai.goworkbro.ui.components.CuteTopBar
 import com.azarai.goworkbro.ui.theme.LocalForestExtras
 
-/** Settings page: updates, late-night mode and the data wipe. */
+/** Settings page: updates, late-night mode, backup and the data wipe. */
 @Composable
 fun SettingsScreen(onBack: () -> Unit) {
     val vm: SettingsViewModel = viewModel()
@@ -51,8 +56,17 @@ fun SettingsScreen(onBack: () -> Unit) {
     val lateNight by vm.lateNight.collectAsState()
     val autoUpdate by vm.autoUpdate.collectAsState()
     var showDelete by remember { mutableStateOf(false) }
+    var showImportConfirm by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val version = remember { Updater.currentVersion(context) }
+
+    // SAF pickers: export writes a fresh JSON doc, import replaces all data
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri -> if (uri != null) vm.exportTo(uri) }
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri -> if (uri != null) vm.importFrom(uri) }
 
     Column(
         Modifier
@@ -85,11 +99,45 @@ fun SettingsScreen(onBack: () -> Unit) {
         )
         Spacer(Modifier.size(10.dp))
         SettingRow(
+            title = "导出数据",
+            subtitle = "把全部记录存成一个 JSON 备份文件（换机、刷机前记得导）",
+            icon = Icons.Filled.Save,
+            onClick = { exportLauncher.launch(Backup.fileName()) },
+        )
+        SettingRow(
+            title = "导入数据",
+            subtitle = "从备份文件恢复，会覆盖当前全部数据",
+            icon = Icons.Filled.SettingsBackupRestore,
+            onClick = { showImportConfirm = true },
+            danger = true,
+        )
+        Spacer(Modifier.size(10.dp))
+        SettingRow(
             title = "删除应用数据",
             subtitle = "按类型清理待办、打卡与记录",
             icon = Icons.Filled.DeleteOutline,
             onClick = { showDelete = true },
             danger = true,
+        )
+    }
+
+    if (showImportConfirm) {
+        AlertDialog(
+            onDismissRequest = { showImportConfirm = false },
+            title = { Text("确认导入？") },
+            text = {
+                Text("导入会先清空当前的待办、习惯、记录和设置，再写入备份文件的内容。\n建议先导出一份当前数据再继续。")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showImportConfirm = false
+                    importLauncher.launch(arrayOf("application/json", "application/octet-stream"))
+                }) { Text("继续，选文件", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showImportConfirm = false }) { Text("取消") }
+            },
+            containerColor = extras.card,
         )
     }
 

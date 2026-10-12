@@ -85,7 +85,8 @@ fun HomeScreen(
     val state by vm.state.collectAsState()
     val timerVm: com.azarai.goworkbro.ui.timer.TimerViewModel = viewModel()
     val activeTimer by timerVm.active.collectAsState()
-    val elapsed by timerVm.elapsed.collectAsState()
+    // NB: `elapsed` is deliberately NOT collected here — it ticks 4x/s and
+    // would recompose the whole home grid; ActiveTimerBar reads it itself
     val sessions by timerVm.sessions.collectAsState()
 
     val extras = LocalForestExtras.current
@@ -231,8 +232,8 @@ fun HomeScreen(
         ) {
             activeTimer?.let { a ->
                 ActiveTimerBar(
+                    vm = timerVm,
                     active = a,
-                    elapsedMs = elapsed,
                     sessions = sessions,
                     onClick = onOpenActiveTimer,
                 )
@@ -242,14 +243,16 @@ fun HomeScreen(
     }
 }
 
-/** Bottom bar shown while a focus timer runs in the background. */
+/** Bottom bar shown while a focus timer runs in the background. The live
+ *  elapsed read lives HERE so its 4Hz ticks recompose only this bar. */
 @Composable
 private fun ActiveTimerBar(
+    vm: com.azarai.goworkbro.ui.timer.TimerViewModel,
     active: com.azarai.goworkbro.ui.timer.ActiveTimer,
-    elapsedMs: Long,
     sessions: Int,
     onClick: () -> Unit,
 ) {
+    val elapsedMs by vm.elapsed.collectAsState()
     val extras = LocalForestExtras.current
     CuteCard(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {

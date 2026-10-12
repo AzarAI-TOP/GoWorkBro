@@ -17,7 +17,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -45,13 +44,19 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     private val db = Graph.db
 
-
     /** Logical day key (late-night aware), re-evaluated on every tick. */
     private val logicalKey = LogicalDay.flow.map { it.dateKey }.distinctUntilChanged()
 
     private val waterToday = logicalKey.flatMapLatest { db.waterDao().observeByDate(it) }
     private val fitnessToday = logicalKey.flatMapLatest { db.fitnessDao().observeByDate(it) }
     private val focusToday = logicalKey.flatMapLatest { db.focusDao().observeDayStats(it) }
+
+    /** Today's sleeps via the fixed-04:00 filing window — NOT the full table
+     *  (home must stay O(today), history grows forever). */
+    private val sleepToday = logicalKey.flatMapLatest { day ->
+        val (from, to) = SleepOps.dayWindow(day)
+        db.sleepDao().observeBetween(from, to)
+    }
 
     /** Version dismissed from the banner this session (install reminder). */
     private val dismissedUpdate = MutableStateFlow<String?>(null)
@@ -64,31 +69,30 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     val state: StateFlow<HomeState> = combine(
         combine(
-            db.todoDao().observeAll(),
-            db.habitDao().observeAll(),
+            db.todoDao().observeCounts(),
+            db.habitDao().observeCounts(),
         ) { todos, habits -> todos to habits },
         combine(
-            db.sleepDao().observeAll(),
-            LogicalDay.flow.map { it.start }.distinctUntilChanged(),
+            sleepToday,
             db.countdownDao().observeAll(),
-        ) { records, _, countdowns -> records to countdowns },
+        ) { sleep, countdowns -> sleep to countdowns },
         combine(waterToday, fitnessToday, focusToday) { w, f, fo -> Triple(w, f, fo) },
         combine(
             Graph.store.observe(Store.Keys.WATER_GOAL_ML),
             Graph.store.observe(Store.Keys.FITNESS_GOAL_MIN),
         ) { w, f -> w to f },
         combine(logicalKey, pendingUpdate) { key, pending -> key to pending },
-    ) { (todos, habits), (sleepRecords, countdowns), (waterToday, fitnessToday, focusToday), (waterGoalRaw, fitnessGoalRaw), (logicalKey, pendingUpdate) ->
+    ) { (todos, habits), (sleepToday, countdowns), (waterToday, fitnessToday, focusToday), (waterGoalRaw, fitnessGoalRaw), (logicalKey, pendingUpdate) ->
         HomeState(
-            todoUndone = todos.count { !it.isDone },
-            todoTotal = todos.size,
-            habitDone = habits.count { it.isCompleted },
-            habitTotal = habits.size,
+            todoUndone = todos.undone,
+            todoTotal = todos.total,
+            habitDone = habits.done,
+            habitTotal = habits.total,
             waterMl = waterToday.sumOf { it.ml },
             waterGoal = waterGoalRaw?.toIntOrNull() ?: Store.DEFAULT_WATER_GOAL,
             fitnessMin = fitnessToday.sumOf { it.minutes },
             fitnessGoal = fitnessGoalRaw?.toIntOrNull() ?: Store.DEFAULT_FITNESS_GOAL,
-            todaySleepText = SleepOps.dailyMinutes(sleepRecords, logicalKey)
+            todaySleepText = sleepToday.sumOf { it.minutes }
                 .takeIf { it > 0 }?.let { SleepOps.formatDuration(it) },
             countdowns = countdowns,
             focusSessions = focusToday.sessions,

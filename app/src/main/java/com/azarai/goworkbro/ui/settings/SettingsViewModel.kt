@@ -1,16 +1,22 @@
 package com.azarai.goworkbro.ui.settings
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import android.net.Uri
+import android.widget.Toast
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.azarai.goworkbro.Graph
+import com.azarai.goworkbro.core.Backup
 import com.azarai.goworkbro.core.LogicalDay
 import com.azarai.goworkbro.core.Store
 import com.azarai.goworkbro.core.Updater
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** Data types the user can wipe from the settings page. */
 enum class DataKind(val label: String) {
@@ -22,7 +28,7 @@ enum class DataKind(val label: String) {
     COUNTDOWNS("倒计时"),
 }
 
-class SettingsViewModel : ViewModel() {
+class SettingsViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Late-night mode: check-ins between 00:00 and 04:00 count as yesterday. */
     val lateNight: StateFlow<Boolean> = Graph.store.observe(Store.Keys.LATE_NIGHT_MODE)
@@ -72,5 +78,49 @@ class SettingsViewModel : ViewModel() {
                 }
             }
         }
+    }
+
+    // ---- backup: export / import over a SAF-picked file ----
+
+    /** Write the full backup JSON to the user-picked location. */
+    fun exportTo(uri: Uri) {
+        viewModelScope.launch {
+            val ok = runCatching {
+                val json = Backup.export(Graph.db)
+                withContext(Dispatchers.IO) {
+                    getApplication<Application>().contentResolver.openOutputStream(uri)?.use {
+                        it.write(json.toByteArray())
+                    } != null
+                }
+            }.getOrDefault(false)
+            toast(if (ok) "备份已导出" else "导出失败，换个位置试试？")
+        }
+    }
+
+    /** Replace ALL app data with the picked backup file's contents. */
+    fun importFrom(uri: Uri) {
+        viewModelScope.launch {
+            val text = runCatching {
+                withContext(Dispatchers.IO) {
+                    getApplication<Application>().contentResolver.openInputStream(uri)
+                        ?.use { it.readBytes().decodeToString() }
+                }
+            }.getOrNull()
+            if (text == null) {
+                toast("读取文件失败")
+                return@launch
+            }
+            val summary = Backup.import(Graph.db, text)
+            if (summary == null) {
+                toast("导入失败：不是有效的 GoWorkBro 备份文件")
+            } else {
+                LogicalDay.notifyResumed() // re-read the logical day under restored settings
+                toast("导入完成，共恢复 ${summary.total} 条记录")
+            }
+        }
+    }
+
+    private fun toast(text: String) {
+        Toast.makeText(getApplication(), text, Toast.LENGTH_LONG).show()
     }
 }

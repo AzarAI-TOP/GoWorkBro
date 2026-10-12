@@ -17,6 +17,8 @@ MODE="${1:-fast}"
 case "$MODE" in
   fast)
     exec ./gradlew :app:testDebugUnitTest --console=plain \
+      --tests "com.azarai.goworkbro.BackupTest" \
+      --tests "com.azarai.goworkbro.CountdownOpsTest" \
       --tests "com.azarai.goworkbro.DatesTest" \
       --tests "com.azarai.goworkbro.SleepOpsTest" \
       --tests "com.azarai.goworkbro.StoreTest" \

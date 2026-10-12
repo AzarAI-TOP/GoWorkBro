@@ -30,6 +30,16 @@ hand-rolled nav stack in `ui/AppRoot.kt`. Data is app-private Room
 
 ### Subsystems worth knowing
 
+- **Backup (v3.4)** — `core/Backup.kt`: the ONLY safety net for the
+  app-private DB (`allowBackup=false` on purpose). Export serializes all 8
+  tables into one JSON doc (org.json, keys mirror DB columns, `format` field
+  gates imports); import is REPLACE-ALL (clear + insert in one transaction).
+  Settings page wires it over SAF (`CreateDocument`/`OpenDocument`, import
+  asks for confirmation first). `Backup.snapshotToDownloads` writes a silent
+  JSON snapshot into public `Download/GoWorkBro/` via MediaStore before every
+  update install (API 29+; survives an uninstall-reinstall signature break).
+  Breaking format changes bump `Backup.FORMAT` — imports of other formats are
+  rejected, so old files keep working until explicitly deprecated.
 - **Day boundary** — `core/LogicalDay.kt` is the single source of truth: one
   flow emits the current logical day + its window, re-emits on app foreground
   and by itself when the 04:00/midnight boundary passes. Screens must NOT
@@ -71,9 +81,22 @@ hand-rolled nav stack in `ui/AppRoot.kt`. Data is app-private Room
   DownloadManager into the private external Download dir, then a
   PackageInstaller session committed from the home banner (system
   install-confirm UI; ACTION_VIEW+apk intents do not resolve reliably
-  on modern Android). Pending-APK version is derived
-  from the file name (`GoWorkBro-update-<version>.apk`); stale APKs (<= the
-  running version) are deleted on startup.
+  on modern Android). The release's `.sha256` asset is stashed next to the
+  APK at download time; `refreshPendingApk` (startup scan) and
+  `startInstall` both verify the digest and delete corrupted downloads —
+  releases without a checksum file skip verification gracefully. The
+  download-complete receiver is `RECEIVER_NOT_EXPORTED` (system broadcasts
+  still arrive; third-party apps cannot spoof them). Pending-APK version is
+  derived from the file name (`GoWorkBro-update-<version>.apk`); stale APKs
+  (<= the running version) and orphaned sidecars are deleted on startup.
+- **Data-access scale rules** (learned 2026-10: history only grows): home
+  reads SQL aggregates (`observeCounts`) and the fixed-04:00 day window
+  (`SleepOps.dayWindow` + `SleepDao.observeBetween`), never `observeAll`;
+  the sleep stats page reads a 370-day bounded window (`SleepOps.historySince`);
+  the todo page renders undone in full but done history capped at 50 with a
+  展开更多 row. High-frequency state (the focus timer's 4Hz elapsed) is
+  collected INSIDE the smallest composable that reads it (ActiveTimerBar),
+  not in the HomeScreen body.
 
 ## Data safety — hard rules
 
@@ -149,6 +172,22 @@ hand-rolled nav stack in `ui/AppRoot.kt`. Data is app-private Room
 - Conventional commits in English, `Co-Authored-By:` footer for AI-authored
   work (see the global instructions for the exact format).
 - Large changes may commit directly to main, but never push without being asked.
+- **Version numbering** (surveyed 2026-10 from curl/OpenSSL/CPython/Signal/
+  VS Code practices; see also CHANGELOG's SemVer note): the number is a
+  compatibility promise to the user — for an app, the "API" is the user's
+  data and established workflows. Pick by what changed:
+
+  | Change | Bump |
+  |---|---|
+  | Bug fix, crash, perf-only, cosmetic tweak | PATCH |
+  | New feature/setting/screen, data auto-migrates, backup FORMAT still imports old files | MINOR |
+  | Breaking backup format without an import path, deliberately data-dropping migration, module-level rewrite | MAJOR |
+  | Pure refactor / dependency bump | rides along, no own release |
+
+  Heuristic: if the CHANGELOG entry needs a “升级会…” warning sentence
+  (data wiped, uninstall required), that is a MAJOR signal — 3.2.0 and
+  3.3.0 both qualified and shipped as MINOR only because the single user
+  consented. `versionCode` is orthogonal: +1 every release, always.
 
 ## User command shorthand
 

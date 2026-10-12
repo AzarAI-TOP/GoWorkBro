@@ -95,15 +95,17 @@ class OverviewFlowTest {
         // gear -> settings page -> 删除应用数据 -> pick types -> confirm
         rule.onNodeWithContentDescription("设置").performScrollTo().performClick()
         rule.waitUntil(10_000) { exists("设置") && exists("删除应用数据") }
-        rule.onNodeWithText("删除应用数据").performClick()
+        // the backup rows pushed 删除应用数据 below Robolectric's 470dp fold
+        rule.onNodeWithText("删除应用数据").performScrollTo().performClick()
         rule.waitUntil(10_000) { exists("待办（含专注记录）") }
         rule.onNodeWithText("待办（含专注记录）").performClick()
         rule.onNodeWithText("删除").performClick()
         rule.waitUntil(10_000) { exists("确认删除？") }
         rule.onNodeWithText("删除").performClick()
 
-        // back to the overview (settings page is not scrollable): pie is empty now
-        rule.onAllNodesWithContentDescription("返回").onFirst().performClick()
+        // back to the overview — scroll back up first: reaching 删除应用数据
+        // scrolled the top bar (and its 返回 button) out of the small viewport
+        rule.onAllNodesWithContentDescription("返回").onFirst().performScrollTo().performClick()
         rule.waitUntil(10_000) { exists("今天还没有专注记录") }
 
         // back home: the todo is gone as well

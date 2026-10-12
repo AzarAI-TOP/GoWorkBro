@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
@@ -57,7 +58,7 @@ fun TodoScreen(
     onAutoAddConsumed: () -> Unit = {},
 ) {
     val vm: TodoViewModel = viewModel()
-    val todos by vm.todos.collectAsState()
+    val todoState by vm.state.collectAsState()
     var editing by remember { mutableStateOf<EditingTodo?>(null) }
 
     // arrived via the 新建待办 launcher shortcut: open the add dialog once
@@ -74,7 +75,7 @@ fun TodoScreen(
             onBack = onBack,
             action = { AddActionButton(onClick = { editing = EditingTodo(null) }) },
         )
-        if (todos.isEmpty()) {
+        if (todoState.undone.isEmpty() && todoState.doneTotal == 0) {
             Column(
                 Modifier
                     .fillMaxSize()
@@ -92,7 +93,7 @@ fun TodoScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                items(todos, key = { it.id }) { todo ->
+                items(todoState.undone + todoState.done, key = { it.id }) { todo ->
                     CuteItemCard(
                         title = todo.title,
                         icon = todo.icon,
@@ -110,6 +111,17 @@ fun TodoScreen(
                         },
                         onEdit = { editing = EditingTodo(todo) },
                     )
+                }
+                // done history is capped at 50 — the rest hides behind this row
+                if (todoState.doneTotal > todoState.done.size) {
+                    item(span = { GridItemSpan(2) }) {
+                        TextButton(
+                            onClick = { vm.expandDone() },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("展开更多已完成（还有 ${todoState.doneTotal - todoState.done.size} 条）")
+                        }
+                    }
                 }
             }
         }

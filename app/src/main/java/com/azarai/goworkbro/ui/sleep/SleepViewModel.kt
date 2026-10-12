@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -36,9 +37,19 @@ data class SleepState(
 /** 睡眠记录页的状态：一条记录一觉（夜睡午睡同理），统计全部按天合计。 */
 class SleepViewModel(app: Application) : AndroidViewModel(app) {
 
+    private val db = Graph.db
+
+    /** Stats read a bounded 370-day window, not the whole table — history
+     *  grows forever, the charts/streak/average never need more than that. */
+    private val logicalKey = LogicalDay.flow.map { it.dateKey }.distinctUntilChanged()
+
+    private val history = logicalKey.flatMapLatest { day ->
+        db.sleepDao().observeSince(SleepOps.historySince(day))
+    }
+
     val state: StateFlow<SleepState> = combine(
-        Graph.db.sleepDao().observeAll(),
-        LogicalDay.flow.map { it.dateKey }.distinctUntilChanged(),
+        history,
+        logicalKey,
     ) { records, today ->
         SleepState(
             todayMinutes = SleepOps.dailyMinutes(records, today),

@@ -34,6 +34,22 @@ object SleepOps {
     fun dailyMinutes(records: List<SleepRecord>, day: String): Int =
         records.filter { dailyKeyOf(it) == day }.sumOf { it.minutes }
 
+    /** ISO `[start, end)` window capturing exactly the records
+     *  [dailyKeyOf] files under [day] — the SQL twin of [dailyMinutes]. */
+    fun dayWindow(day: String): Pair<String, String> {
+        val d = Dates.parseKey(day)
+        val start = d.atTime(Dates.LATE_NIGHT_BOUNDARY_HOUR, 0)
+        val end = d.plusDays(1).atTime(Dates.LATE_NIGHT_BOUNDARY_HOUR, 0)
+        return Dates.isoDateTime(start) to Dates.isoDateTime(end)
+    }
+
+    /** ISO lower bound covering [daysBack] days of history ending at [day]'s
+     *  window — caps the stats page at a bounded, evergreen record set. */
+    const val HISTORY_DAYS = 370
+
+    fun historySince(day: String): String =
+        dayWindow(Dates.dateKeyOf(Dates.parseKey(day).minusDays(HISTORY_DAYS.toLong()))).first
+
     /** The records of [day], newest first. */
     fun recordsOfDay(records: List<SleepRecord>, day: String): List<SleepRecord> =
         records.filter { dailyKeyOf(it) == day }.sortedByDescending { it.sleep }

@@ -14,8 +14,12 @@ import com.azarai.goworkbro.Graph
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.MessageDigest
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
@@ -35,14 +39,24 @@ object Updater {
     private const val CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000L
     private const val APK_PREFIX = "GoWorkBro-update-"
     private const val APK_SUFFIX = ".apk"
+    private const val SHA_SUFFIX = ".sha256"
 
     /** Latest release as reported by GitHub. */
-    data class ReleaseInfo(val tag: String, val version: String, val apkUrl: String)
+    data class ReleaseInfo(
+        val tag: String,
+        val version: String,
+        val apkUrl: String,
+        /** URL of the release's `.sha256` asset, when it ships one. */
+        val sha256Url: String? = null,
+    )
 
     /** Version of a downloaded-but-not-yet-installed APK, for the home banner. */
     val pendingInstallVersion = MutableStateFlow<String?>(null)
 
     private var enqueuedDownloadId: Long = -1
+
+    /** Off-main worker for the receiver (digest + dir scans must not block UI). */
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /** Version of the currently installed build, e.g. "3.1.0". */
     fun currentVersion(context: Context): String =
@@ -65,21 +79,35 @@ object Updater {
         return false
     }
 
-    /** Pulls tag + APK asset URL out of a GitHub release JSON payload. */
+    /** Pulls tag + asset URLs out of a GitHub release JSON payload. */
     fun parseRelease(json: String): ReleaseInfo? = runCatching {
         val obj = JSONObject(json)
         val tag = obj.optString("tag_name")
-        val asset = obj.optJSONArray("assets")
+        val assets = obj.optJSONArray("assets")
             ?.let { arr -> (0 until arr.length()).map { arr.getJSONObject(it) } }
-            ?.firstOrNull { it.optString("name").endsWith(".apk") }
-        if (tag.isEmpty() || asset == null) null
-        else ReleaseInfo(tag, normalizeVersion(tag), asset.optString("browser_download_url"))
+        val apk = assets?.firstOrNull { it.optString("name").endsWith(".apk") }
+        val sha = assets?.firstOrNull { it.optString("name").endsWith(".sha256") }
+        if (tag.isEmpty() || apk == null) null
+        else ReleaseInfo(
+            tag = tag,
+            version = normalizeVersion(tag),
+            apkUrl = apk.optString("browser_download_url"),
+            sha256Url = sha?.optString("browser_download_url")?.ifEmpty { null },
+        )
     }.getOrNull()
 
-    /** Fetches releases/latest; null on any failure (offline is normal). */
-    suspend fun fetchLatest(): ReleaseInfo? = withContext(Dispatchers.IO) {
+    /** First token of a sha256sum-style file (`<hex>  <name>`), lowercased;
+     *  null when it doesn't look like a 64-hex digest. */
+    fun normalizeSha256File(text: String): String? =
+        text.trim().split(Regex("\\s+")).firstOrNull()
+            ?.takeIf { it.length == 64 && it.all { c -> c.isDigit() || c in 'a'..'f' || c in 'A'..'F' } }
+            ?.lowercase()
+
+    /** Fetches a small text document (API payload, checksum file); null on any
+     *  failure (offline is normal). */
+    private suspend fun fetchText(url: String): String? = withContext(Dispatchers.IO) {
         runCatching {
-            val conn = URL(API_LATEST).openConnection() as HttpURLConnection
+            val conn = URL(url).openConnection() as HttpURLConnection
             try {
                 conn.connectTimeout = CONNECT_TIMEOUT_MS
                 conn.readTimeout = READ_TIMEOUT_MS
@@ -91,8 +119,10 @@ object Updater {
             } finally {
                 conn.disconnect()
             }
-        }.getOrNull()?.let { parseRelease(it) }
+        }.getOrNull()
     }
+
+    suspend fun fetchLatest(): ReleaseInfo? = fetchText(API_LATEST)?.let { parseRelease(it) }
 
     /**
      * Auto path (app start / foreground): throttled to one check per day and
@@ -104,7 +134,7 @@ object Updater {
         if (Graph.testing) return
         // pick up an APK that finished downloading after the process died;
         // stale ones (<= the running version) are deleted
-        withContext(Dispatchers.IO) { refreshPendingApk(context) }
+        refreshPendingApk(context)
         if (store.get(Store.Keys.AUTO_UPDATE) == "false") return
         val last = store.get(Store.Keys.LAST_UPDATE_CHECK)?.toLongOrNull() ?: 0L
         val now = System.currentTimeMillis()
@@ -131,8 +161,21 @@ object Updater {
         }
     }
 
-    private fun download(context: Context, release: ReleaseInfo) {
+    /** Stashes the release's checksum next to the APK (so verification never
+     *  needs the network again), then enqueues the download. A missing or
+     *  unreadable checksum just skips verification — same as releases that
+     *  ship without one. */
+    private suspend fun download(context: Context, release: ReleaseInfo) {
         if (enqueuedDownloadId != -1L) return // one download at a time
+        withContext(Dispatchers.IO) {
+            release.sha256Url?.let { url ->
+                fetchText(url)?.let { text ->
+                    normalizeSha256File(text)?.let { hash ->
+                        sidecarFile(context, release.version).writeText(hash)
+                    }
+                }
+            }
+        }
         val request = DownloadManager.Request(Uri.parse(release.apkUrl))
             .setTitle("GoWorkBro v${release.version}")
             .setDescription("正在下载更新")
@@ -146,8 +189,12 @@ object Updater {
     fun updatesDir(context: Context): File? =
         context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
 
-    /** Registers the download-complete listener. The APK dir scan runs from
-     *  [maybeAutoCheck] so no disk I/O lands on the main thread at startup. */
+    /** `<apk>.sha256` holding the expected digest for a downloaded update. */
+    private fun sidecarFile(context: Context, version: String): File =
+        File(updatesDir(context), apkName(version) + SHA_SUFFIX)
+
+    /** Registers the download-complete listener (system broadcasts reach
+     *  NOT_EXPORTED receivers fine; EXPORTED would let any app spoof it). */
     fun install(context: Context) {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context, intent: Intent) {
@@ -155,37 +202,85 @@ object Updater {
                 val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
                 if (id != enqueuedDownloadId) return
                 enqueuedDownloadId = -1
-                refreshPendingApk(ctx)
-                if (pendingInstallVersion.value != null) {
-                    Toast.makeText(ctx, "新版本已下载，回主页点击横幅安装", Toast.LENGTH_LONG).show()
+                scope.launch {
+                    refreshPendingApk(ctx)
+                    if (pendingInstallVersion.value != null) {
+                        toast(ctx, "新版本已下载，回主页点击横幅安装")
+                    }
                 }
             }
         }
         context.registerReceiver(
             receiver,
             IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
-            Context.RECEIVER_EXPORTED,
+            Context.RECEIVER_NOT_EXPORTED,
         )
     }
 
-    private fun refreshPendingApk(context: Context) {
-        val dir = updatesDir(context) ?: return
-        val current = currentVersion(context)
-        var best: File? = null
-        dir.listFiles { f -> f.name.startsWith(APK_PREFIX) && f.name.endsWith(APK_SUFFIX) }
-            ?.forEach { file ->
-                val v = versionOfApk(file)
-                when {
-                    isNewer(v, current) ->
-                        if (best == null || isNewer(v, versionOfApk(best!!))) best = file
-                    else -> file.delete() // stale: we're already on it (or past it)
-                }
+    /** Rescans the update dir: deletes stale APKs and orphaned checksum
+     *  sidecars, verifies the surviving best APK against its sidecar, and
+     *  publishes the pending-install version. Disk + digest work, so suspend. */
+    private suspend fun refreshPendingApk(context: Context) {
+        withContext(Dispatchers.IO) {
+            val dir = updatesDir(context) ?: return@withContext
+            val current = currentVersion(context)
+            val all = dir.listFiles().orEmpty()
+
+            // stale APKs (<= the running version) and sidecars without their APK
+            all.filter { it.name.startsWith(APK_PREFIX) && it.name.endsWith(APK_SUFFIX) }
+                .filterNot { isNewer(versionOfApk(it), current) }
+                .forEach { it.delete() }
+            all.filter { it.name.startsWith(APK_PREFIX) && it.name.endsWith(SHA_SUFFIX) }
+                .filterNot { sc -> File(dir, sc.name.removeSuffix(SHA_SUFFIX)).exists() }
+                .forEach { it.delete() }
+
+            var best: File? = null
+            dir.listFiles().orEmpty()
+                .filter { it.name.startsWith(APK_PREFIX) && it.name.endsWith(APK_SUFFIX) }
+                .forEach { f -> if (best == null || isNewer(versionOfApk(f), versionOfApk(best!!))) best = f }
+
+            if (best != null && !verifyApk(best!!)) {
+                best!!.delete()
+                File(best!!.path + SHA_SUFFIX).delete()
+                best = null
+                toast(context, "更新包校验失败，已删除；可稍后在设置里重试")
             }
-        pendingInstallVersion.value = best?.let { versionOfApk(it) }
+            pendingInstallVersion.value = best?.let { versionOfApk(it) }
+        }
     }
 
     private fun versionOfApk(file: File): String =
         file.name.removePrefix(APK_PREFIX).removeSuffix(APK_SUFFIX)
+
+    /** Digest of [file], streamed, as lowercase hex. */
+    private fun sha256Of(file: File): String {
+        val md = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buf = ByteArray(64 * 1024)
+            while (true) {
+                val n = input.read(buf)
+                if (n < 0) break
+                md.update(buf, 0, n)
+            }
+        }
+        return md.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    /** True when [file] matches its checksum sidecar. No sidecar (release
+     *  without one, or the checksum fetch failed) → vacuously OK. */
+    private fun verifyApk(file: File): Boolean {
+        val expected = runCatching {
+            normalizeSha256File(File(file.path + SHA_SUFFIX).readText())
+        }.getOrNull() ?: return true
+        return sha256Of(file) == expected
+    }
+
+    /** Long toast from any dispatcher. */
+    private suspend fun toast(context: Context, text: String) {
+        withContext(Dispatchers.Main) {
+            Toast.makeText(context, text, Toast.LENGTH_LONG).show()
+        }
+    }
 
     /** Fires the system install-confirm UI for a downloaded APK via a
      *  PackageInstaller session (the deterministic path on modern Android:
@@ -207,6 +302,18 @@ object Updater {
                 .onFailure { Toast.makeText(context, "打不开安装设置：${it.message}", Toast.LENGTH_LONG).show() }
             return
         }
+        // last-line integrity check: a corrupted download dies here, not in
+        // the system installer
+        if (!withContext(Dispatchers.IO) { verifyApk(file) }) {
+            file.delete()
+            File(file.path + SHA_SUFFIX).delete()
+            pendingInstallVersion.value = null
+            toast(context, "安装包校验失败，已删除；可稍后在设置里重试")
+            return
+        }
+        // belt-and-braces snapshot into public Downloads: even a
+        // uninstall-reinstall (signature break) must never eat history again
+        Backup.snapshotToDownloads(context)
         runCatching {
             val installer = context.packageManager.packageInstaller
             val session = installer.openSession(
