@@ -138,6 +138,7 @@ object Backup {
         .put("id", t.id).put("title", t.title).put("icon", t.icon)
         .put("color_index", t.colorIndex).put("timing_type", t.timingType)
         .put("duration_minutes", t.durationMinutes).put("is_done", t.isDone)
+        .put("done_date", t.doneDate)
         .put("sort_order", t.sortOrder).put("created_date", t.createdDate)
 
     private fun todoOf(o: JSONObject): Todo? {
@@ -150,6 +151,8 @@ object Backup {
             timingType = o.optString("timing_type", "none"),
             durationMinutes = o.optInt("duration_minutes", 25),
             isDone = o.optBoolean("is_done", false),
+            // older backups have no done_date: "" = un-dated history
+            doneDate = o.optString("done_date"),
             sortOrder = o.optInt("sort_order", 0),
             createdDate = o.optString("created_date"),
         )

@@ -55,6 +55,24 @@ class TodoOrderTest {
     }
 
     @Test
+    fun completionsAreScopedToTheirDay() = runBlocking {
+        val dao = db.todoDao()
+        // newest completion first; "" (un-dated, e.g. migrated history) sinks last
+        dao.upsert(Todo(id = "A", title = "A", sortOrder = 3, isDone = true, doneDate = "2026-10-19"))
+        dao.upsert(Todo(id = "B", title = "B", sortOrder = 2, isDone = true, doneDate = "2026-10-18"))
+        dao.upsert(Todo(id = "C", title = "C", sortOrder = 1, isDone = true, doneDate = ""))
+
+        assertEquals(listOf("A"), dao.observeDoneOn("2026-10-19").first().map { it.id })
+        assertEquals(
+            listOf("B", "C"),
+            dao.observeDoneBefore("2026-10-19", 50).first().map { it.id },
+        )
+        assertEquals(2, dao.observeDoneCountBefore("2026-10-19").first())
+        // nothing is deleted: the open list stays empty, history keeps both rows
+        assertEquals(emptyList<String>(), dao.observeUndone().first().map { it.id })
+    }
+
+    @Test
     fun timingTypeRoundTrip() = runBlocking {
         val dao = db.todoDao()
         dao.upsert(

@@ -86,8 +86,10 @@ fun AppRoot(
     GoWorkBroTheme {
         var stack by rememberSaveable { mutableStateOf(listOf(Routes.HOME)) }
         var showTimer by rememberSaveable { mutableStateOf(false) }
-        // cold-start reveal: the big sprout flies into the home header
-        var showReveal by rememberSaveable { mutableStateOf(true) }
+        // cold-start reveal: the big sprout flies into the home header.
+        // It only plays on the day's FIRST launch — the app is opened many
+        // times a day and a 1.4s flourish every time is a tax, not a treat.
+        var showReveal by rememberSaveable { mutableStateOf(false) }
         // one-shot launcher-shortcut state (consumed where it is used)
         var pendingAddTodo by rememberSaveable { mutableStateOf(false) }
         var pendingAutoRecord by rememberSaveable { mutableStateOf(false) }
@@ -114,6 +116,13 @@ fun AppRoot(
             }
         }
 
+        LaunchedEffect(Unit) {
+            val today = com.azarai.goworkbro.core.util.Dates.todayKey()
+            if (Graph.store.get(com.azarai.goworkbro.core.Store.Keys.LAST_REVEAL_DATE) != today) {
+                Graph.store.set(com.azarai.goworkbro.core.Store.Keys.LAST_REVEAL_DATE, today)
+                showReveal = true
+            }
+        }
         // Launcher shortcuts (long-press the app icon). LOG_SLEEP opens the
         // sleep page with the two-step record sheet already up.
         LaunchedEffect(pendingShortcut) {
@@ -170,6 +179,7 @@ fun AppRoot(
                         openRoute = open,
                         onOpenActiveTimer = { showTimer = true },
                         onOpenOverview = { open(Routes.OVERVIEW) },
+                        onOpenSettings = { open(Routes.SETTINGS) },
                         onRecordSleep = {
                             open(Routes.SLEEP)
                             pendingAutoRecord = true

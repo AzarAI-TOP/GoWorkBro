@@ -8,11 +8,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.azarai.goworkbro.ui.theme.LocalForestExtras
@@ -22,19 +25,32 @@ data class SleepPoint(val label: String, val hours: Float?)
 
 /**
  * Hand-drawn 7-night sleep DURATION line chart (hours slept per night).
- * Missing nights break the line; the value is printed above each dot.
+ * Missing nights break the line; the value is printed above each dot. The
+ * 7h target is drawn as a dashed line — the page header has always promised
+ * it, the chart just never drew it.
  */
 @Composable
 fun SleepDurationChart(points: List<SleepPoint>, modifier: Modifier = Modifier) {
     val extras = LocalForestExtras.current
     val line = MaterialTheme.colorScheme.secondary
+    val goalLine = MaterialTheme.colorScheme.tertiary
     val strongLabel = MaterialTheme.colorScheme.onSurface
     val density = LocalDensity.current
+
+    if (points.none { it.hours != null }) {
+        EmptyHint(icon = "moon", text = "近 7 天还没有睡眠记录", modifier = modifier.fillMaxWidth())
+        return
+    }
 
     Canvas(
         modifier = modifier
             .fillMaxWidth()
-            .height(200.dp),
+            .height(200.dp)
+            .semantics {
+                contentDescription = "近 7 天睡眠时长：" + points.joinToString("，") { p ->
+                    "${p.label} " + (p.hours?.let { "%.1f 小时".format(it) } ?: "无记录")
+                }
+            },
     ) {
         val leftPad = 44.dp.toPx()
         val rightPad = 14.dp.toPx()
@@ -68,6 +84,20 @@ fun SleepDurationChart(points: List<SleepPoint>, modifier: Modifier = Modifier) 
             val y = yAt(hours)
             drawLine(extras.divider, Offset(leftPad, y), Offset(w - rightPad, y), 1.5f)
             drawContext.canvas.nativeCanvas.drawText("${hours.toInt()}h", leftPad - 8.dp.toPx(), y + 4.dp.toPx(), gridPaint)
+        }
+
+        // 7h target, dashed (only when the axis actually reaches it)
+        if (yMax > 7f) {
+            val goalY = yAt(7f)
+            drawLine(
+                color = goalLine,
+                start = Offset(leftPad, goalY),
+                end = Offset(w - rightPad, goalY),
+                strokeWidth = 1.5.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(
+                    floatArrayOf(8.dp.toPx(), 6.dp.toPx()),
+                ),
+            )
         }
 
         // smooth line through consecutive recorded nights

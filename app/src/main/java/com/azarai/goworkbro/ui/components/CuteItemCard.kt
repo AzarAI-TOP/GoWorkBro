@@ -8,6 +8,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -32,6 +34,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -53,6 +57,7 @@ fun CuteItemCard(
     onEdit: () -> Unit,
     status: String? = null,
     strikeTitle: Boolean = false,
+    onMore: (() -> Unit)? = null,
 ) {
     val extras = LocalForestExtras.current
     val tick = rememberTick()
@@ -84,6 +89,27 @@ fun CuteItemCard(
                 }
                 // check badge
                 CheckBadge(visible = done)
+                // Visible edit affordance: long-press still works, but nothing
+                // on screen used to say it existed.
+                if (onMore != null) {
+                    Box(
+                        Modifier
+                            .align(Alignment.TopEnd)
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(extras.inputFill.copy(alpha = 0.94f))
+                            .clickable(onClick = onMore)
+                            .semantics { contentDescription = "编辑 $title" },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.Filled.MoreHoriz,
+                            contentDescription = null,
+                            tint = extras.textSecondary,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
             }
             Text(
                 title,

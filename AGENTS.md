@@ -14,19 +14,47 @@ gone).** One home page, no tabs: a 2×3 grid of six modules — 待办 / 习惯 
 hand-rolled nav stack in `ui/AppRoot.kt`. Data is app-private Room
 (`goworkbro_v3.db`).
 
-- `ui/home/` — the grid, the running-focus mini card, the today-focus line.
-- `ui/todo/`, `ui/habit/` — two-column card grids: tap = act, long-press = edit.
-  Finished todos are history and cannot be deleted (only the settings bulk
-  wipe removes them).
+- `ui/home/` — the grid, the running-focus mini card, the today-focus line
+  (hidden while it would read all zeros), the header gears: sprout = 数据纵览,
+  gear = 设置. A card may carry a one-tap 打卡 pill on its title row — today
+  only 喝水 uses it (`HomeViewModel.drinkWater`, logged on the logical day).
+  Anything ambiguous with several items (习惯, multiple todos) deliberately
+  has no home quick action.
+- `ui/todo/`, `ui/habit/` — two-column card grids: tap = act, long-press =
+  edit, and the visible `⋯` chip on each card opens the same editor. Editors
+  are `ModalBottomSheet`s with the icon/colour block folded behind one 外观
+  row (the old AlertDialog held 27 icons + 8 dots and clipped the last dot).
+  Finishing stamps `todos.done_date` with the logical day; the list shows
+  today's completions under 已完成 and folds everything older behind one
+  更早完成 N 条 row (a v5→v6 migration gave existing done rows `''`, which
+  counts as older). Nothing is deleted and finished items still cannot be
+  removed one by one (only the settings bulk wipe clears them); a finished
+  item re-opens with a tap and never starts a timer. After completing
+  something the grid snaps back to the top (`LazyGridState.animateScrollToItem(0)`)
+  instead of following the item down into the done section.
+- Deletions ask first: todo / habit / countdown go through
+  `ConfirmDeleteDialog`; sleep already did.
 - `ui/timer/` — pomodoro overlay (正向/倒计时). A round counts once a full
   minute passed; a round that ends while the overlay is open drops the user on
   the todo list. Timer state is in-memory on purpose (dies with the process).
 - `ui/water/`, `ui/fitness/` — goal hero + quick logs + today list + 7-day bars.
 - `ui/sleep/`, `ui/countdown/`, `ui/overview/`, `ui/settings/` — see the subsystems below.
-- `ui/components/` — hand-drawn Canvas cartoons (`CartoonIcon.kt`, 16 icons:
-  extend `CartoonIcons.all` + one draw function), cards/charts/dialogs,
-  `rememberTick()` haptics, the cold-start sprout flight (`StartupReveal.kt`).
+- `ui/components/` — hand-drawn Canvas cartoons (`CartoonIcon.kt`, 27 icons:
+  extend `CartoonIcons.all` + one draw function; icons are drawn in a 0..100
+  space with an ink outline). Style rule: objects stay faceless — no eyes,
+  smiles, blush or sparkles — only the animals (dog / cat / fish) keep a
+  minimal face; decoration is what made the old set noisy at 30dp. Cards,
+  charts, dialogs,
+  `rememberTick()` haptics, the cold-start sprout flight (`StartupReveal.kt`,
+  at most once per calendar day — see `Store.Keys.LAST_REVEAL_DATE`).
+  Charts carry their values + a dashed goal line and show an explicit empty
+  state, never a flat 1px row of nothing; every chart sets a
+  `contentDescription` that spells the data out.
 - Theme: forest palette (`ui/theme/Color.kt`), follows system light/dark.
+  **Light-theme colours that carry text must stay >= 4.5:1** against the cream
+  scaffold / card / input fill (current: primary 4.9, textSecondary 5.0); a
+  display* style MUST exist in `ForestTypography` or the timer clock and the
+  workout stopwatch silently fall back to Roboto.
 
 ### Subsystems worth knowing
 
@@ -133,8 +161,9 @@ hand-rolled nav stack in `ui/AppRoot.kt`. Data is app-private Room
     changed, and before committing.
   - `all`: everything with a 15-min hard timeout (a hung test must never
     eat a session again). One full round before a commit is enough.
-- Builds: `:app:assembleDebug`, `:app:assembleRelease` (`gradlew.bat` is
-  the old Windows box — ignore it).
+- Builds: `:app:assembleDebug`, `:app:assembleRelease` (`gradlew.bat` is part of the standard Gradle wrapper set and
+  is regenerated on every wrapper upgrade; this machine is Linux-only, never
+  run it.)
 - Testing discipline (all learned the hard way, 2026-10-09):
   - Never `runBlocking { flow.first { … } }` without a timeout — one
     unsatisfied predicate deadlocks the whole executor.

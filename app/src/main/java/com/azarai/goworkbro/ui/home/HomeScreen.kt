@@ -2,6 +2,7 @@ package com.azarai.goworkbro.ui.home
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -23,6 +25,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -37,6 +40,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.semantics.contentDescription
@@ -78,6 +82,7 @@ fun HomeScreen(
     openRoute: (String) -> Unit,
     onOpenActiveTimer: () -> Unit,
     onOpenOverview: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
     onRecordSleep: () -> Unit = {},
     onSproutMeasured: (androidx.compose.ui.geometry.Offset) -> Unit = {},
 ) {
@@ -126,10 +131,23 @@ fun HomeScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = extras.textSecondary,
                 )
-                Text(
-                    focusLine(state.focusSessions, state.focusMinutes),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onBackground,
+                // A row of zeros is not information — it only shows up once
+                // there is something to report.
+                if (state.focusSessions > 0) {
+                    Text(
+                        focusLine(state.focusSessions, state.focusMinutes),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onBackground,
+                    )
+                }
+            }
+            // settings used to hide behind sprout -> overview -> a lone gear
+            IconButton(onClick = onOpenSettings, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    Icons.Filled.Settings,
+                    contentDescription = "设置",
+                    tint = extras.textSecondary,
+                    modifier = Modifier.size(20.dp),
                 )
             }
             IconBubble(
@@ -197,6 +215,9 @@ fun HomeScreen(
                     icon = "cup", title = "喝水", pastelIndex = 2,
                     status = "${state.waterMl} / ${state.waterGoal} ml",
                     progress = if (state.waterGoal == 0) 0f else state.waterMl.toFloat() / state.waterGoal,
+                    onQuickCheck = { vm.drinkWater(state.quickCupMl) },
+                    quickCheckText = "喝 ${state.quickCupMl}ml",
+                    quickCheckLabel = "喝水打卡 ${state.quickCupMl} 毫升",
                     onClick = { openRoute(Routes.WATER) },
                 )
             }
@@ -220,7 +241,6 @@ fun HomeScreen(
                     icon = "moon", title = "睡眠", pastelIndex = 4,
                     onClick = { openRoute(Routes.SLEEP) },
                     status = state.todaySleepText?.let { "已睡 $it" } ?: "今天还没记录",
-                    checkedTime = state.todaySleepText,
                 )
             }
         }
@@ -362,11 +382,13 @@ private fun ModuleCard(
     status: String,
     onClick: () -> Unit,
     progress: Float? = null,
-    checkedTime: String? = null,
     onQuickCheck: (() -> Unit)? = null,
+    /** Visible text on the one-tap pill — say what gets recorded, not "打卡". */
+    quickCheckText: String? = null,
     quickCheckLabel: String? = null,
 ) {
     val extras = LocalForestExtras.current
+    val tick = rememberTick()
     CuteCard(
         onClick = onClick,
         modifier = Modifier
@@ -377,6 +399,31 @@ private fun ModuleCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconBubble(icon, extras.pastels[pastelIndex % extras.pastels.size], 44.dp, bob = true)
                 Spacer(Modifier.weight(1f))
+                // one-tap log straight from the home grid. Lives on the icon
+                // row (44dp tall) so it cannot change the card's text rhythm,
+                // and it is a plain Box, not a Surface: the 48dp minimum touch
+                // target of Material buttons would stretch the row.
+                if (onQuickCheck != null) {
+                    Box(
+                        Modifier
+                            .height(22.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(MaterialTheme.colorScheme.primary)
+                            .clickable { tick(); onQuickCheck() }
+                            .semantics {
+                                contentDescription = quickCheckLabel ?: "打卡"
+                            }
+                            .padding(horizontal = 10.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            quickCheckText ?: "打卡",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                    }
+                    Spacer(Modifier.width(4.dp))
+                }
                 Icon(
                     Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     contentDescription = "详情",
@@ -384,54 +431,27 @@ private fun ModuleCard(
                 )
             }
             Spacer(Modifier.weight(1f))
-            Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
             Spacer(Modifier.height(3.dp))
             if (progress != null) {
                 CuteProgressBar(progress, height = 8.dp)
                 Spacer(Modifier.height(5.dp))
-                Text(
-                    status,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = extras.textSecondary,
-                )
-            } else if (onQuickCheck != null) {
-                if (checkedTime != null) {
-                    Text(
-                        status,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                } else {
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(30.dp),
-                        contentAlignment = Alignment.CenterStart,
-                    ) {
-                        Surface(
-                            onClick = onQuickCheck,
-                            shape = androidx.compose.foundation.shape.RoundedCornerShape(50),
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.semantics {
-                                contentDescription = quickCheckLabel ?: "打卡"
-                            },
-                        ) {
-                            Text(
-                                "打卡",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 5.dp),
-                            )
-                        }
-                    }
-                }
-            } else {
-                Text(
-                    status,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = extras.textSecondary,
-                )
             }
+            Text(
+                status,
+                style = MaterialTheme.typography.bodySmall,
+                color = extras.textSecondary,
+                maxLines = 1,
+                // status lines are sometimes Latin ("0 / 2000 ml") and
+                // sometimes 中文 ("0 / 45 分钟"); the two fallback fonts size
+                // their lines differently, so pin a minimum or the cards in
+                // one grid row stop sharing a baseline
+                modifier = Modifier.heightIn(min = 20.dp),
+            )
         }
     }
 }

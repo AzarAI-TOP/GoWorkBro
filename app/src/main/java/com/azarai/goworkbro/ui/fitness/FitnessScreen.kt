@@ -178,7 +178,7 @@ private fun StopwatchCard(
         Column(
             Modifier
                 .fillMaxWidth()
-                .padding(vertical = 18.dp),
+                .padding(horizontal = 16.dp, vertical = 18.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(

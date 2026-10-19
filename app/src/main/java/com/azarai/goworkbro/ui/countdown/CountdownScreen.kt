@@ -1,5 +1,6 @@
 package com.azarai.goworkbro.ui.countdown
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -39,6 +40,7 @@ import com.azarai.goworkbro.core.SleepOps
 import com.azarai.goworkbro.core.db.Countdown
 import com.azarai.goworkbro.core.util.Dates
 import com.azarai.goworkbro.ui.components.AddActionButton
+import com.azarai.goworkbro.ui.components.ConfirmDeleteDialog
 import com.azarai.goworkbro.ui.components.CuteCard
 import com.azarai.goworkbro.ui.components.CuteTopBar
 import com.azarai.goworkbro.ui.components.EmptyHint
@@ -69,11 +71,14 @@ fun CountdownScreen(onBack: () -> Unit) {
         )
 
         if (items.isEmpty()) {
-            EmptyHint(
-                icon = "clock",
-                text = "加一个倒计时，掐着秒等它到",
-                modifier = Modifier.padding(top = 60.dp),
-            )
+            // centre both axes in the space under the top bar — a bare
+            // EmptyHint in a Column sits at the start edge and looks broken
+            Box(
+                Modifier.fillMaxWidth().weight(1f).padding(bottom = 40.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                EmptyHint(icon = "clock", text = "加一个倒计时，掐着秒等它到")
+            }
         } else {
             LazyColumn(
                 Modifier.weight(1f),
@@ -177,6 +182,7 @@ private fun CountdownEditDialog(
     }
     var pickDate by remember { mutableStateOf(false) }
     var pickTime by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
     val color = remember { initial?.colorIndex ?: (0..7).random() }
 
     AlertDialog(
@@ -189,7 +195,9 @@ private fun CountdownEditDialog(
         dismissButton = {
             Row {
                 if (onDelete != null) {
-                    TextButton(onClick = onDelete) { Text("删除", color = MaterialTheme.colorScheme.error) }
+                    TextButton(onClick = { confirmDelete = true }) {
+                        Text("删除", color = MaterialTheme.colorScheme.error)
+                    }
                 }
                 TextButton(onClick = onDismiss) { Text("取消") }
             }
@@ -211,6 +219,18 @@ private fun CountdownEditDialog(
         },
         containerColor = LocalForestExtras.current.card,
     )
+
+    if (confirmDelete && onDelete != null) {
+        ConfirmDeleteDialog(
+            title = "删除这个倒计时？",
+            text = "「${initial?.title.orEmpty()}」会被删掉，无法恢复。",
+            onDismiss = { confirmDelete = false },
+            onConfirm = {
+                confirmDelete = false
+                onDelete()
+            },
+        )
+    }
 
     if (pickDate) {
         val dateState = rememberDatePickerState(

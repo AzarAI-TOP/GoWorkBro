@@ -18,7 +18,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         Countdown::class,
         SettingRow::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -47,7 +47,7 @@ abstract class AppDatabase : RoomDatabase() {
 
         private fun build(context: Context, name: String): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, name)
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .fallbackToDestructiveMigration()
                 .fallbackToDestructiveMigrationOnDowngrade()
                 .build()
@@ -112,6 +112,15 @@ abstract class AppDatabase : RoomDatabase() {
                         "PRIMARY KEY(`id`))",
                 )
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_countdowns_target_at` ON `countdowns` (`target_at`)")
+            }
+        }
+
+        /** v6 stamps finished todos with the logical day they were completed
+         *  on, so the list can hide anything older than today. Existing done
+         *  rows get "" (= un-dated history, shown under 更早完成). */
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `todos` ADD COLUMN `done_date` TEXT NOT NULL DEFAULT ''")
             }
         }
 

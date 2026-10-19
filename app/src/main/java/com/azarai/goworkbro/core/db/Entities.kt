@@ -33,6 +33,10 @@ data class Todo(
     /** Countdown duration in minutes (ignored otherwise). */
     @ColumnInfo(name = "duration_minutes") val durationMinutes: Int = 25,
     @ColumnInfo(name = "is_done") val isDone: Boolean = false,
+    /** Logical day (YYYY-MM-DD) the todo was completed on; "" while open.
+     *  The list shows today's completions and hides the older ones, so the
+     *  history is still there but the page cleans itself every day. */
+    @ColumnInfo(name = "done_date", defaultValue = "") val doneDate: String = "",
     @ColumnInfo(name = "sort_order") val sortOrder: Int = 0,
     @ColumnInfo(name = "created_date") val createdDate: String = "",
 ) {

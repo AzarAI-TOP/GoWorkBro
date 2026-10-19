@@ -143,13 +143,3 @@ private fun TotalBlock(value: String, unit: String, modifier: Modifier = Modifie
         Text(unit, style = MaterialTheme.typography.bodySmall, color = LocalForestExtras.current.textSecondary)
     }
 }
-
-@Composable
-private fun SectionTitle(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.titleSmall,
-        color = LocalForestExtras.current.textSecondary,
-        modifier = Modifier.padding(horizontal = 22.dp, vertical = 12.dp),
-    )
-}

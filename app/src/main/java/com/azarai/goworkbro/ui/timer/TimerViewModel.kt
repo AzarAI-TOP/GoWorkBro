@@ -138,7 +138,13 @@ class TimerViewModel : ViewModel() {
         val a = active.value ?: return
         stop()
         viewModelScope.launch {
-            Graph.db.todoDao().upsert(a.todo.copy(isDone = true))
+            Graph.db.todoDao().upsert(
+                a.todo.copy(
+                    isDone = true,
+                    // stamp the completion day, or the list would hide it at once
+                    doneDate = Rollover.logicalToday(Graph.store),
+                ),
+            )
         }
     }
 }

@@ -3,15 +3,19 @@ package com.azarai.goworkbro.ui.theme
 import androidx.compose.ui.graphics.Color
 
 // ---- Forest light ----
-val ForestPrimary = Color(0xFF5E9C6B)      // moss green
+// Contrast note: everything below that carries TEXT is held at WCAG AA
+// (>= 4.5:1) against the cream scaffold (#F6F3E7), the card (#FFFEF9) and the
+// input fill (#EFEAD9) — the old pastel-green accents read as washed out at
+// 12sp. Graphic-only uses (progress bars, chart lines) need >= 3:1.
+val ForestPrimary = Color(0xFF42754C)      // moss green (4.9:1 on cream, 5.4:1 white-on)
 val ForestOnPrimary = Color(0xFFFFFFFF)
 val ForestPrimaryContainer = Color(0xFFD9EDD6)
 val ForestOnPrimaryContainer = Color(0xFF1E3A26)
-val ForestSecondary = Color(0xFF8CB86A)    // sapling
+val ForestSecondary = Color(0xFF679145)    // sapling (3.3:1 — charts and bars)
 val ForestOnSecondary = Color(0xFFFFFFFF)
 val ForestSecondaryContainer = Color(0xFFE7F2D8)
 val ForestOnSecondaryContainer = Color(0xFF2B4320)
-val ForestTertiary = Color(0xFFB08552)     // wood brown
+val ForestTertiary = Color(0xFF8A6536)     // wood brown (4.7:1 on cream)
 val ForestOnTertiary = Color(0xFFFFFFFF)
 val ForestTertiaryContainer = Color(0xFFF2E3CB)
 val ForestOnTertiaryContainer = Color(0xFF43331B)
@@ -20,7 +24,7 @@ val ForestCardLight = Color(0xFFFFFEF9)
 val ForestCardBorderLight = Color(0xFFE4DEC9)
 val ForestDividerLight = Color(0xFFEAE4D2)
 val ForestTextPrimaryLight = Color(0xFF33402F)
-val ForestTextSecondaryLight = Color(0xFF77836F)
+val ForestTextSecondaryLight = Color(0xFF626B57) // 5.0:1 cream / 5.5:1 card / 4.6:1 fill
 val ForestInputFillLight = Color(0xFFEFEAD9)
 
 // ---- Forest night ----

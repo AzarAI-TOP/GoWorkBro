@@ -52,17 +52,28 @@ val CuteFont = FontFamily(
 )
 
 val ForestTypography = Typography(
-    headlineLarge = TextStyle(fontFamily = CuteFont, fontSize = 28.sp, fontWeight = FontWeight.Bold),
-    headlineMedium = TextStyle(fontFamily = CuteFont, fontSize = 22.sp, fontWeight = FontWeight.SemiBold),
-    titleLarge = TextStyle(fontFamily = CuteFont, fontSize = 19.sp, fontWeight = FontWeight.Bold),
-    titleMedium = TextStyle(fontFamily = CuteFont, fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-    titleSmall = TextStyle(fontFamily = CuteFont, fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
-    bodyLarge = TextStyle(fontFamily = CuteFont, fontSize = 16.sp),
-    bodyMedium = TextStyle(fontFamily = CuteFont, fontSize = 14.sp),
-    bodySmall = TextStyle(fontFamily = CuteFont, fontSize = 12.sp),
-    labelLarge = TextStyle(fontFamily = CuteFont, fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
-    labelMedium = TextStyle(fontFamily = CuteFont, fontSize = 12.sp, fontWeight = FontWeight.Medium),
-    labelSmall = TextStyle(fontFamily = CuteFont, fontSize = 10.sp, fontWeight = FontWeight.Medium),
+    // display* is what the timer clock and the workout stopwatch use — they
+    // MUST carry the cute font too, or the biggest numbers on screen fall
+    // back to Roboto and the app looks patched together.
+    //
+    // Every style also pins an explicit lineHeight so wrapped 中文/ASCII text
+    // gets consistent leading instead of whatever the fallback font decides.
+    // (Single-line Text still sizes itself from the font metrics, so layout
+    // that must line up across cards needs a fixed height, not a lineHeight.)
+    displayLarge = TextStyle(fontFamily = CuteFont, fontSize = 56.sp, lineHeight = 64.sp, fontWeight = FontWeight.Bold),
+    displayMedium = TextStyle(fontFamily = CuteFont, fontSize = 42.sp, lineHeight = 48.sp, fontWeight = FontWeight.Bold),
+    displaySmall = TextStyle(fontFamily = CuteFont, fontSize = 34.sp, lineHeight = 40.sp, fontWeight = FontWeight.SemiBold),
+    headlineLarge = TextStyle(fontFamily = CuteFont, fontSize = 28.sp, lineHeight = 34.sp, fontWeight = FontWeight.Bold),
+    headlineMedium = TextStyle(fontFamily = CuteFont, fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
+    titleLarge = TextStyle(fontFamily = CuteFont, fontSize = 19.sp, lineHeight = 26.sp, fontWeight = FontWeight.Bold),
+    titleMedium = TextStyle(fontFamily = CuteFont, fontSize = 16.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold),
+    titleSmall = TextStyle(fontFamily = CuteFont, fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold),
+    bodyLarge = TextStyle(fontFamily = CuteFont, fontSize = 16.sp, lineHeight = 22.sp),
+    bodyMedium = TextStyle(fontFamily = CuteFont, fontSize = 14.sp, lineHeight = 20.sp),
+    bodySmall = TextStyle(fontFamily = CuteFont, fontSize = 13.sp, lineHeight = 18.sp),
+    labelLarge = TextStyle(fontFamily = CuteFont, fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold),
+    labelMedium = TextStyle(fontFamily = CuteFont, fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium),
+    labelSmall = TextStyle(fontFamily = CuteFont, fontSize = 11.sp, lineHeight = 15.sp, fontWeight = FontWeight.Medium),
 )
 
 val ForestShapes = Shapes(

@@ -228,45 +228,60 @@ fun EmptyHint(icon: String, text: String, modifier: Modifier = Modifier) {
 }
 
 /** Grid picker for cartoon icons, used inside create/edit dialogs. Scrolls
- *  once the catalog outgrows the four visible rows. */
+ *  once the catalog outgrows the four visible rows. Inside a scrolling
+ *  bottom sheet pass [scrollable] = false: the sheet scrolls, the grid must
+ *  not fight it for the drag gesture. */
 @Composable
-fun IconPicker(selected: String, onSelect: (String) -> Unit) {
+fun IconPicker(selected: String, onSelect: (String) -> Unit, scrollable: Boolean = true) {
     val extras = LocalForestExtras.current
+    val columns = 5
+    val rows = (CartoonIcons.all.size + columns - 1) / columns
     LazyVerticalGrid(
-        columns = GridCells.Fixed(5),
+        columns = GridCells.Fixed(columns),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = Modifier.height(202.dp),
-        userScrollEnabled = true,
+        modifier = Modifier.height(if (scrollable) 202.dp else (rows * 50).dp),
+        userScrollEnabled = scrollable,
     ) {
         items(CartoonIcons.all.size) { index ->
             val spec = CartoonIcons.all[index]
             val isSel = spec.key == selected
-            Box(
-                Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(if (isSel) MaterialTheme.colorScheme.primaryContainer else extras.inputFill)
-                    .border(
-                        width = if (isSel) 2.5.dp else 1.dp,
-                        color = if (isSel) MaterialTheme.colorScheme.primary else extras.cardBorder,
-                        shape = CircleShape,
-                    )
-                    .clickable { onSelect(spec.key) }
-                    .semantics { contentDescription = spec.label },
-                contentAlignment = Alignment.Center,
-            ) {
-                CartoonIcon(spec.key, Modifier.size(30.dp))
+            // the grid hands each item a fixed cell width — wrapping in a
+            // full-width box keeps the icon chip a CIRCLE instead of the
+            // pill that size() would produce under a fixed min width
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Box(
+                    Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(if (isSel) MaterialTheme.colorScheme.primaryContainer else extras.inputFill)
+                        .border(
+                            width = if (isSel) 2.5.dp else 1.dp,
+                            color = if (isSel) MaterialTheme.colorScheme.primary else extras.cardBorder,
+                            shape = CircleShape,
+                        )
+                        .clickable { onSelect(spec.key) }
+                        .semantics { contentDescription = spec.label },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CartoonIcon(spec.key, Modifier.size(30.dp))
+                }
             }
         }
     }
 }
 
-/** Pastel chips picker for the icon-circle background. */
+/** Pastel chips picker for the icon-circle background. Wraps instead of
+ *  overflowing: 8 dots + gaps do not fit a dialog's content width on a
+ *  narrow phone, and the old Row silently clipped the last colour. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun ColorDots(selected: Int, onSelect: (Int) -> Unit) {
     val extras = LocalForestExtras.current
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    androidx.compose.foundation.layout.FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         extras.pastels.forEachIndexed { i, c ->
             Box(
                 Modifier
@@ -278,10 +293,35 @@ fun ColorDots(selected: Int, onSelect: (Int) -> Unit) {
                         color = if (i == selected) MaterialTheme.colorScheme.primary else extras.cardBorder,
                         shape = CircleShape,
                     )
-                    .clickable { onSelect(i) },
+                    .clickable { onSelect(i) }
+                    .semantics { contentDescription = "颜色 ${i + 1}" },
             )
         }
     }
+}
+
+/** Shared "are you sure" dialog for destructive taps that used to fire
+ *  immediately (habit / countdown / todo removal). */
+@Composable
+fun ConfirmDeleteDialog(
+    title: String,
+    text: String,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+    confirmLabel: String = "删除",
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { Text(text) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(confirmLabel, color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        containerColor = LocalForestExtras.current.card,
+    )
 }
 
 /** Small grey section header used by the log / stats pages. */

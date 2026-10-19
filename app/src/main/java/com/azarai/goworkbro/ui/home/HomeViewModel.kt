@@ -6,10 +6,14 @@ import androidx.lifecycle.viewModelScope
 import com.azarai.goworkbro.Graph
 import com.azarai.goworkbro.core.CountdownOps
 import com.azarai.goworkbro.core.LogicalDay
+import com.azarai.goworkbro.core.Rollover
 import com.azarai.goworkbro.core.SleepOps
 import com.azarai.goworkbro.core.Store
 import com.azarai.goworkbro.core.Updater
 import com.azarai.goworkbro.core.db.Countdown
+import com.azarai.goworkbro.core.db.WaterLog
+import com.azarai.goworkbro.core.util.Dates
+import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -34,6 +38,8 @@ data class HomeState(
     val todaySleepText: String? = null,
     /** Countdown items, for the home tile's live label. */
     val countdowns: List<Countdown> = emptyList(),
+    /** First water preset — what the home tile's one-tap 打卡 logs. */
+    val quickCupMl: Int = Store.DEFAULT_WATER_CUPS.first(),
     val focusSessions: Int = 0,
     val focusMinutes: Int = 0,
     /** A downloaded update APK waiting for its install tap. */
@@ -80,9 +86,10 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         combine(
             Graph.store.observe(Store.Keys.WATER_GOAL_ML),
             Graph.store.observe(Store.Keys.FITNESS_GOAL_MIN),
-        ) { w, f -> w to f },
+            Graph.store.observe(Store.Keys.WATER_CUPS),
+        ) { w, f, cups -> Triple(w, f, cups) },
         combine(logicalKey, pendingUpdate) { key, pending -> key to pending },
-    ) { (todos, habits), (sleepToday, countdowns), (waterToday, fitnessToday, focusToday), (waterGoalRaw, fitnessGoalRaw), (logicalKey, pendingUpdate) ->
+    ) { (todos, habits), (sleepToday, countdowns), (waterToday, fitnessToday, focusToday), (waterGoalRaw, fitnessGoalRaw, cupsRaw), (logicalKey, pendingUpdate) ->
         HomeState(
             todoUndone = todos.undone,
             todoTotal = todos.total,
@@ -90,6 +97,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             habitTotal = habits.total,
             waterMl = waterToday.sumOf { it.ml },
             waterGoal = waterGoalRaw?.toIntOrNull() ?: Store.DEFAULT_WATER_GOAL,
+            quickCupMl = Store.parseWaterCups(cupsRaw).firstOrNull() ?: Store.DEFAULT_WATER_CUPS.first(),
             fitnessMin = fitnessToday.sumOf { it.minutes },
             fitnessGoal = fitnessGoalRaw?.toIntOrNull() ?: Store.DEFAULT_FITNESS_GOAL,
             todaySleepText = sleepToday.sumOf { it.minutes }
@@ -103,6 +111,21 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     fun dismissUpdate() {
         dismissedUpdate.value = Updater.pendingInstallVersion.value
+    }
+
+    /** One-tap water log from the home grid (same row shape the water page writes). */
+    fun drinkWater(ml: Int) {
+        if (ml <= 0) return
+        viewModelScope.launch {
+            db.waterDao().insert(
+                WaterLog(
+                    id = UUID.randomUUID().toString(),
+                    logDate = Rollover.logicalToday(Graph.store),
+                    ml = ml,
+                    loggedAt = Dates.hhmm(java.time.LocalDateTime.now()),
+                ),
+            )
+        }
     }
 
     fun installUpdate() {

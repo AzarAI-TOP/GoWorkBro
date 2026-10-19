@@ -3,6 +3,8 @@ package com.azarai.goworkbro.ui.todo
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.azarai.goworkbro.Graph
+import com.azarai.goworkbro.core.LogicalDay
+import com.azarai.goworkbro.core.Rollover
 import com.azarai.goworkbro.core.db.TimingType
 import com.azarai.goworkbro.core.db.Todo
 import com.azarai.goworkbro.core.util.Dates
@@ -11,32 +13,64 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-/** What the todo page renders: active work + a capped slice of history. */
+/**
+ * What the todo page renders. Finished work is split by the logical day it was
+ * completed on: today's stays visible, everything older folds away behind the
+ * 更早完成 row. Nothing is deleted — the page just cleans itself every day.
+ */
 data class TodoListState(
     val undone: List<Todo> = emptyList(),
-    val done: List<Todo> = emptyList(),
-    /** Total finished todos ever — drives the 展开更多 row. */
-    val doneTotal: Int = 0,
+    val doneToday: List<Todo> = emptyList(),
+    val olderDone: List<Todo> = emptyList(),
+    /** All completions from previous days — drives the 更早完成 row. */
+    val olderDoneTotal: Int = 0,
+    val showOlder: Boolean = false,
 )
 
 class TodoViewModel : ViewModel() {
     private val dao = Graph.db.todoDao()
 
-    /** Done history renders capped — the page stays O(active work), not
-     *  O(all time); expandDone() lifts the cap for this session. */
+    private val logicalKey = LogicalDay.flow.map { it.dateKey }.distinctUntilChanged()
+
+    /** Older history renders capped; expandDone() lifts the cap for this
+     *  session. Collapsed by default, so the query is not even subscribed. */
     private val doneLimit = MutableStateFlow(50)
+    private val showOlderFlow = MutableStateFlow(false)
 
     val state: StateFlow<TodoListState> = combine(
         dao.observeUndone(),
-        doneLimit.flatMapLatest { dao.observeDone(it) },
-        dao.observeDoneCount(),
-    ) { undone, done, doneTotal ->
-        TodoListState(undone, done, doneTotal)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TodoListState())
+        logicalKey,
+        showOlderFlow,
+    ) { undone, day, show -> Triple(undone, day, show) }
+        .flatMapLatest { (undone, day, show) ->
+            if (!show) {
+                combine(
+                    dao.observeDoneOn(day),
+                    dao.observeDoneCountBefore(day),
+                ) { today, olderTotal ->
+                    TodoListState(undone, today, emptyList(), olderTotal, false)
+                }
+            } else {
+                combine(
+                    dao.observeDoneOn(day),
+                    dao.observeDoneCountBefore(day),
+                    doneLimit.flatMapLatest { dao.observeDoneBefore(day, it) },
+                ) { today, olderTotal, older ->
+                    TodoListState(undone, today, older, olderTotal, true)
+                }
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TodoListState())
+
+    fun toggleOlder() {
+        showOlderFlow.value = !showOlderFlow.value
+    }
 
     fun expandDone() {
         doneLimit.value = Int.MAX_VALUE
@@ -62,7 +96,7 @@ class TodoViewModel : ViewModel() {
     }
 
     fun toggle(todo: Todo) {
-        viewModelScope.launch { dao.upsert(todo.copy(isDone = !todo.isDone)) }
+        viewModelScope.launch { dao.upsert(stamped(todo, !todo.isDone)) }
     }
 
     fun update(
@@ -95,6 +129,12 @@ class TodoViewModel : ViewModel() {
     }
 
     fun setDone(todo: Todo, done: Boolean) {
-        viewModelScope.launch { dao.upsert(todo.copy(isDone = done)) }
+        viewModelScope.launch { dao.upsert(stamped(todo, done)) }
     }
+
+    /** Completion always stamps the logical day, reopening clears it. */
+    private suspend fun stamped(todo: Todo, done: Boolean): Todo = todo.copy(
+        isDone = done,
+        doneDate = if (done) Rollover.logicalToday(Graph.store) else "",
+    )
 }

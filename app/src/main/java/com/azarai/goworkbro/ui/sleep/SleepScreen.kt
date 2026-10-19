@@ -252,6 +252,15 @@ private fun SleepRecordSheet(
                     onSelected = { wakeAt = it },
                 )
                 LightDateLabel(wakeAt)
+                // the duration the user is about to file, so nobody has to do
+                // 06:15 -> 13:15 arithmetic in their head
+                Text(
+                    "本次睡了 " + SleepOps.formatDuration(
+                        java.time.Duration.between(sleepAt, wakeAt).toMinutes().toInt().coerceAtLeast(0),
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
                 ConfirmPill("确认起床时间") { onConfirm(sleepAt, wakeAt) }
             }
             Spacer(Modifier.height(18.dp))

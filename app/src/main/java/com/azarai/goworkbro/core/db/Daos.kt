@@ -13,20 +13,27 @@ interface TodoDao {
     @Query("SELECT * FROM todos ORDER BY is_done ASC, sort_order DESC")
     fun observeAll(): Flow<List<Todo>>
 
-    /** The todo page's bounded halves: active work in full, capped done
-     *  history (finished todos are kept forever and never deleted). */
+    /** The todo page's bounded halves: active work in full, finished work
+     *  split by the logical day it was completed on. */
     @Query("SELECT * FROM todos WHERE is_done = 0 ORDER BY sort_order DESC")
     fun observeUndone(): Flow<List<Todo>>
 
-    @Query("SELECT * FROM todos WHERE is_done = 1 ORDER BY sort_order DESC LIMIT :limit")
-    fun observeDone(limit: Int): Flow<List<Todo>>
+    /** Finished today: what still shows under 已完成. */
+    @Query("SELECT * FROM todos WHERE is_done = 1 AND done_date = :date ORDER BY sort_order DESC")
+    fun observeDoneOn(date: String): Flow<List<Todo>>
 
-    @Query("SELECT COUNT(*) FROM todos WHERE is_done = 1")
-    fun observeDoneCount(): Flow<Int>
+    /** Older completions — hidden behind 更早完成, never deleted. */
+    @Query(
+        "SELECT * FROM todos WHERE is_done = 1 AND done_date <> :date " +
+            "ORDER BY done_date DESC, sort_order DESC LIMIT :limit",
+    )
+    fun observeDoneBefore(date: String, limit: Int): Flow<List<Todo>>
+
+    @Query("SELECT COUNT(*) FROM todos WHERE is_done = 1 AND done_date <> :date")
+    fun observeDoneCountBefore(date: String): Flow<Int>
 
     /** Aggregate counts for the home tile — done todos are kept forever, so
-     *  home must not load the full history just to count. */
-    @Query("SELECT COUNT(*) AS total, IFNULL(SUM(CASE WHEN is_done = 0 THEN 1 ELSE 0 END), 0) AS undone FROM todos")
+     *  home must not load the full history just to count. */    @Query("SELECT COUNT(*) AS total, IFNULL(SUM(CASE WHEN is_done = 0 THEN 1 ELSE 0 END), 0) AS undone FROM todos")
     fun observeCounts(): Flow<TodoCounts>
 
     @Upsert

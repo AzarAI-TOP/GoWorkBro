@@ -28,6 +28,7 @@ case "$MODE" in
   ui)
     exec ./gradlew :app:testDebugUnitTest --console=plain \
       --tests "com.azarai.goworkbro.AppSmokeTest" \
+      --tests "com.azarai.goworkbro.HomeQuickLogTest" \
       --tests "com.azarai.goworkbro.OverviewFlowTest" \
       --tests "com.azarai.goworkbro.TimerRulesTest"
     ;;
