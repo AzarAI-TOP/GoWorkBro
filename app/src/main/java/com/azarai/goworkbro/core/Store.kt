@@ -4,7 +4,6 @@ import com.azarai.goworkbro.core.db.AppDatabase
 import com.azarai.goworkbro.core.db.SettingRow
 import com.azarai.goworkbro.core.db.SettingsDao
 import com.azarai.goworkbro.core.util.Dates
-import java.time.LocalDateTime
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import org.json.JSONArray
@@ -16,12 +15,9 @@ import org.json.JSONArray
 class Store(private val dao: SettingsDao) {
 
     object Keys {
-        /** After-midnight-before-4am activity counts for the previous day. */
-        const val LATE_NIGHT_MODE = "late_night_mode"
         const val LAST_ROLLOVER_DATE = "last_rollover_date"
         const val WATER_GOAL_ML = "water_goal_ml"
         const val WATER_CUPS = "water_cups"
-        const val FITNESS_GOAL_MIN = "fitness_goal_min"
         /** "false" opts out of GitHub update checks + downloads. */
         const val AUTO_UPDATE = "auto_update"
         /** Epoch ms of the last automatic update check. */
@@ -39,8 +35,6 @@ class Store(private val dao: SettingsDao) {
     }
 
     suspend fun waterGoalMl(): Int = get(Keys.WATER_GOAL_ML)?.toIntOrNull() ?: DEFAULT_WATER_GOAL
-
-    suspend fun fitnessGoalMin(): Int = get(Keys.FITNESS_GOAL_MIN)?.toIntOrNull() ?: DEFAULT_FITNESS_GOAL
 
     suspend fun waterCups(): List<Int> = parseWaterCups(get(Keys.WATER_CUPS))
 
@@ -60,22 +54,19 @@ class Store(private val dao: SettingsDao) {
         }
 
         const val DEFAULT_WATER_GOAL = 2000
-        const val DEFAULT_FITNESS_GOAL = 45
         val DEFAULT_WATER_CUPS = listOf(150, 250, 500)
     }
 }
 
-/** Daily rollover engine — resets habit counters at the logical day boundary. */
+/** Daily rollover engine — resets habit counters when the calendar day changes. */
 object Rollover {
 
-    suspend fun logicalToday(store: Store): String {
-        val lateNight = store.get(Store.Keys.LATE_NIGHT_MODE) != "false"
-        val last = store.get(Store.Keys.LAST_ROLLOVER_DATE) ?: ""
-        return Dates.logicalDateKey(LocalDateTime.now(), lateNight, last)
-    }
-
+    /**
+     * One guard against the reset running twice a day: the timer flow emits
+     * once per day boundary already, but a foreground return can re-fire it.
+     */
     suspend fun ensure(db: AppDatabase, store: Store) {
-        val target = logicalToday(store)
+        val target = Dates.todayKey()
         val last = store.get(Store.Keys.LAST_ROLLOVER_DATE) ?: ""
         if (last == target) return
         db.habitDao().resetForNewDay(target)

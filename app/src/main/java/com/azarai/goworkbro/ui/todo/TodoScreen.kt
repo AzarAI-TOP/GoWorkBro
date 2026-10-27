@@ -58,6 +58,8 @@ import com.azarai.goworkbro.ui.components.randomColorIndex
 import com.azarai.goworkbro.ui.components.CuteTopBar
 import com.azarai.goworkbro.ui.components.EmptyHint
 import com.azarai.goworkbro.ui.components.IconPicker
+import com.azarai.goworkbro.ui.components.rememberDragSort
+import com.azarai.goworkbro.ui.components.rememberTick
 import com.azarai.goworkbro.ui.theme.LocalForestExtras
 
 private val DURATION_PRESETS = listOf(10, 20, 30, 45)
@@ -76,12 +78,37 @@ fun TodoScreen(
     var editing by remember { mutableStateOf<EditingTodo?>(null) }
     val gridState = rememberLazyGridState()
     val scope = rememberCoroutineScope()
-    // Completing an item pushes it down into 已完成 and the keyed grid follows
+    // Long-press drag sorting. Only the open list is sortable — finished work
+    // keeps its completion order.
+    val sort = rememberDragSort(
+        gridState = gridState,
+        items = todoState.undone,
+        idOf = { it.id },
+        onReorder = vm::reorder,
+        haptics = rememberTick(),
+    )
+    // Completing an item pushes it down into "已完成" and the keyed grid follows
     // it there. Snap back to the top instead: the point of finishing something
     // is picking the next one.
     val backToTop = { scope.launch { gridState.animateScrollToItem(0) } }
+    // One action for open AND finished cards: a finished timed task re-opens
+    // and starts a NEW round (that is what "再来一轮" means), a plain one
+    // just flips back to open.
+    val act: (Todo) -> Unit = { todo ->
+        when {
+            todo.isDone && todo.timing != TimingType.NONE -> {
+                vm.setDone(todo, false)
+                onOpenTimer(todo.copy(isDone = false, doneDate = ""))
+            }
+            todo.timing == TimingType.NONE -> {
+                vm.toggle(todo)
+                if (!todo.isDone) backToTop()
+            }
+            else -> onOpenTimer(todo)
+        }
+    }
 
-    // arrived via the 新建待办 launcher shortcut: open the add sheet once
+    // arrived via the "新建待办" launcher shortcut: open the add sheet once
     LaunchedEffect(autoOpenAdd) {
         if (autoOpenAdd) {
             editing = EditingTodo(null)
@@ -116,17 +143,14 @@ fun TodoScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                items(todoState.undone, key = { it.id }) { todo ->
+                items(sort.items, key = { it.id }) { todo ->
                     TodoCard(
                         todo = todo,
-                        onAction = {
-                            if (todo.timing == TimingType.NONE) {
-                                vm.toggle(todo)
-                                backToTop()
-                            } else {
-                                onOpenTimer(todo)
-                            }
-                        },
+                        modifier = Modifier
+                            .then(if (sort.draggingKey == todo.id) Modifier else Modifier.animateItem())
+                            .then(sort.cardModifier(todo.id)),
+                        gestureModifier = sort.gestureModifier(todo.id),
+                        onAction = { act(todo) },
                         onEdit = { editing = EditingTodo(todo) },
                     )
                 }
@@ -143,7 +167,7 @@ fun TodoScreen(
                     items(todoState.doneToday, key = { it.id }) { todo ->
                         TodoCard(
                             todo = todo,
-                            onAction = { vm.toggle(todo) },
+                            onAction = { act(todo) },
                             onEdit = { editing = EditingTodo(todo) },
                         )
                     }
@@ -169,7 +193,7 @@ fun TodoScreen(
                     items(todoState.olderDone, key = { it.id }) { todo ->
                         TodoCard(
                             todo = todo,
-                            onAction = { vm.toggle(todo) },
+                            onAction = { act(todo) },
                             onEdit = { editing = EditingTodo(todo) },
                         )
                     }
@@ -213,7 +237,13 @@ fun TodoScreen(
 }
 
 @Composable
-private fun TodoCard(todo: Todo, onAction: () -> Unit, onEdit: () -> Unit) {
+private fun TodoCard(
+    todo: Todo,
+    onAction: () -> Unit,
+    onEdit: () -> Unit,
+    modifier: Modifier = Modifier,
+    gestureModifier: Modifier = Modifier,
+) {
     CuteItemCard(
         title = todo.title,
         icon = todo.icon,
@@ -227,8 +257,9 @@ private fun TodoCard(todo: Todo, onAction: () -> Unit, onEdit: () -> Unit) {
         },
         strikeTitle = true,
         onAction = onAction,
-        onEdit = onEdit,
         onMore = onEdit,
+        modifier = modifier,
+        gestureModifier = gestureModifier,
     )
 }
 

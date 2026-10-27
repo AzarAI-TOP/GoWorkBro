@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.IconButton
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -21,11 +20,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -76,14 +75,12 @@ private fun dateLine(now: LocalDateTime = LocalDateTime.now()): String {
 private fun focusLine(sessions: Int, minutes: Int): String =
     "$sessions 次专注 - 共专注 ${Dates.formatMinutesHuman(minutes)}"
 
-/** The single home page: a 2 x 3 grid — four square modules + one wide sleep card. */
+/** The single home page: a 2-column grid of five modules (sleep spans the row). */
 @Composable
 fun HomeScreen(
     openRoute: (String) -> Unit,
     onOpenActiveTimer: () -> Unit,
     onOpenOverview: () -> Unit = {},
-    onOpenSettings: () -> Unit = {},
-    onRecordSleep: () -> Unit = {},
     onSproutMeasured: (androidx.compose.ui.geometry.Offset) -> Unit = {},
 ) {
     val vm: HomeViewModel = viewModel()
@@ -141,15 +138,7 @@ fun HomeScreen(
                     )
                 }
             }
-            // settings used to hide behind sprout -> overview -> a lone gear
-            IconButton(onClick = onOpenSettings, modifier = Modifier.size(36.dp)) {
-                Icon(
-                    Icons.Filled.Settings,
-                    contentDescription = "设置",
-                    tint = extras.textSecondary,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
+            // settings live behind "数据纵览" -> its bottom gear: one icon here
             IconBubble(
                 "sprout",
                 extras.pastels[1],
@@ -215,18 +204,14 @@ fun HomeScreen(
                     icon = "cup", title = "喝水", pastelIndex = 2,
                     status = "${state.waterMl} / ${state.waterGoal} ml",
                     progress = if (state.waterGoal == 0) 0f else state.waterMl.toFloat() / state.waterGoal,
-                    onQuickCheck = { vm.drinkWater(state.quickCupMl) },
-                    quickCheckText = "喝 ${state.quickCupMl}ml",
-                    quickCheckLabel = "喝水打卡 ${state.quickCupMl} 毫升",
+                    pill = {
+                        QuickLogPill(
+                            text = "喝 ${state.quickCupMl}ml",
+                            label = "喝水打卡 ${state.quickCupMl} 毫升",
+                        ) { vm.drinkWater(state.quickCupMl) }
+                        Spacer(Modifier.width(4.dp))
+                    },
                     onClick = { openRoute(Routes.WATER) },
-                )
-            }
-            item {
-                ModuleCard(
-                    icon = "dumbbell", title = "健身", pastelIndex = 5,
-                    status = "${state.fitnessMin} / ${state.fitnessGoal} 分钟",
-                    progress = if (state.fitnessGoal == 0) 0f else state.fitnessMin.toFloat() / state.fitnessGoal,
-                    onClick = { openRoute(Routes.FITNESS) },
                 )
             }
             item {
@@ -236,10 +221,11 @@ fun HomeScreen(
                     status = countdownStatus(),
                 )
             }
-            item {
+            item(span = { GridItemSpan(2) }) {
                 ModuleCard(
                     icon = "moon", title = "睡眠", pastelIndex = 4,
                     onClick = { openRoute(Routes.SLEEP) },
+                    wide = true,
                     status = state.todaySleepText?.let { "已睡 $it" } ?: "今天还没记录",
                 )
             }
@@ -373,6 +359,32 @@ private fun UpdateBanner(version: String, onInstall: () -> Unit, onDismiss: () -
     }
 }
 
+/**
+ * One-tap log pill for a home card: says what gets recorded ("喝 500ml"), not
+ * "打卡". A plain Box, not a Surface — the 48dp minimum touch target of
+ * Material buttons would stretch the icon row.
+ */
+@Composable
+private fun QuickLogPill(text: String, label: String, onClick: () -> Unit) {
+    val tick = rememberTick()
+    Box(
+        Modifier
+            .height(22.dp)
+            .clip(RoundedCornerShape(50))
+            .background(MaterialTheme.colorScheme.primary)
+            .clickable { tick(); onClick() }
+            .semantics { contentDescription = label }
+            .padding(horizontal = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onPrimary,
+        )
+    }
+}
+
 /** One cute module card in the home grid. */
 @Composable
 private fun ModuleCard(
@@ -382,48 +394,51 @@ private fun ModuleCard(
     status: String,
     onClick: () -> Unit,
     progress: Float? = null,
-    onQuickCheck: (() -> Unit)? = null,
-    /** Visible text on the one-tap pill — say what gets recorded, not "打卡". */
-    quickCheckText: String? = null,
-    quickCheckLabel: String? = null,
+    /** Optional one-tap action pill on the icon row (only the water tile uses it). */
+    pill: (@Composable () -> Unit)? = null,
+    /** Full-row card (the sleep tile): icon left, title + status stacked right. */
+    wide: Boolean = false,
 ) {
     val extras = LocalForestExtras.current
-    val tick = rememberTick()
     CuteCard(
         onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(1.08f),
+            .then(if (wide) Modifier.heightIn(min = 92.dp) else Modifier.aspectRatio(1.08f)),
     ) {
+        if (wide) {
+            Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+                IconBubble(icon, extras.pastels[pastelIndex % extras.pastels.size], 56.dp, bob = true)
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        status,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = extras.textSecondary,
+                        maxLines = 1,
+                    )
+                }
+                Icon(
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = "详情",
+                    tint = extras.textSecondary,
+                )
+            }
+            return@CuteCard
+        }
         Column(Modifier.fillMaxSize()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconBubble(icon, extras.pastels[pastelIndex % extras.pastels.size], 44.dp, bob = true)
                 Spacer(Modifier.weight(1f))
-                // one-tap log straight from the home grid. Lives on the icon
-                // row (44dp tall) so it cannot change the card's text rhythm,
-                // and it is a plain Box, not a Surface: the 48dp minimum touch
-                // target of Material buttons would stretch the row.
-                if (onQuickCheck != null) {
-                    Box(
-                        Modifier
-                            .height(22.dp)
-                            .clip(RoundedCornerShape(50))
-                            .background(MaterialTheme.colorScheme.primary)
-                            .clickable { tick(); onQuickCheck() }
-                            .semantics {
-                                contentDescription = quickCheckLabel ?: "打卡"
-                            }
-                            .padding(horizontal = 10.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            quickCheckText ?: "打卡",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                        )
-                    }
-                    Spacer(Modifier.width(4.dp))
-                }
+                // the pill sits on the icon row (44dp tall) so it cannot change
+                // the card's text rhythm
+                pill?.invoke()
                 Icon(
                     Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     contentDescription = "详情",
@@ -447,7 +462,7 @@ private fun ModuleCard(
                 color = extras.textSecondary,
                 maxLines = 1,
                 // status lines are sometimes Latin ("0 / 2000 ml") and
-                // sometimes 中文 ("0 / 45 分钟"); the two fallback fonts size
+                // sometimes CJK ("0 / 45 分钟"); the two fallback fonts size
                 // their lines differently, so pin a minimum or the cards in
                 // one grid row stop sharing a baseline
                 modifier = Modifier.heightIn(min = 20.dp),

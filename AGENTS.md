@@ -9,19 +9,24 @@ UI strings hardcoded Chinese.
 ## Architecture
 
 **v3 (2026-09 rewrite — the Flutter/Supabase v1 and the v2 "news" era are
-gone).** One home page, no tabs: a 2×3 grid of six modules — 待办 / 习惯 /
-喝水 / 健身 / 倒计时 / 睡眠 — each pushing a detail screen onto the
-hand-rolled nav stack in `ui/AppRoot.kt`. Data is app-private Room
+gone).** One home page, no tabs: a 2-column grid of five modules — 待办 / 习惯 /
+喝水 / 倒计时 in two square rows, 睡眠 as one full-width card — each
+pushing a detail screen onto the hand-rolled nav stack in `ui/AppRoot.kt`. Data is app-private Room
 (`goworkbro_v3.db`).
 
 - `ui/home/` — the grid, the running-focus mini card, the today-focus line
-  (hidden while it would read all zeros), the header gears: sprout = 数据纵览,
-  gear = 设置. A card may carry a one-tap 打卡 pill on its title row — today
+  (hidden while it would read all zeros), and one header entry: sprout =
+  数据纵览 (its bottom gear is the ONLY way to 设置 — the home gear was
+  dropped in v3.6 to keep the header to one icon). A card may carry a one-tap 打卡 pill on its title row — today
   only 喝水 uses it (`HomeViewModel.drinkWater`, logged on the logical day).
   Anything ambiguous with several items (习惯, multiple todos) deliberately
   has no home quick action.
 - `ui/todo/`, `ui/habit/` — two-column card grids: tap = act, long-press =
-  edit, and the visible `⋯` chip on each card opens the same editor. Editors
+  DRAG TO SORT (launcher-icon style, `ui/components/GridReorder.kt` +
+  `core/util/Ordering.kt`: `rememberDragSort` reorders locally and writes once
+  on drop, `sort_order` DESC for open todos, ASC for habits; only the open todo
+  list is sortable), and the visible `⋯` chip is the only way into the
+  editor. Editors
   are `ModalBottomSheet`s with the icon/colour block folded behind one 外观
   row (the old AlertDialog held 27 icons + 8 dots and clipped the last dot).
   Finishing stamps `todos.done_date` with the logical day; the list shows
@@ -29,22 +34,30 @@ hand-rolled nav stack in `ui/AppRoot.kt`. Data is app-private Room
   更早完成 N 条 row (a v5→v6 migration gave existing done rows `''`, which
   counts as older). Nothing is deleted and finished items still cannot be
   removed one by one (only the settings bulk wipe clears them); a finished
-  item re-opens with a tap and never starts a timer. After completing
+  plain todo re-opens with a tap, and a finished TIMED todo re-opens *and*
+  starts a new round (that is the "second session" gesture — no separate
+  button). After completing
   something the grid snaps back to the top (`LazyGridState.animateScrollToItem(0)`)
   instead of following the item down into the done section.
 - Deletions ask first: todo / habit / countdown go through
   `ConfirmDeleteDialog`; sleep already did.
 - `ui/timer/` — pomodoro overlay (正向/倒计时). A round counts once a full
-  minute passed; a round that ends while the overlay is open drops the user on
-  the todo list. Timer state is in-memory on purpose (dies with the process).
-- `ui/water/`, `ui/fitness/` — goal hero + quick logs + today list + 7-day bars.
+  minute passed, and only the overlay's ✓ marks the todo done (stop /
+  countdown-expiry just logs the round). A round that ends while the overlay
+  is open drops the user on the todo list. Timer state is in-memory on
+  purpose (dies with the process).
+- `ui/water/` — goal hero + quick logs + today list + 7-day bars. (`ui/fitness/`
+  is gone since v3.6: exercise is just another habit. Migration v6→v7 DROPs
+  `fitness_logs`, so that history is intentionally gone.)
 - `ui/sleep/`, `ui/countdown/`, `ui/overview/`, `ui/settings/` — see the subsystems below.
 - `ui/components/` — hand-drawn Canvas cartoons (`CartoonIcon.kt`, 27 icons:
   extend `CartoonIcons.all` + one draw function; icons are drawn in a 0..100
   space with an ink outline). Style rule: objects stay faceless — no eyes,
   smiles, blush or sparkles — only the animals (dog / cat / fish) keep a
   minimal face; decoration is what made the old set noisy at 30dp. Cards,
-  charts, dialogs,
+  charts, dialogs, the long-press drag sorter (`GridReorder.kt` — screens use
+  `rememberDragSort`; its gesture half must sit INSIDE the card's click
+  handler, otherwise the release of a long press also counts as a tap),
   `rememberTick()` haptics, the cold-start sprout flight (`StartupReveal.kt`,
   at most once per calendar day — see `Store.Keys.LAST_REVEAL_DATE`).
   Charts carry their values + a dashed goal line and show an explicit empty
@@ -59,7 +72,7 @@ hand-rolled nav stack in `ui/AppRoot.kt`. Data is app-private Room
 ### Subsystems worth knowing
 
 - **Backup (v3.4)** — `core/Backup.kt`: the ONLY safety net for the
-  app-private DB (`allowBackup=false` on purpose). Export serializes all 8
+  app-private DB (`allowBackup=false` on purpose). Export serializes all 7
   tables into one JSON doc (org.json, keys mirror DB columns, `format` field
   gates imports); import is REPLACE-ALL (clear + insert in one transaction).
   Settings page wires it over SAF (`CreateDocument`/`OpenDocument`, import
@@ -70,12 +83,12 @@ hand-rolled nav stack in `ui/AppRoot.kt`. Data is app-private Room
   rejected, so old files keep working until explicitly deprecated.
 - **Day boundary** — `core/LogicalDay.kt` is the single source of truth: one
   flow emits the current logical day + its window, re-emits on app foreground
-  and by itself when the 04:00/midnight boundary passes. Screens must NOT
-  thread refresh counters. Late-night mode (0–4am counts as yesterday) is a
-  settings toggle, default ON; `core/Store.kt#Rollover` resets habits on each
-  new logical day, driven from the AppRoot collector.
-- **Focus statistics** — `focus_logs` rows are written with the logical day
-  (`Rollover.logicalToday`), never the calendar day, and are kept forever:
+  and by itself when midnight passes. Screens must NOT thread refresh
+  counters. The day IS the calendar day — the old 熬夜模式 toggle (0–4am
+  counted as yesterday) was removed in v3.6. `core/Store.kt#Rollover` resets
+  habits on each new day, driven from the AppRoot collector.
+- **Focus statistics** — `focus_logs` rows are written with `Dates.todayKey()`
+  and are kept forever:
   home/overview read them per logical day (`FocusDao.observeDayStats` /
   `observeDayByTodo`), the overview shows them as a per-todo donut.
 - **Sleep records (v3.3)** — `sleep_records`: ONE row per SLEEP — a nap and
@@ -84,9 +97,10 @@ hand-rolled nav stack in `ui/AppRoot.kt`. Data is app-private Room
   sleep start (default now−7h, wheel now−48h → now−15min), step 2 wake
   (default now, wheel sleep+15min → now); the ONLY hard bound is "never
   the future". 15-min steps, wheels stop at their ends (no wrap), light
-  date label under the wheel auto-crosses midnight. Stats in
-  `core/SleepOps.kt`: a record is filed under the logical day it STARTED
-  on (00:00–04:00 bedtimes belong to the previous evening); per-day totals
+  date label under the wheel auto-crosses midnight and names 今天 / 昨天 /
+  前天 (`SleepOps.relativeDateLabel`). Stats in `core/SleepOps.kt`: a record
+  is filed under the calendar day it ENDED on (the wake day), so a
+  23:00–07:00 night already counts for the morning it ended on; per-day totals
   (home card + hero "今天 X"), ≥7h-per-day streak (an unrecorded today
   doesn't break it), per-sleep average. Migration v3→v4 DROPPED
   `routine_events` on purpose (user abandoned the check-in history) but a
@@ -118,8 +132,8 @@ hand-rolled nav stack in `ui/AppRoot.kt`. Data is app-private Room
   derived from the file name (`GoWorkBro-update-<version>.apk`); stale APKs
   (<= the running version) and orphaned sidecars are deleted on startup.
 - **Data-access scale rules** (learned 2026-10: history only grows): home
-  reads SQL aggregates (`observeCounts`) and the fixed-04:00 day window
-  (`SleepOps.dayWindow` + `SleepDao.observeBetween`), never `observeAll`;
+  reads SQL aggregates (`observeCounts`) and the wake-time calendar window
+  (`SleepOps.dayWindow` + `SleepDao.observeWakesBetween`), never `observeAll`;
   the sleep stats page reads a 370-day bounded window (`SleepOps.historySince`);
   the todo page renders undone in full but done history capped at 50 with a
   展开更多 row. High-frequency state (the focus timer's 4Hz elapsed) is
@@ -179,7 +193,7 @@ hand-rolled nav stack in `ui/AppRoot.kt`. Data is app-private Room
   - New test classes get sorted into a tier in `scripts/test.sh`.
 - Emulator testing (local-only skill, gitignored): `.agents/skills/gwb-emu`
   drives the headless local AVD — install/launch, tap-by-label, screenshots,
-  app-data reset, guest-clock faking for 04:00 day-boundary tests. Prefer it
+  app-data reset, guest-clock faking for midnight day-boundary tests. Prefer it
   over the phone for any manual verification or destructive-flow testing.
 
 ## Device automation (learned the hard way, 2026-09-24)

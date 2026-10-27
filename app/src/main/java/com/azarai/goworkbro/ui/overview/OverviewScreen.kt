@@ -38,7 +38,7 @@ import com.azarai.goworkbro.ui.components.SectionLabel
 import com.azarai.goworkbro.ui.components.SleepDurationChart
 import com.azarai.goworkbro.ui.theme.LocalForestExtras
 
-/** 数据纵览：总专注、今日占比饼图、近七天睡眠时长、底部齿轮（删数据）。 */
+/** Overview page: all-time focus, today's share pie, 7-day sleep, bottom gear (data wipe). */
 @Composable
 fun OverviewScreen(onBack: () -> Unit, onOpenSettings: () -> Unit) {
     val vm: OverviewViewModel = viewModel()

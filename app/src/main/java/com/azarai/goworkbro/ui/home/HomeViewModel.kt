@@ -6,7 +6,6 @@ import androidx.lifecycle.viewModelScope
 import com.azarai.goworkbro.Graph
 import com.azarai.goworkbro.core.CountdownOps
 import com.azarai.goworkbro.core.LogicalDay
-import com.azarai.goworkbro.core.Rollover
 import com.azarai.goworkbro.core.SleepOps
 import com.azarai.goworkbro.core.Store
 import com.azarai.goworkbro.core.Updater
@@ -32,13 +31,11 @@ data class HomeState(
     val habitTotal: Int = 0,
     val waterMl: Int = 0,
     val waterGoal: Int = Store.DEFAULT_WATER_GOAL,
-    val fitnessMin: Int = 0,
-    val fitnessGoal: Int = Store.DEFAULT_FITNESS_GOAL,
     /** Duration of today's total sleep, e.g. "7h 5m". */
     val todaySleepText: String? = null,
     /** Countdown items, for the home tile's live label. */
     val countdowns: List<Countdown> = emptyList(),
-    /** First water preset — what the home tile's one-tap 打卡 logs. */
+    /** First water preset — what the home tile's one-tap "打卡" logs. */
     val quickCupMl: Int = Store.DEFAULT_WATER_CUPS.first(),
     val focusSessions: Int = 0,
     val focusMinutes: Int = 0,
@@ -54,14 +51,13 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     private val logicalKey = LogicalDay.flow.map { it.dateKey }.distinctUntilChanged()
 
     private val waterToday = logicalKey.flatMapLatest { db.waterDao().observeByDate(it) }
-    private val fitnessToday = logicalKey.flatMapLatest { db.fitnessDao().observeByDate(it) }
     private val focusToday = logicalKey.flatMapLatest { db.focusDao().observeDayStats(it) }
 
-    /** Today's sleeps via the fixed-04:00 filing window — NOT the full table
-     *  (home must stay O(today), history grows forever). */
+    /** Sleeps that ended today (the filing rule is the wake day) via a bounded
+     *  SQL window — home must stay O(today), history grows forever. */
     private val sleepToday = logicalKey.flatMapLatest { day ->
         val (from, to) = SleepOps.dayWindow(day)
-        db.sleepDao().observeBetween(from, to)
+        db.sleepDao().observeWakesBetween(from, to)
     }
 
     /** Version dismissed from the banner this session (install reminder). */
@@ -82,14 +78,13 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             sleepToday,
             db.countdownDao().observeAll(),
         ) { sleep, countdowns -> sleep to countdowns },
-        combine(waterToday, fitnessToday, focusToday) { w, f, fo -> Triple(w, f, fo) },
+        combine(waterToday, focusToday) { w, fo -> w to fo },
         combine(
             Graph.store.observe(Store.Keys.WATER_GOAL_ML),
-            Graph.store.observe(Store.Keys.FITNESS_GOAL_MIN),
             Graph.store.observe(Store.Keys.WATER_CUPS),
-        ) { w, f, cups -> Triple(w, f, cups) },
+        ) { w, cups -> w to cups },
         combine(logicalKey, pendingUpdate) { key, pending -> key to pending },
-    ) { (todos, habits), (sleepToday, countdowns), (waterToday, fitnessToday, focusToday), (waterGoalRaw, fitnessGoalRaw, cupsRaw), (logicalKey, pendingUpdate) ->
+    ) { (todos, habits), (sleepToday, countdowns), (waterToday, focusToday), (waterGoalRaw, cupsRaw), (logicalKey, pendingUpdate) ->
         HomeState(
             todoUndone = todos.undone,
             todoTotal = todos.total,
@@ -98,8 +93,6 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             waterMl = waterToday.sumOf { it.ml },
             waterGoal = waterGoalRaw?.toIntOrNull() ?: Store.DEFAULT_WATER_GOAL,
             quickCupMl = Store.parseWaterCups(cupsRaw).firstOrNull() ?: Store.DEFAULT_WATER_CUPS.first(),
-            fitnessMin = fitnessToday.sumOf { it.minutes },
-            fitnessGoal = fitnessGoalRaw?.toIntOrNull() ?: Store.DEFAULT_FITNESS_GOAL,
             todaySleepText = sleepToday.sumOf { it.minutes }
                 .takeIf { it > 0 }?.let { SleepOps.formatDuration(it) },
             countdowns = countdowns,
@@ -120,7 +113,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             db.waterDao().insert(
                 WaterLog(
                     id = UUID.randomUUID().toString(),
-                    logDate = Rollover.logicalToday(Graph.store),
+                    logDate = Dates.todayKey(),
                     ml = ml,
                     loggedAt = Dates.hhmm(java.time.LocalDateTime.now()),
                 ),

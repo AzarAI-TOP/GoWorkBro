@@ -13,12 +13,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         Habit::class,
         SleepRecord::class,
         WaterLog::class,
-        FitnessLog::class,
         FocusLog::class,
         Countdown::class,
         SettingRow::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -26,7 +25,6 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun habitDao(): HabitDao
     abstract fun sleepDao(): SleepDao
     abstract fun waterDao(): WaterDao
-    abstract fun fitnessDao(): FitnessDao
     abstract fun focusDao(): FocusDao
     abstract fun countdownDao(): CountdownDao
     abstract fun maintenanceDao(): MaintenanceDao
@@ -47,7 +45,7 @@ abstract class AppDatabase : RoomDatabase() {
 
         private fun build(context: Context, name: String): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, name)
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 .fallbackToDestructiveMigration()
                 .fallbackToDestructiveMigrationOnDowngrade()
                 .build()
@@ -117,10 +115,19 @@ abstract class AppDatabase : RoomDatabase() {
 
         /** v6 stamps finished todos with the logical day they were completed
          *  on, so the list can hide anything older than today. Existing done
-         *  rows get "" (= un-dated history, shown under 更早完成). */
+         *  rows get "" (= un-dated history, shown under "更早完成"). */
         private val MIGRATION_5_6 = object : Migration(5, 6) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `todos` ADD COLUMN `done_date` TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        /** v7 drops the fitness module: the page was removed and the user
+         *  agreed to lose the rows (exercise is just another habit now).
+         *  Every other table is untouched. */
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP TABLE IF EXISTS `fitness_logs`")
             }
         }
 

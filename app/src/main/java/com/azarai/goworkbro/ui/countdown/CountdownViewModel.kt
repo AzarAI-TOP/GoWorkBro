@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-/** 倒计时页:条目流 + 每秒一个 tick(让剩余时间真的在走)。 */
+/** Countdown page state: the item flow plus a 1s tick so the remaining time actually moves. */
 class CountdownViewModel : ViewModel() {
 
     val items: StateFlow<List<Countdown>> = Graph.db.countdownDao().observeAll()

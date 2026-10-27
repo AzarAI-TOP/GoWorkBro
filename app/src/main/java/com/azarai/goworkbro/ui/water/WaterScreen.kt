@@ -38,7 +38,7 @@ import com.azarai.goworkbro.ui.components.rememberTick
 import com.azarai.goworkbro.ui.components.WeekBars
 import com.azarai.goworkbro.ui.theme.LocalForestExtras
 
-/** 喝水打卡页：目标、快捷杯、自定义、今日记录、近 7 天。 */
+/** Water page: goal, quick cups, custom amount, today's log, 7-day chart. */
 @Composable
 fun WaterScreen(onBack: () -> Unit) {
     val vm: WaterViewModel = viewModel()

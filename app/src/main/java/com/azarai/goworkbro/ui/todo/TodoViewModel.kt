@@ -4,10 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.azarai.goworkbro.Graph
 import com.azarai.goworkbro.core.LogicalDay
-import com.azarai.goworkbro.core.Rollover
 import com.azarai.goworkbro.core.db.TimingType
 import com.azarai.goworkbro.core.db.Todo
 import com.azarai.goworkbro.core.util.Dates
+import com.azarai.goworkbro.core.util.Ordering
 import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -22,16 +22,26 @@ import kotlinx.coroutines.launch
 /**
  * What the todo page renders. Finished work is split by the logical day it was
  * completed on: today's stays visible, everything older folds away behind the
- * 更早完成 row. Nothing is deleted — the page just cleans itself every day.
+ * "更早完成" row. Nothing is deleted — the page just cleans itself every day.
  */
 data class TodoListState(
     val undone: List<Todo> = emptyList(),
     val doneToday: List<Todo> = emptyList(),
     val olderDone: List<Todo> = emptyList(),
-    /** All completions from previous days — drives the 更早完成 row. */
+    /** All completions from previous days — drives the "更早完成" row. */
     val olderDoneTotal: Int = 0,
     val showOlder: Boolean = false,
-)
+) {
+    /**
+     * Room re-runs `observeUndone` and `observeDoneOn` independently, so right
+     * after a completion one frame can carry the same todo in BOTH lists — a
+     * duplicate lazy key that crashes the grid. The completed row wins.
+     */
+    fun withoutDuplicates(): TodoListState {
+        val done = (doneToday + olderDone).mapTo(HashSet()) { it.id }
+        return if (done.isEmpty()) this else copy(undone = undone.filterNot { it.id in done })
+    }
+}
 
 class TodoViewModel : ViewModel() {
     private val dao = Graph.db.todoDao()
@@ -66,6 +76,7 @@ class TodoViewModel : ViewModel() {
                 }
             }
         }
+        .map { it.withoutDuplicates() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TodoListState())
 
     fun toggleOlder() {
@@ -132,9 +143,22 @@ class TodoViewModel : ViewModel() {
         viewModelScope.launch { dao.upsert(stamped(todo, done)) }
     }
 
+    /**
+     * Persists a drag-reordered list of OPEN todos (the only sortable section
+     * — finished work stays in completion order). [ids] comes from the local,
+     * on-screen order; a stale id set is ignored and left to the next DB emit.
+     */
+    fun reorder(ids: List<String>) {
+        val ordered = Ordering.byId(state.value.undone, ids) { it.id } ?: return
+        val ranks = Ordering.rankOrders(ordered.size)
+        viewModelScope.launch {
+            dao.updateAll(ordered.mapIndexed { index, todo -> todo.copy(sortOrder = ranks[index]) })
+        }
+    }
+
     /** Completion always stamps the logical day, reopening clears it. */
     private suspend fun stamped(todo: Todo, done: Boolean): Todo = todo.copy(
         isDone = done,
-        doneDate = if (done) Rollover.logicalToday(Graph.store) else "",
+        doneDate = if (done) Dates.todayKey() else "",
     )
 }

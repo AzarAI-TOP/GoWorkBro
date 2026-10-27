@@ -6,8 +6,6 @@ import java.time.format.DateTimeFormatter
 
 /** Date helpers. All date keys are local-time `yyyy-MM-dd` strings. */
 object Dates {
-    const val LATE_NIGHT_BOUNDARY_HOUR = 4
-    const val SLEEP_ROW_CUTOFF_HOUR = 12
 
     private val KEY: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
     private val HHMM: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
@@ -19,23 +17,6 @@ object Dates {
     fun todayKey(clock: LocalDateTime = LocalDateTime.now()): String = dateKeyOf(clock)
 
     fun parseKey(key: String): LocalDate = LocalDate.parse(key)
-
-    /**
-     * The date bucket used by daily app data. In late-night mode, activity
-     * between midnight and 4 AM stays on the previous day. The boundary is
-     * fixed in time — a day that has already rolled over never moves back.
-     */
-    fun logicalDateKey(
-        now: LocalDateTime,
-        lateNightModeEnabled: Boolean,
-        lastRolloverDate: String,
-    ): String {
-        val calendarDate = dateKeyOf(now)
-        val canCarryOver = lateNightModeEnabled &&
-            now.hour < LATE_NIGHT_BOUNDARY_HOUR &&
-            lastRolloverDate != calendarDate
-        return if (canCarryOver) dateKeyOf(now.minusDays(1)) else calendarDate
-    }
 
     /** Parses `HH:mm` into decimal hours (e.g. "23:29" -> 23.4833…). */
     fun hoursFromTime(value: String?): Double? {

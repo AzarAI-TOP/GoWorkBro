@@ -37,7 +37,6 @@ class StoreTest {
     fun defaults() = runBlocking {
         val store = Store(db.settingsDao())
         assertEquals(Store.DEFAULT_WATER_GOAL, store.waterGoalMl())
-        assertEquals(Store.DEFAULT_FITNESS_GOAL, store.fitnessGoalMin())
         assertEquals(Store.DEFAULT_WATER_CUPS, store.waterCups())
     }
 

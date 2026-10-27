@@ -9,7 +9,6 @@ import com.azarai.goworkbro.Graph
 import com.azarai.goworkbro.core.db.AppDatabase
 import com.azarai.goworkbro.core.db.Countdown
 import com.azarai.goworkbro.core.db.FocusLog
-import com.azarai.goworkbro.core.db.FitnessLog
 import com.azarai.goworkbro.core.db.Habit
 import com.azarai.goworkbro.core.db.SettingRow
 import com.azarai.goworkbro.core.db.SleepRecord
@@ -38,13 +37,12 @@ object Backup {
         val todos: Int,
         val habits: Int,
         val waterLogs: Int,
-        val fitnessLogs: Int,
         val sleepRecords: Int,
         val countdowns: Int,
         val focusLogs: Int,
         val settings: Int,
     ) {
-        val total: Int get() = todos + habits + waterLogs + fitnessLogs +
+        val total: Int get() = todos + habits + waterLogs +
             sleepRecords + countdowns + focusLogs + settings
     }
 
@@ -54,7 +52,6 @@ object Backup {
         put("todos", JSONArray(db.todoDao().getAll().map(::todoJson)))
         put("habits", JSONArray(db.habitDao().getAll().map(::habitJson)))
         put("water_logs", JSONArray(db.waterDao().getAll().map(::waterJson)))
-        put("fitness_logs", JSONArray(db.fitnessDao().getAll().map(::fitnessJson)))
         put("sleep_records", JSONArray(db.sleepDao().getAll().map(::sleepJson)))
         put("countdowns", JSONArray(db.countdownDao().getAll().map(::countdownJson)))
         put("focus_logs", JSONArray(db.focusDao().getAll().map(::focusJson)))
@@ -69,7 +66,6 @@ object Backup {
         val todos = root.optJSONArray("todos").orEmpty().mapNotNull(::todoOf)
         val habits = root.optJSONArray("habits").orEmpty().mapNotNull(::habitOf)
         val water = root.optJSONArray("water_logs").orEmpty().mapNotNull(::waterOf)
-        val fitness = root.optJSONArray("fitness_logs").orEmpty().mapNotNull(::fitnessOf)
         val sleep = root.optJSONArray("sleep_records").orEmpty().mapNotNull(::sleepOf)
         val countdowns = root.optJSONArray("countdowns").orEmpty().mapNotNull(::countdownOf)
         val focus = root.optJSONArray("focus_logs").orEmpty().mapNotNull(::focusOf)
@@ -80,7 +76,6 @@ object Backup {
             m.clearTodos()
             m.clearHabits()
             m.clearWaterLogs()
-            m.clearFitnessLogs()
             m.clearSleepRecords()
             m.clearCountdowns()
             m.clearFocusLogs()
@@ -88,7 +83,6 @@ object Backup {
             db.todoDao().insertAll(todos)
             db.habitDao().insertAll(habits)
             db.waterDao().insertAll(water)
-            db.fitnessDao().insertAll(fitness)
             db.sleepDao().insertAll(sleep)
             db.countdownDao().insertAll(countdowns)
             db.focusDao().insertAll(focus)
@@ -98,7 +92,6 @@ object Backup {
             todos = todos.size,
             habits = habits.size,
             waterLogs = water.size,
-            fitnessLogs = fitness.size,
             sleepRecords = sleep.size,
             countdowns = countdowns.size,
             focusLogs = focus.size,
@@ -109,7 +102,7 @@ object Backup {
     /**
      * Silent snapshot into PUBLIC Downloads (Download/GoWorkBro/…) — survives
      * even an uninstall-reinstall. Called before every update install; no-op
-     * below API 29 (no MediaStore Downloads there; use 设置 → 导出数据 instead).
+     * below API 29 (no MediaStore Downloads there; use "设置 → 导出数据" instead).
      * Best-effort: a failed snapshot never blocks the install.
      */
     suspend fun snapshotToDownloads(context: Context): Boolean {
@@ -192,19 +185,6 @@ object Backup {
             id = o.optString("id"),
             logDate = o.optString("log_date"),
             ml = o.optInt("ml", 0),
-            loggedAt = o.optString("logged_at"),
-        )
-    }
-
-    private fun fitnessJson(f: FitnessLog) = JSONObject()
-        .put("id", f.id).put("log_date", f.logDate).put("minutes", f.minutes).put("logged_at", f.loggedAt)
-
-    private fun fitnessOf(o: JSONObject): FitnessLog? {
-        if (o.optString("id").isBlank()) return null
-        return FitnessLog(
-            id = o.optString("id"),
-            logDate = o.optString("log_date"),
-            minutes = o.optInt("minutes", 0),
             loggedAt = o.optString("logged_at"),
         )
     }

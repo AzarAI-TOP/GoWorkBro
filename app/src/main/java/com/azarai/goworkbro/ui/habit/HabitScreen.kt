@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -52,6 +53,8 @@ import com.azarai.goworkbro.ui.components.randomColorIndex
 import com.azarai.goworkbro.ui.components.CuteTopBar
 import com.azarai.goworkbro.ui.components.EmptyHint
 import com.azarai.goworkbro.ui.components.IconPicker
+import com.azarai.goworkbro.ui.components.rememberDragSort
+import com.azarai.goworkbro.ui.components.rememberTick
 import com.azarai.goworkbro.ui.theme.LocalForestExtras
 
 /** Habit detail page: two-column grid of cute cards, tap = +1. */
@@ -60,6 +63,14 @@ fun HabitScreen(onBack: () -> Unit) {
     val vm: HabitViewModel = viewModel()
     val habits by vm.habits.collectAsState()
     var editing by remember { mutableStateOf<EditingHabit?>(null) }
+    val gridState = rememberLazyGridState()
+    val sort = rememberDragSort(
+        gridState = gridState,
+        items = habits,
+        idOf = { it.id },
+        onReorder = vm::reorder,
+        haptics = rememberTick(),
+    )
 
     Column(Modifier.fillMaxSize()) {
         CuteTopBar(
@@ -79,13 +90,14 @@ fun HabitScreen(onBack: () -> Unit) {
             }
         } else {
             LazyVerticalGrid(
+                state = gridState,
                 columns = GridCells.Fixed(2),
                 contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                items(habits, key = { it.id }) { habit ->
+                items(sort.items, key = { it.id }) { habit ->
                     CuteItemCard(
                         title = habit.title,
                         icon = habit.icon,
@@ -94,8 +106,11 @@ fun HabitScreen(onBack: () -> Unit) {
                         status = "${habit.currentCount}/${habit.targetCount} ${habit.unit}" +
                             if (habit.isCompleted) " ✓" else "",
                         onAction = { vm.checkIn(habit) },
-                        onEdit = { editing = EditingHabit(habit) },
                         onMore = { editing = EditingHabit(habit) },
+                        modifier = Modifier
+                            .then(if (sort.draggingKey == habit.id) Modifier else Modifier.animateItem())
+                            .then(sort.cardModifier(habit.id)),
+                        gestureModifier = sort.gestureModifier(habit.id),
                     )
                 }
             }

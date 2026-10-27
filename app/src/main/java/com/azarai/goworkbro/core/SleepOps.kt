@@ -4,47 +4,40 @@ import com.azarai.goworkbro.Graph
 import com.azarai.goworkbro.core.db.SleepRecord
 import com.azarai.goworkbro.core.util.Dates
 import java.time.LocalDateTime
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 /**
  * Statistics over the one-row-per-sleep records.
  *
- * v3.3 semantics: a record is just A SLEEP — a nap and a night are the same
- * kind of thing, and a day can hold any number of them. A record is filed
- * under the logical day it STARTED on (a bedtime between 00:00 and 04:00
- * still belongs to the previous evening); all stats are per-day TOTALS.
+ * A record is just A SLEEP — a nap and a night are the same kind of thing,
+ * and a day can hold any number of them. A record is filed under the calendar
+ * day it ENDED on, so the morning after a 23:00–07:00 night the day's total
+ * already reads 8h instead of nothing; all stats are per-day TOTALS.
  */
 object SleepOps {
 
-    /** Days whose total meets this count as 达标. */
+    /** Days whose total meets this count as "达标" (target met). */
     const val TARGET_MINUTES = 7 * 60
 
-    /** The logical day a record is filed under (see class doc). */
-    fun dailyKeyOf(record: SleepRecord): String {
-        val sleep = record.sleep
-        val day = if (sleep.hour < Dates.LATE_NIGHT_BOUNDARY_HOUR) {
-            sleep.toLocalDate().minusDays(1)
-        } else {
-            sleep.toLocalDate()
-        }
-        return Dates.dateKeyOf(day)
-    }
+    /** The day a record is filed under: the calendar day the sleeper woke up. */
+    fun dailyKeyOf(record: SleepRecord): String = Dates.dateKeyOf(record.wake)
 
     /** Total minutes slept on [day] (all records that started on it). */
     fun dailyMinutes(records: List<SleepRecord>, day: String): Int =
         records.filter { dailyKeyOf(it) == day }.sumOf { it.minutes }
 
-    /** ISO `[start, end)` window capturing exactly the records
-     *  [dailyKeyOf] files under [day] — the SQL twin of [dailyMinutes]. */
+    /** ISO `[start, end)` WAKE-time window capturing exactly the records
+     *  [dailyKeyOf] files under [day] — the SQL twin of [dailyMinutes]
+     *  (queries must filter `wake_at`, not `sleep_at`). */
     fun dayWindow(day: String): Pair<String, String> {
         val d = Dates.parseKey(day)
-        val start = d.atTime(Dates.LATE_NIGHT_BOUNDARY_HOUR, 0)
-        val end = d.plusDays(1).atTime(Dates.LATE_NIGHT_BOUNDARY_HOUR, 0)
-        return Dates.isoDateTime(start) to Dates.isoDateTime(end)
+        return Dates.isoDateTime(d.atStartOfDay()) to
+            Dates.isoDateTime(d.plusDays(1).atStartOfDay())
     }
 
-    /** ISO lower bound covering [daysBack] days of history ending at [day]'s
-     *  window — caps the stats page at a bounded, evergreen record set. */
+    /** ISO lower WAKE-time bound covering [HISTORY_DAYS] days of history — caps
+     *  the stats page at a bounded, evergreen record set. */
     const val HISTORY_DAYS = 370
 
     fun historySince(day: String): String =
@@ -52,7 +45,7 @@ object SleepOps {
 
     /** The records of [day], newest first. */
     fun recordsOfDay(records: List<SleepRecord>, day: String): List<SleepRecord> =
-        records.filter { dailyKeyOf(it) == day }.sortedByDescending { it.sleep }
+        records.filter { dailyKeyOf(it) == day }.sortedByDescending { it.wake }
 
     /**
      * Consecutive days (walking back from [today]) whose TOTAL met the 7h
@@ -99,6 +92,21 @@ object SleepOps {
 
     /** "M月d日" for the light date labels under the record wheels. */
     fun dateLabel(at: LocalDateTime): String = "${at.monthValue}月${at.dayOfMonth}日"
+
+    /**
+     * Same label with a "今天 / 昨天 / 前天" prefix, so the sleep wheel says
+     * *which* day the user just scrolled to instead of forcing date math.
+     */
+    fun relativeDateLabel(at: LocalDateTime, now: LocalDateTime = LocalDateTime.now()): String {
+        val days = ChronoUnit.DAYS.between(at.toLocalDate(), now.toLocalDate())
+        val head = when (days) {
+            0L -> "今天"
+            1L -> "昨天"
+            2L -> "前天"
+            else -> null
+        }
+        return if (head == null) dateLabel(at) else "$head · ${dateLabel(at)}"
+    }
 
     /**
      * Round DOWN to a 15-minute step. Down on purpose: computed wheel bounds

@@ -46,7 +46,7 @@ import com.azarai.goworkbro.ui.components.rememberTick
 import com.azarai.goworkbro.ui.theme.LocalForestExtras
 import java.time.LocalDateTime
 
-/** 睡眠记录页：hero（今天合计）+ 统计 + 近 7 天 + 两步滚轮记录弹窗。 */
+/** Sleep page: hero (today's total) + stats + 7-day chart + the two-step record sheet. */
 @Composable
 fun SleepScreen(
     onBack: () -> Unit,
@@ -268,11 +268,12 @@ private fun SleepRecordSheet(
     }
 }
 
-/** 浅色居中日期：滚轮滚过 00:00 它自动跳到次日。 */
+/** Light centred date under a wheel: "今天/昨天/前天" prefix, and it crosses
+ *  midnight by itself as the wheel rolls. */
 @Composable
 private fun LightDateLabel(at: LocalDateTime) {
     Text(
-        SleepOps.dateLabel(at),
+        SleepOps.relativeDateLabel(at),
         style = MaterialTheme.typography.bodyMedium,
         color = LocalForestExtras.current.textSecondary,
         modifier = Modifier.padding(top = 10.dp, bottom = 4.dp),

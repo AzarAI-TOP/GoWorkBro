@@ -3,8 +3,8 @@ package com.azarai.goworkbro
 import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.azarai.goworkbro.core.Rollover
 import com.azarai.goworkbro.core.Store
+import com.azarai.goworkbro.core.util.Dates
 import com.azarai.goworkbro.ui.home.HomeState
 import com.azarai.goworkbro.ui.home.HomeViewModel
 import kotlinx.coroutines.CoroutineScope
@@ -22,7 +22,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.SQLiteMode
 
 /**
- * The home grid's one-tap water log. The nested 打卡 button cannot be clicked
+ * The home grid's one-tap water log. The nested "打卡" button cannot be clicked
  * through Compose semantics (see AGENTS.md "Device automation"), so the path
  * is covered here through the ViewModel instead.
  */
@@ -38,7 +38,7 @@ class HomeQuickLogTest {
     }
 
     private fun todayRows() = runBlocking {
-        Graph.db.waterDao().observeByDate(Rollover.logicalToday(Graph.store)).first()
+        Graph.db.waterDao().observeByDate(Dates.todayKey()).first()
     }
 
     @Test

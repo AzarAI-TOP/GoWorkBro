@@ -9,10 +9,10 @@ import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -68,7 +68,7 @@ class AppSmokeTest {
     @Test
     fun homeShowsAllModules() {
         homeReady()
-        listOf("待办", "习惯", "喝水", "健身", "倒计时", "睡眠").forEach {
+        listOf("待办", "习惯", "喝水", "倒计时", "睡眠").forEach {
             assertTrue("missing module card: $it", exists(it))
         }
     }
@@ -160,16 +160,40 @@ class AppSmokeTest {
         rule.onAllNodesWithContentDescription("返回").onFirst().performClick()
         rule.waitUntil(10_000) { hasDesc("添加") }
 
-        // long-press -> edit dialog -> 标记完成 (the only way to close a timed todo)
-        rule.onAllNodesWithText("Read").onFirst().performTouchInput { longClick() }
+        // the ⋯ chip is the only way into the editor (long-press now sorts)
+        rule.onAllNodesWithContentDescription("编辑 Read").onFirst().performClick()
         rule.waitUntil(10_000) { exists("标记完成") }
         rule.onNodeWithText("标记完成").performClick()
         rule.waitUntil(10_000) { exists("已完成") }
 
-        // a finished todo is history: no delete affordance, only 标记未完成
-        rule.onAllNodesWithText("Read").onFirst().performTouchInput { longClick() }
+        // a finished todo is history: no delete affordance, only "标记未完成"
+        rule.onAllNodesWithContentDescription("编辑 Read").onFirst().performClick()
         rule.waitUntil(10_000) { exists("标记未完成") }
         assertTrue(rule.onAllNodesWithText("删除").fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun longPressStartsADragNotTheEditor() {
+        homeReady()
+        rule.onAllNodesWithText("待办").onFirst().performClick()
+        rule.waitUntil(10_000) { hasDesc("添加") }
+        rule.onNodeWithContentDescription("添加").performClick()
+        rule.waitUntil(10_000) { exists("新待办") }
+        rule.onNode(hasSetTextAction()).performTextInput("Drag")
+        rule.onNodeWithText("保存").performClick()
+        rule.waitUntil(10_000) { exists("Drag") }
+
+        // long-press starts a drag now — it must not pop the editor sheet, and
+        // a press without movement must not leave anything else behind (the
+        // ⋯-chip editor path is covered by the countdown flow; nested
+        // clickables are not clickable under Robolectric, see AGENTS.md)
+        rule.onAllNodesWithText("Drag").onFirst().performTouchInput { longClick() }
+        rule.waitForIdle()
+        assertTrue(rule.onAllNodesWithText("编辑待办").fetchSemanticsNodes().isEmpty())
+        assertTrue(rule.onAllNodesWithText("标记完成").fetchSemanticsNodes().isEmpty())
+        // lifting a card must not also tap it
+        assertTrue(exists("Drag"))
+        assertTrue(exists("待完成"))
     }
 
     @Test
@@ -235,16 +259,6 @@ class AppSmokeTest {
         assertTrue(exists("今日目标达成啦 🎉") || hasSub("还差"))
         back()
 
-        open("健身")
-        rule.waitUntil(5_000) { exists("运动计时") && exists("今日记录") && exists("近 7 天") }
-        assertTrue(exists("开始运动"))
-        // start and finish inside a minute: the workout is discarded, not logged
-        rule.onNodeWithText("开始运动").performClick()
-        rule.waitUntil(5_000) { exists("结束并记录") }
-        rule.onNodeWithText("结束并记录").performClick()
-        rule.waitUntil(5_000) { exists("开始运动") }
-        back()
-
         open("倒计时")
         rule.waitUntil(5_000) { exists("倒计时") }
         assertTrue(exists("加一个倒计时，掐着秒等它到"))
@@ -258,7 +272,7 @@ class AppSmokeTest {
         rule.onNodeWithContentDescription("数据纵览").performClick()
         rule.waitUntil(5_000) { exists("今日专注时间占比") && exists("近七天睡眠时长") }
         rule.onNodeWithContentDescription("设置").performScrollTo().performClick()
-        rule.waitUntil(5_000) { exists("熬夜模式") && exists("删除应用数据") }
+        rule.waitUntil(5_000) { exists("删除应用数据") }
         back()
         rule.waitUntil(5_000) { exists("今日专注时间占比") }
         back(scrollable = true)

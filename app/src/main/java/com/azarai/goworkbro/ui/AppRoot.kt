@@ -30,7 +30,6 @@ import com.azarai.goworkbro.core.LogicalDay
 import com.azarai.goworkbro.core.Rollover
 import com.azarai.goworkbro.core.ShortcutActions
 import com.azarai.goworkbro.core.Updater
-import com.azarai.goworkbro.ui.fitness.FitnessScreen
 import com.azarai.goworkbro.ui.habit.HabitScreen
 import com.azarai.goworkbro.ui.home.HomeScreen
 import com.azarai.goworkbro.ui.overview.OverviewScreen
@@ -50,7 +49,6 @@ object Routes {
     const val TODOS = "todos"
     const val HABITS = "habits"
     const val WATER = "water"
-    const val FITNESS = "fitness"
     const val SLEEP = "sleep"
     const val COUNTDOWN = "countdown"
     const val OVERVIEW = "overview"
@@ -109,8 +107,11 @@ fun AppRoot(
 
         // A round that ends while the focus page is open drops the user on the
         // todo list; otherwise the page stays put (the home mini-card just goes).
-        LaunchedEffect(activeTimer, showTimer) {
-            if (showTimer && activeTimer == null) {
+        // Keyed on the TIMER ONLY: showTimer flips a frame before the StateFlow's
+        // value reaches composition, and keying on it would close the page it
+        // just opened.
+        LaunchedEffect(activeTimer) {
+            if (activeTimer == null && showTimer) {
                 showTimer = false
                 if (stack.last() != Routes.TODOS) stack = listOf(Routes.HOME, Routes.TODOS)
             }
@@ -163,7 +164,6 @@ fun AppRoot(
                     )
                     Routes.HABITS -> HabitScreen(onBack = back)
                     Routes.WATER -> WaterScreen(onBack = back)
-                    Routes.FITNESS -> FitnessScreen(onBack = back)
                     Routes.SLEEP -> SleepScreen(
                         onBack = back,
                         autoOpenRecord = pendingAutoRecord,
@@ -179,11 +179,6 @@ fun AppRoot(
                         openRoute = open,
                         onOpenActiveTimer = { showTimer = true },
                         onOpenOverview = { open(Routes.OVERVIEW) },
-                        onOpenSettings = { open(Routes.SETTINGS) },
-                        onRecordSleep = {
-                            open(Routes.SLEEP)
-                            pendingAutoRecord = true
-                        },
                         onSproutMeasured = { sproutCenter = it },
                     )
                 }

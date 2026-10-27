@@ -12,7 +12,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.azarai.goworkbro.core.Rollover
 import com.azarai.goworkbro.core.db.FocusLog
 import com.azarai.goworkbro.core.db.Todo
 import com.azarai.goworkbro.core.util.Dates
@@ -63,7 +62,7 @@ class OverviewFlowTest {
         val todo = Todo(id = "seed-1", title = "数学", icon = "book", colorIndex = 2, timingType = "forward")
         runBlocking {
             // the app keys focus stats by the late-night logical day
-            val today = Rollover.logicalToday(Graph.store)
+            val today = Dates.todayKey()
             Graph.db.todoDao().upsert(todo)
             Graph.db.focusDao().insert(FocusLog("f1", todo.id, today, 25))
             Graph.db.focusDao().insert(FocusLog("f2", todo.id, today, 20))
@@ -92,10 +91,10 @@ class OverviewFlowTest {
         rule.waitUntil(15_000) { hasSub("100%") } // the seeded todo owns all of today's focus
         assertTrue(exists("近七天睡眠时长"))
 
-        // gear -> settings page -> 删除应用数据 -> pick types -> confirm
+        // gear -> settings page -> "删除应用数据" -> pick types -> confirm
         rule.onNodeWithContentDescription("设置").performScrollTo().performClick()
         rule.waitUntil(10_000) { exists("设置") && exists("删除应用数据") }
-        // the backup rows pushed 删除应用数据 below Robolectric's 470dp fold
+        // the backup rows pushed "删除应用数据" below Robolectric's 470dp fold
         rule.onNodeWithText("删除应用数据").performScrollTo().performClick()
         rule.waitUntil(10_000) { exists("待办（含专注记录）") }
         rule.onNodeWithText("待办（含专注记录）").performClick()
@@ -103,8 +102,8 @@ class OverviewFlowTest {
         rule.waitUntil(10_000) { exists("确认删除？") }
         rule.onNodeWithText("删除").performClick()
 
-        // back to the overview — scroll back up first: reaching 删除应用数据
-        // scrolled the top bar (and its 返回 button) out of the small viewport
+        // back to the overview — scroll back up first: reaching "删除应用数据"
+        // scrolled the top bar (and its "返回" button) out of the small viewport
         rule.onAllNodesWithContentDescription("返回").onFirst().performScrollTo().performClick()
         rule.waitUntil(10_000) { exists("今天还没有专注记录") }
 

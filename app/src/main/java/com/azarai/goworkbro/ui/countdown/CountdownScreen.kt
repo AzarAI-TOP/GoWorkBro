@@ -52,7 +52,7 @@ import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
 
-/** 倒计时页：条目列表 + 添加/编辑（标题 + 日期 + 时间）。 */
+/** Countdown page: the item list plus add/edit (title + date + time). */
 @Composable
 fun CountdownScreen(onBack: () -> Unit) {
     val vm: CountdownViewModel = viewModel()

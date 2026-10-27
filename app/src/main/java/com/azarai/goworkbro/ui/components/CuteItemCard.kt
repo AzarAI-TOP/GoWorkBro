@@ -44,8 +44,9 @@ import com.azarai.goworkbro.ui.theme.LocalForestExtras
 /**
  * The cute two-column item card shared by the Todo and Habit pages:
  * a rounded rectangle with one big circular cartoon icon (diameter ~80% of
- * the card width) and a title underneath. Tap = primary action
- * (start / check in), long-press = edit.
+ * the card width) and a title underneath. Tap = primary action (start /
+ * check in), long-press = drag to sort (see [GridReorder]), and the `⋯` chip
+ * is the only way into the editor.
  */
 @Composable
 fun CuteItemCard(
@@ -54,19 +55,22 @@ fun CuteItemCard(
     colorIndex: Int,
     done: Boolean,
     onAction: () -> Unit,
-    onEdit: () -> Unit,
     status: String? = null,
     strikeTitle: Boolean = false,
     onMore: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+    /** Drag gesture for the long-press sorter; applied inside the click handler
+     *  so it can swallow a release that must not count as a tap. */
+    gestureModifier: Modifier = Modifier,
 ) {
     val extras = LocalForestExtras.current
     val tick = rememberTick()
     CuteCard(
         onClick = { tick(); onAction() },
-        onLongClick = onEdit,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .aspectRatio(0.84f),
+        gestureModifier = gestureModifier,
         contentPadding = androidx.compose.foundation.layout.PaddingValues(10.dp),
     ) {
         Column(Modifier.fillMaxSize()) {

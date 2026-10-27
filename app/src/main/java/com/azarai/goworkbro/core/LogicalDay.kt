@@ -1,6 +1,5 @@
 package com.azarai.goworkbro.core
 
-import com.azarai.goworkbro.Graph
 import com.azarai.goworkbro.core.util.Dates
 import java.time.Duration
 import java.time.LocalDateTime
@@ -27,10 +26,9 @@ data class LogicalDayInfo(
 
 /**
  * Single source of truth for "which day is it". Emits the current logical day,
- * re-emits on [notifyResumed] (app foreground, late-night setting changed) and
- * again by itself the moment the day boundary passes — so screens no longer
- * thread a refresh counter around and rollovers happen even if the app stays
- * open across 04:00.
+ * re-emits on [notifyResumed] (app foreground) and again by itself the moment
+ * midnight passes — so screens no longer thread a refresh counter around and
+ * rollovers happen even if the app stays open across 00:00.
  */
 object LogicalDay {
 
@@ -60,23 +58,15 @@ object LogicalDay {
     }
 
     /** One-shot read for non-reactive callers. */
-    suspend fun current(): LogicalDayInfo = compute()
+    fun current(): LogicalDayInfo = compute()
 
-    private suspend fun compute(): LogicalDayInfo {
-        val store = Graph.store
-        val lateNight = store.get(Store.Keys.LATE_NIGHT_MODE) != "false"
-        val dateKey = Rollover.logicalToday(store)
+    private fun compute(): LogicalDayInfo {
+        val dateKey = Dates.todayKey()
         val day = Dates.parseKey(dateKey)
-        val start = if (lateNight) {
-            day.atTime(Dates.LATE_NIGHT_BOUNDARY_HOUR, 0)
-        } else {
-            day.atStartOfDay()
-        }
-        val next = if (lateNight) {
-            day.plusDays(1).atTime(Dates.LATE_NIGHT_BOUNDARY_HOUR, 0)
-        } else {
-            day.plusDays(1).atStartOfDay()
-        }
-        return LogicalDayInfo(dateKey, start, next)
+        return LogicalDayInfo(
+            dateKey = dateKey,
+            start = day.atStartOfDay(),
+            nextBoundary = day.plusDays(1).atStartOfDay(),
+        )
     }
 }

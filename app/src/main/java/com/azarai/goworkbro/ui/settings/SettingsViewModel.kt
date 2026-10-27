@@ -23,24 +23,11 @@ enum class DataKind(val label: String) {
     TODOS("待办（含专注记录）"),
     HABITS("习惯"),
     WATER("喝水记录"),
-    FITNESS("健身记录"),
     SLEEP("睡眠记录"),
     COUNTDOWNS("倒计时"),
 }
 
 class SettingsViewModel(app: Application) : AndroidViewModel(app) {
-
-    /** Late-night mode: check-ins between 00:00 and 04:00 count as yesterday. */
-    val lateNight: StateFlow<Boolean> = Graph.store.observe(Store.Keys.LATE_NIGHT_MODE)
-        .map { it != "false" }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
-
-    fun setLateNight(enabled: Boolean) {
-        viewModelScope.launch {
-            Graph.store.set(Store.Keys.LATE_NIGHT_MODE, enabled.toString())
-            LogicalDay.notifyResumed()
-        }
-    }
 
     /** Auto-update: check GitHub for new releases on app start, download them. */
     val autoUpdate: StateFlow<Boolean> = Graph.store.observe(Store.Keys.AUTO_UPDATE)
@@ -72,7 +59,6 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     DataKind.HABITS -> dao.clearHabits()
                     DataKind.WATER -> dao.clearWaterLogs()
-                    DataKind.FITNESS -> dao.clearFitnessLogs()
                     DataKind.SLEEP -> dao.clearSleepRecords()
                     DataKind.COUNTDOWNS -> dao.clearCountdowns()
                 }

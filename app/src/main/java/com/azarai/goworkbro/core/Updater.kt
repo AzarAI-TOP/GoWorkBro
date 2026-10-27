@@ -126,7 +126,7 @@ object Updater {
 
     /**
      * Auto path (app start / foreground): throttled to one check per day and
-     * only when the 自动更新 switch is on. Finds something newer → starts the
+     * only when the "自动更新" switch is on. Finds something newer → starts the
      * download quietly. Never runs under Robolectric so unit tests stay
      * hermetic (the JVM would happily hit the real API).
      */

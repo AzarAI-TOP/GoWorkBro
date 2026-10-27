@@ -5,7 +5,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.azarai.goworkbro.Graph
 import com.azarai.goworkbro.core.LogicalDay
-import com.azarai.goworkbro.core.Rollover
 import com.azarai.goworkbro.core.Store
 import com.azarai.goworkbro.core.db.WaterLog
 import com.azarai.goworkbro.core.util.Dates
@@ -67,7 +66,7 @@ class WaterViewModel(app: Application) : AndroidViewModel(app) {
     fun drink(ml: Int) {
         if (ml <= 0) return
         viewModelScope.launch {
-            val key = Rollover.logicalToday(Graph.store)
+            val key = Dates.todayKey()
             db.waterDao().insert(
                 WaterLog(
                     id = UUID.randomUUID().toString(),

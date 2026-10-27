@@ -48,12 +48,11 @@ import com.azarai.goworkbro.core.Updater
 import com.azarai.goworkbro.ui.components.CuteTopBar
 import com.azarai.goworkbro.ui.theme.LocalForestExtras
 
-/** Settings page: updates, late-night mode, backup and the data wipe. */
+/** Settings page: updates, backup and the data wipe. */
 @Composable
 fun SettingsScreen(onBack: () -> Unit) {
     val vm: SettingsViewModel = viewModel()
     val extras = LocalForestExtras.current
-    val lateNight by vm.lateNight.collectAsState()
     val autoUpdate by vm.autoUpdate.collectAsState()
     var showDelete by remember { mutableStateOf(false) }
     var showImportConfirm by remember { mutableStateOf(false) }
@@ -90,13 +89,6 @@ fun SettingsScreen(onBack: () -> Unit) {
             onClick = { vm.checkNow() },
         )
         InfoRow(title = "当前版本", value = "v$version")
-        Spacer(Modifier.size(10.dp))
-        SettingSwitchRow(
-            title = "熬夜模式",
-            subtitle = "0 点到 4 点的打卡算作前一天",
-            checked = lateNight,
-            onCheckedChange = { vm.setLateNight(it) },
-        )
         Spacer(Modifier.size(10.dp))
         SettingRow(
             title = "导出数据",

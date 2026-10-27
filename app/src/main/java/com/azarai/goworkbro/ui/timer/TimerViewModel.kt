@@ -4,9 +4,9 @@ import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.azarai.goworkbro.Graph
-import com.azarai.goworkbro.core.Rollover
 import com.azarai.goworkbro.core.db.FocusLog
 import com.azarai.goworkbro.core.db.Todo
+import com.azarai.goworkbro.core.util.Dates
 import java.util.UUID
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -99,7 +99,7 @@ class TimerViewModel : ViewModel() {
         }
     }
 
-    /** 提前结束： the round counts as one completed focus (needs >= 1 min). */
+    /** "提前结束" (end early): the round still counts as one focus (needs >= 1 min). */
     fun stop() = stop(auto = false)
 
     private fun stop(auto: Boolean) {
@@ -114,7 +114,7 @@ class TimerViewModel : ViewModel() {
                     FocusLog(
                         id = UUID.randomUUID().toString(),
                         todoId = a.todo.id,
-                        logDate = Rollover.logicalToday(Graph.store),
+                        logDate = Dates.todayKey(),
                         minutes = maxOf(1, elapsedMin),
                     ),
                 )
@@ -142,7 +142,7 @@ class TimerViewModel : ViewModel() {
                 a.todo.copy(
                     isDone = true,
                     // stamp the completion day, or the list would hide it at once
-                    doneDate = Rollover.logicalToday(Graph.store),
+                    doneDate = Dates.todayKey(),
                 ),
             )
         }

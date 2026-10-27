@@ -8,7 +8,6 @@ import com.azarai.goworkbro.core.Backup
 import com.azarai.goworkbro.core.db.AppDatabase
 import com.azarai.goworkbro.core.db.Countdown
 import com.azarai.goworkbro.core.db.FocusLog
-import com.azarai.goworkbro.core.db.FitnessLog
 import com.azarai.goworkbro.core.db.Habit
 import com.azarai.goworkbro.core.db.SettingRow
 import com.azarai.goworkbro.core.db.SleepRecord
@@ -55,7 +54,6 @@ class BackupTest {
         db.habitDao().upsert(Habit("h1", "喝水8杯", targetCount = 8, currentCount = 3))
         db.habitDao().upsert(Habit("h2", "阅读", lastResetDate = "2026-10-09"))
         db.waterDao().insert(WaterLog("w1", "2026-10-09", 250, "09:30"))
-        db.fitnessDao().insert(FitnessLog("f1", "2026-10-09", 45, "10:00"))
         db.sleepDao().insert(SleepRecord("s1", "2026-10-08T23:00:00", "2026-10-09T06:30:00"))
         db.countdownDao().upsert(Countdown("c1", "考研", "2026-12-26T08:30:00", 3))
         db.focusDao().insert(FocusLog("fo1", "t1", "2026-10-09", 25))
@@ -72,12 +70,11 @@ class BackupTest {
         assertEquals(2, summary.todos)
         assertEquals(2, summary.habits)
         assertEquals(1, summary.waterLogs)
-        assertEquals(1, summary.fitnessLogs)
         assertEquals(1, summary.sleepRecords)
         assertEquals(1, summary.countdowns)
         assertEquals(1, summary.focusLogs)
         assertEquals(1, summary.settings)
-        assertEquals(10, summary.total)
+        assertEquals(9, summary.total)
 
         val t1 = other.todoDao().getAll().first { it.id == "t1" }
         assertEquals("forward", t1.timingType)

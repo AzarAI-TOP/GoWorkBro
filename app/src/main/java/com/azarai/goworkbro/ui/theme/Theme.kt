@@ -56,7 +56,7 @@ val ForestTypography = Typography(
     // MUST carry the cute font too, or the biggest numbers on screen fall
     // back to Roboto and the app looks patched together.
     //
-    // Every style also pins an explicit lineHeight so wrapped 中文/ASCII text
+    // Every style also pins an explicit lineHeight so wrapped CJK/ASCII text
     // gets consistent leading instead of whatever the fallback font decides.
     // (Single-line Text still sizes itself from the font metrics, so layout
     // that must line up across cards needs a fixed height, not a lineHeight.)

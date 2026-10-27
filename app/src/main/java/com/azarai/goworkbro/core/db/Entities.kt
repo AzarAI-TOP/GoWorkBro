@@ -102,15 +102,6 @@ data class WaterLog(
     @ColumnInfo(name = "logged_at") val loggedAt: String = "",
 )
 
-/** One bout of exercise, in minutes. */
-@Entity(tableName = "fitness_logs", indices = [Index("log_date")])
-data class FitnessLog(
-    @PrimaryKey val id: String,
-    @ColumnInfo(name = "log_date") val logDate: String = "",
-    val minutes: Int,
-    @ColumnInfo(name = "logged_at") val loggedAt: String = "",
-)
-
 /** One finished focus round for a todo (>= 1 minute). */
 @Entity(tableName = "focus_logs", indices = [Index("todo_id")])
 data class FocusLog(

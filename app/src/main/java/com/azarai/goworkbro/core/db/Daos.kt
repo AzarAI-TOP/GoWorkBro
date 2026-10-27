@@ -4,6 +4,7 @@ import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
+import androidx.room.Update
 import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
@@ -18,11 +19,11 @@ interface TodoDao {
     @Query("SELECT * FROM todos WHERE is_done = 0 ORDER BY sort_order DESC")
     fun observeUndone(): Flow<List<Todo>>
 
-    /** Finished today: what still shows under 已完成. */
+    /** Finished today: what still shows under "已完成". */
     @Query("SELECT * FROM todos WHERE is_done = 1 AND done_date = :date ORDER BY sort_order DESC")
     fun observeDoneOn(date: String): Flow<List<Todo>>
 
-    /** Older completions — hidden behind 更早完成, never deleted. */
+    /** Older completions — hidden behind "更早完成", never deleted. */
     @Query(
         "SELECT * FROM todos WHERE is_done = 1 AND done_date <> :date " +
             "ORDER BY done_date DESC, sort_order DESC LIMIT :limit",
@@ -38,6 +39,11 @@ interface TodoDao {
 
     @Upsert
     suspend fun upsert(todo: Todo)
+
+    /** One statement for a drag-reordered list — a per-row loop would emit a
+     *  burst of invalidations and let the grid flicker through half orders. */
+    @Update
+    suspend fun updateAll(todos: List<Todo>)
 
     @Insert
     suspend fun insertAll(todos: List<Todo>)
@@ -64,6 +70,10 @@ interface HabitDao {
     @Upsert
     suspend fun upsert(habit: Habit)
 
+    /** One statement for a drag-reordered list (see TodoDao.updateAll). */
+    @Update
+    suspend fun updateAll(habits: List<Habit>)
+
     @Insert
     suspend fun insertAll(habits: List<Habit>)
 
@@ -85,15 +95,16 @@ interface SleepDao {
     @Query("SELECT * FROM sleep_records ORDER BY wake_at DESC")
     fun observeAll(): Flow<List<SleepRecord>>
 
-    /** Records whose sleep_at falls in `[from, to)` — exactly the set
-     *  `SleepOps.dailyKeyOf` files under that day (fixed 04:00 boundary;
-     *  ISO strings sort chronologically). */
-    @Query("SELECT * FROM sleep_records WHERE sleep_at >= :from AND sleep_at < :to ORDER BY sleep_at DESC")
-    fun observeBetween(from: String, to: String): Flow<List<SleepRecord>>
+    /** Records that WOKE in `[from, to)` — exactly the set
+     *  `SleepOps.dailyKeyOf` files under that day (ISO strings sort
+     *  chronologically). */
+    @Query("SELECT * FROM sleep_records WHERE wake_at >= :from AND wake_at < :to ORDER BY wake_at DESC")
+    fun observeWakesBetween(from: String, to: String): Flow<List<SleepRecord>>
 
-    /** Newest-first records since [from] — bounded history for the stats page. */
-    @Query("SELECT * FROM sleep_records WHERE sleep_at >= :from ORDER BY wake_at DESC")
-    fun observeSince(from: String): Flow<List<SleepRecord>>
+    /** Newest-first records that woke since [from] — bounded history for the
+     *  stats page. */
+    @Query("SELECT * FROM sleep_records WHERE wake_at >= :from ORDER BY wake_at DESC")
+    fun observeWakesSince(from: String): Flow<List<SleepRecord>>
 
     @Insert
     suspend fun insert(record: SleepRecord)
@@ -144,27 +155,6 @@ interface WaterDao {
     suspend fun getAll(): List<WaterLog>
 
     @Query("DELETE FROM water_logs WHERE id = :id")
-    suspend fun deleteById(id: String)
-}
-
-@Dao
-interface FitnessDao {
-    @Query("SELECT * FROM fitness_logs WHERE log_date = :date ORDER BY logged_at")
-    fun observeByDate(date: String): Flow<List<FitnessLog>>
-
-    @Query("SELECT log_date, SUM(minutes) AS total FROM fitness_logs WHERE log_date BETWEEN :from AND :to GROUP BY log_date")
-    suspend fun dailyTotals(from: String, to: String): List<DailyTotal>
-
-    @Insert
-    suspend fun insert(log: FitnessLog)
-
-    @Insert
-    suspend fun insertAll(logs: List<FitnessLog>)
-
-    @Query("SELECT * FROM fitness_logs")
-    suspend fun getAll(): List<FitnessLog>
-
-    @Query("DELETE FROM fitness_logs WHERE id = :id")
     suspend fun deleteById(id: String)
 }
 
@@ -224,9 +214,6 @@ interface MaintenanceDao {
 
     @Query("DELETE FROM water_logs")
     suspend fun clearWaterLogs()
-
-    @Query("DELETE FROM fitness_logs")
-    suspend fun clearFitnessLogs()
 
     @Query("DELETE FROM sleep_records")
     suspend fun clearSleepRecords()

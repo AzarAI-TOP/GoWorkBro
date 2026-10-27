@@ -78,6 +78,9 @@ fun CuteCard(
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(14.dp),
     onLongClick: (() -> Unit)? = null,
+    /** Gesture modifiers that must see pointer events BEFORE [onClick] can
+     *  claim them (the long-press sorter needs to eat the release). */
+    gestureModifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
     val interaction = remember { MutableInteractionSource() }
@@ -100,6 +103,7 @@ fun CuteCard(
                 onClick = onClick,
                 onLongClick = onLongClick,
             )
+            .then(gestureModifier)
             .padding(contentPadding),
     ) { content() }
 }
@@ -376,7 +380,7 @@ fun LogEntryRow(text: String, onDelete: () -> Unit) {
 
 /**
  * Big round icon + "total / goal unit" + progress bar + encouragement line,
- * shared by the water and fitness pages.
+ * used by the water page.
  */
 @Composable
 fun GoalHero(

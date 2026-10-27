@@ -20,6 +20,7 @@ case "$MODE" in
       --tests "com.azarai.goworkbro.BackupTest" \
       --tests "com.azarai.goworkbro.CountdownOpsTest" \
       --tests "com.azarai.goworkbro.DatesTest" \
+      --tests "com.azarai.goworkbro.OrderingTest" \
       --tests "com.azarai.goworkbro.SleepOpsTest" \
       --tests "com.azarai.goworkbro.StoreTest" \
       --tests "com.azarai.goworkbro.TodoOrderTest" \

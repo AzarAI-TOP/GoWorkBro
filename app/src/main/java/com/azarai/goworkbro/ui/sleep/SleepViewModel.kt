@@ -34,7 +34,7 @@ data class SleepState(
     val points: List<SleepPoint> = emptyList(),
 )
 
-/** 睡眠记录页的状态：一条记录一觉（夜睡午睡同理），统计全部按天合计。 */
+/** Sleep page state: one row per sleep (a nap is a sleep), every stat summed per day. */
 class SleepViewModel(app: Application) : AndroidViewModel(app) {
 
     private val db = Graph.db
@@ -44,7 +44,7 @@ class SleepViewModel(app: Application) : AndroidViewModel(app) {
     private val logicalKey = LogicalDay.flow.map { it.dateKey }.distinctUntilChanged()
 
     private val history = logicalKey.flatMapLatest { day ->
-        db.sleepDao().observeSince(SleepOps.historySince(day))
+        db.sleepDao().observeWakesSince(SleepOps.historySince(day))
     }
 
     val state: StateFlow<SleepState> = combine(

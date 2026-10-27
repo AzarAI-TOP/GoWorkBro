@@ -3,9 +3,9 @@ package com.azarai.goworkbro.ui.habit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.azarai.goworkbro.Graph
-import com.azarai.goworkbro.core.Rollover
 import com.azarai.goworkbro.core.db.Habit
 import com.azarai.goworkbro.core.util.Dates
+import com.azarai.goworkbro.core.util.Ordering
 import java.util.UUID
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
@@ -24,7 +24,7 @@ class HabitViewModel : ViewModel() {
             db.habitDao().upsert(
                 habit.copy(
                     currentCount = next.coerceAtLeast(0),
-                    lastResetDate = Rollover.logicalToday(Graph.store),
+                    lastResetDate = Dates.todayKey(),
                 ),
             )
         }
@@ -67,5 +67,15 @@ class HabitViewModel : ViewModel() {
 
     fun delete(habit: Habit) {
         viewModelScope.launch { db.habitDao().deleteById(habit.id) }
+    }
+
+    /** Persists a drag-reordered habit list (sort_order is ASC here). */
+    fun reorder(ids: List<String>) {
+        val ordered = Ordering.byId(habits.value, ids) { it.id } ?: return
+        // rankOrders hands out biggest-first; habits sort ASC, so reverse it
+        val ranks = Ordering.rankOrders(ordered.size).reversed()
+        viewModelScope.launch {
+            db.habitDao().updateAll(ordered.mapIndexed { index, habit -> habit.copy(sortOrder = ranks[index]) })
+        }
     }
 }
