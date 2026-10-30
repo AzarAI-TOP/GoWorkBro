@@ -4,7 +4,7 @@ All notable changes to GoWorkBro are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [3.6.0] - 2026-10-30
 
 反馈落地：拖拽排序、睡眠日期标注、去掉健身与熬夜模式。
 
@@ -26,6 +26,10 @@ All notable changes to GoWorkBro are documented here. Format follows
 - **健身模块整个移除**（按你的要求当习惯来管）：页面、设置里的健身目标、备份里的健身表都已删除。**升级会清空健身记录**（数据库 v6→v7 直接 DROP `fitness_logs`），其他数据不受影响；旧备份文件仍可导入，健身部分会被忽略。
 - **熬夜模式（0–4 点算前一天）开关移除**：日界线就是 00:00。
 - **主页右上角齿轮移除**：设置仍然从「数据纵览」底部的齿轮进入。
+
+### Fixed
+
+- **打开待办页偶发崩溃**：已完成/未完成两段曾在同一帧里混着渲染，列表键重复直接崩；现在两段分开渲染。
 
 ## [3.5.0] - 2026-10-19
 
