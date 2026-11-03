@@ -1,6 +1,6 @@
 # 电脑协同 · 线协议
 
-电脑端（`tools/gwbcore.py` + `gwb.py` + `gwb_mcp.py`，bleak）之间的约定。协议版本 `RemoteApi.PROTOCOL = 1`。
+电脑端（独立仓库 [`goworkbro-mcp`](https://github.com/AzarAI-TOP/goworkbro-mcp)，bleak）之间的约定。协议版本 `RemoteApi.PROTOCOL = 1`。
 
 手机是唯一数据源：每个 op 都是**单次写入**，走的是 UI 用的同一批 DAO，所以 Room 的 Flow 会自动刷新界面，逻辑日规则（`done_date`、习惯跨天清零）与手点完全一致。
 
@@ -86,38 +86,36 @@ Linux 侧两个坑已在 `core/remote/BleServer.kt` 里处理：写响应必须�
 
 同一个 `id` 重复 `*.add` 会**更新**而不是插入第二条，返回 `created:false`。所以 PC 丢响应直接重试是安全的。不带 `id` 时手机生成 UUID；想拿回 id 就从响应里读。
 
-## 电脑端：CLI 与 MCP
+## 电脑端：`goworkbro-mcp`
+
+客户端不在本仓库：**<https://github.com/AzarAI-TOP/goworkbro-mcp>**（v0.1.0 起独立发布，
+`uv tool install git+https://github.com/AzarAI-TOP/goworkbro-mcp`）。
 
 ```bash
-uv run --with bleak tools/gwb.py ping          # 连通性 + 各表条数
-tools/gwb.py todos | habits | countdowns       # 列表（--json 给脚本用）
-tools/gwb.py todo add "写毕设" --icon book --color 2 --timing countdown --minutes 25
-tools/gwb.py todo done 5c32b591                # id 支持前缀；--undone 改回未完成
-tools/gwb.py todo rm 5c32b591 -y                # 不加 -y 不删
-tools/gwb.py habit add "读书" --target 2 --unit 章
-tools/gwb.py habit check 6f9ccd4d [--delta -1]
-tools/gwb.py cd add "二课·香文化" 2026-11-05T14:00
-tools/gwb.py token <从设置页复制的串>          # 存一次到 ~/.config/gwb/config.json（0600）
+gwb token <设置页复制的串>        # 存一次到 ~/.config/gwb/config.json（0600）
+gwb ping                          # 连通性（首次 ~3-6 s 含扫描）
+gwb todos | habits | countdowns   # 列表（--json 给脚本）
+gwb todo add "写毕设" --icon book --color 2
+gwb todo done 5c32b591            # id 支持前缀；--undone 改回
+gwb todo rm 5c32b591 -y           # 不加 -y 不删
+gwb habit check 6f9ccd4d --delta -1
+gwb cd add "二课·香文化" 2026-11-05T14:00
 ```
 
-token 也可以走 `$GWB_TOKEN` 环境变量。每次调用先扫描（~3 s）再连接。
-
-MCP server（给 agent 用，13 个工具）：
+MCP（给 agent 用，13 个工具）：
 
 ```bash
-pi mcp add goworkbro -- ~/.venvs/gwb/bin/python ~/Workspace/GoWorkBro/tools/gwb_mcp.py
+pi mcp add goworkbro -- ~/.local/bin/gwb-mcp
 ```
 
-`ping`、`list_todos|habits|countdowns`、`add_todo`、`set_todo_done`、`delete_todo`、`add_habit`、`check_habit`、`delete_habit`、`add_countdown`、`delete_countdown`、`disconnect`。删除类必须 `confirm=true`（未确认时以工具错误返回，不会静默删）。
-
-连接在工具调用之间**复用**（首次 ~3–6 s 含扫描，之后单次 ~0.36 s），空闲 5 分钟自动断开省手机电；链路掉了重连一次，不重发已发出的写入。
+连接在工具调用之间复用（之后单次 ~0.36 s），空闲 5 分钟断开；删除类必须 `confirm=true`。
 
 ## 安全
 
 - 协同默认关闭；`设置 → 电脑协同` 打开后才生成并显示 token。
 - BLE 配对是 Just Works（不做认证），导出的广播接收器任何 app 都能发 —— **真正授权的是 token**，不是链路。
 - token 存在 `user_settings` 里，因此会随备份文件一起导出：**备份文件等于凭据**，别随手发出去；换机器时重新生成更省心。
-- PC 端的删除类 op 默认要 `--yes`（CLI）或 `confirm=true`（MCP），见 `tools/`。
+- PC 端的删除类 op 默认要 `--yes`（CLI）或 `confirm=true`（MCP）。
 
 ## adb 调试配方
 

@@ -141,10 +141,12 @@ pushing a detail screen onto the hand-rolled nav stack in `ui/AppRoot.kt`. Data 
   drops implicit broadcasts to manifest receivers) and `BleServer` +
   `RemoteService` (phone advertises a GATT service, `INFO`/`UP`/`DOWN`, bytes
   framed by `Framing.kt`; a `connectedDevice` foreground service keeps it
-  alive). PC side is `tools/` (bleak): `gwbcore.py` (framing + link, shared),
-  `gwb.py` (CLI), `gwb_mcp.py` (13 MCP tools, registered as `goworkbro` in
-  `~/.pi/agent/mcp.json`; the link is reused across calls and closed after 5
-  idle minutes). Protocol in `docs/remote-protocol.md`. Rules: every op is a single write through the
+  alive). The PC side is a SEPARATE repo now — `goworkbro-mcp`
+  (<https://github.com/AzarAI-TOP/goworkbro-mcp>, installed with
+  `uv tool install`, giving `gwb` + `gwb-mcp`); it was extracted from `tools/`
+  so other machines can download it, and it is registered as `goworkbro` in
+  `~/.pi/agent/mcp.json`. Protocol in `docs/remote-protocol.md`; if an op's
+  shape changes, bump `RemoteApi.PROTOCOL` HERE and update that repo too. Rules: every op is a single write through the
   normal DAOs — so Room flows refresh the screens and the logical-day rules
   (`done_date`, `habit.last_reset_date`) apply exactly as for a tap; `*.add`
   with an existing `id` updates instead of inserting (a retried PC request is
