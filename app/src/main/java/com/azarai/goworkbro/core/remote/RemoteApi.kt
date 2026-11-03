@@ -1,13 +1,17 @@
 package com.azarai.goworkbro.core.remote
 
 import com.azarai.goworkbro.core.Store
+import com.azarai.goworkbro.core.SleepOps
 import com.azarai.goworkbro.core.db.AppDatabase
 import com.azarai.goworkbro.core.db.Countdown
 import com.azarai.goworkbro.core.db.Habit
+import com.azarai.goworkbro.core.db.SleepRecord
 import com.azarai.goworkbro.core.db.TimingType
 import com.azarai.goworkbro.core.db.Todo
+import com.azarai.goworkbro.core.db.WaterLog
 import com.azarai.goworkbro.core.util.Dates
 import com.azarai.goworkbro.ui.components.CartoonIcons
+import java.time.Duration
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.util.UUID
@@ -34,11 +38,19 @@ import org.json.JSONObject
  */
 object RemoteApi {
 
-    /** Bumped when an op's shape changes; a newer PC gets "bad_version". */
-    const val PROTOCOL = 1
+    /** Bumped when an op's shape changes; a newer PC gets "bad_version".
+     *
+     *  v2 (2026-11-03) only ADDED ops (today.summary, water.*, sleep.*,
+     *  focus.today) and the optional `only` filter on todos.list — every v1 op
+     *  behaves exactly as before, so an old PC keeps working and a new PC can
+     *  gate the additions on `ping.protocol >= 2`. */
+    const val PROTOCOL = 2
 
     private const val MAX_TITLE = 80
     private const val MAX_UNIT = 8
+    private const val MAX_WATER_ML = 5000
+    private const val MAX_SLEEP_MINUTES = 24 * 60
+    private const val DEFAULT_SLEEP_DAYS = 14
     private val ID_PATTERN = Regex("[A-Za-z0-9_-]{4,64}")
 
     /** A request we refuse; [code] becomes the response's `error` field. */
@@ -74,8 +86,7 @@ object RemoteApi {
             val payload = when (op) {
                 "ping" -> ping(db, today)
 
-                "todos.list" -> JSONObject()
-                    .put("items", JSONArray(db.todoDao().listAll().map(::todoOut)))
+                "todos.list" -> listTodos(db, data, today)
                 "todo.add" -> writeTodo(db, data, today, now, create = true)
                 "todo.update" -> writeTodo(db, data, today, now, create = false)
                 "todo.done" -> markTodo(db, data, today)
@@ -94,6 +105,15 @@ object RemoteApi {
                 "countdown.update" -> writeCountdown(db, data, now, create = false)
                 "countdown.delete" -> deleteCountdown(db, data)
 
+                // v2 additions: one round trip each, read-mostly, and none of
+                // them can clear a table.
+                "today.summary" -> summary(db, today)
+                "water.log" -> logWater(db, data, today, now)
+                "water.today" -> waterToday(db, today)
+                "sleep.list" -> listSleep(db, data, today)
+                "sleep.log" -> logSleep(db, data, now)
+                "focus.today" -> focusToday(db, today)
+
                 else -> throw ApiError("bad_op", "不认识的 op「$op」")
             }
             ok(op, payload)
@@ -103,6 +123,19 @@ object RemoteApi {
     }
 
     // ---- todos ----
+
+    /** All three shapes the todo page itself uses: everything, the open list,
+     *  or open + today's completions (the page's visible halves). */
+    private suspend fun listTodos(db: AppDatabase, data: JSONObject, today: String): JSONObject {
+        val dao = db.todoDao()
+        val items = when (data.optString("only").trim().ifEmpty { "all" }) {
+            "all" -> dao.listAll()
+            "open" -> dao.listUndone()
+            "today" -> dao.listUndone() + dao.listDoneOn(today)
+            else -> throw bad("only 只能是 all / open / today")
+        }
+        return JSONObject().put("items", JSONArray(items.map(::todoOut)))
+    }
 
     private suspend fun writeTodo(
         db: AppDatabase,
@@ -264,6 +297,144 @@ object RemoteApi {
         return JSONObject().put("id", id).put("deleted", true)
     }
 
+    // ---- water / sleep / focus (v2) ----
+
+    /** "今天怎么样" in one frame, so an agent needs one round trip, not four. */
+    private suspend fun summary(db: AppDatabase, today: String): JSONObject {
+        val store = Store(db.settingsDao())
+        val wakes = wakesOn(db, today)
+        val history = db.sleepDao().wakesSince(SleepOps.historySince(today))
+        val focus = db.focusDao().dayStats(today)
+        return JSONObject()
+            .put("today", today)
+            .put(
+                "todos",
+                JSONObject()
+                    .put("undone", db.todoDao().countUndone())
+                    .put("done_today", db.todoDao().countDoneOn(today))
+                    .put("total", db.todoDao().countAll()),
+            )
+            .put(
+                "habits",
+                JSONObject()
+                    .put("total", db.habitDao().countAll())
+                    .put("done", db.habitDao().countDone()),
+            )
+            .put(
+                "water",
+                JSONObject().put("ml", db.waterDao().totalOn(today)).put("goal_ml", store.waterGoalMl()),
+            )
+            .put(
+                "sleep",
+                JSONObject()
+                    .put("today_minutes", wakes.sumOf { it.minutes })
+                    .put("streak", SleepOps.streak(history, today))
+                    .put("last", db.sleepDao().latest()?.let(::recordOut) ?: JSONObject.NULL),
+            )
+            .put("focus", JSONObject().put("sessions", focus.sessions).put("minutes", focus.minutes))
+            .put("next_countdown", db.countdownDao().listAll().firstOrNull()?.let(::countdownOut) ?: JSONObject.NULL)
+    }
+
+    /** No amount given = one tap of the first quick cup on the water page. */
+    private suspend fun logWater(
+        db: AppDatabase,
+        data: JSONObject,
+        today: String,
+        now: LocalDateTime,
+    ): JSONObject {
+        val store = Store(db.settingsDao())
+        val cups = store.waterCups()
+        val ml = if (data.has("ml")) data.optInt("ml", 0) else cups.first()
+        if (ml <= 0 || ml > MAX_WATER_ML) throw bad("ml 要在 1..$MAX_WATER_ML 之间")
+        val log = WaterLog(
+            id = data.id() ?: UUID.randomUUID().toString(),
+            logDate = today,
+            ml = ml,
+            loggedAt = Dates.hhmm(now),
+        )
+        // Upsert: a PC retrying after a lost response must not add a second cup.
+        db.waterDao().upsert(log)
+        return JSONObject()
+            .put("id", log.id)
+            .put("ml", ml)
+            .put("today_ml", db.waterDao().totalOn(today))
+            .put("goal_ml", store.waterGoalMl())
+    }
+
+    private suspend fun waterToday(db: AppDatabase, today: String): JSONObject {
+        val store = Store(db.settingsDao())
+        val logs = db.waterDao().logsOn(today)
+        return JSONObject()
+            .put("date", today)
+            .put("ml", logs.sumOf { it.ml })
+            .put("goal_ml", store.waterGoalMl())
+            .put("cups", JSONArray(store.waterCups()))
+            .put(
+                "logs",
+                JSONArray(
+                    logs.map {
+                        JSONObject().put("id", it.id).put("ml", it.ml).put("logged_at", it.loggedAt)
+                    },
+                ),
+            )
+    }
+
+    /** A bounded window by WAKE day — the history grows forever, so the PC
+     *  must never be able to pull all of it in one frame. */
+    private suspend fun listSleep(db: AppDatabase, data: JSONObject, today: String): JSONObject {
+        val days = if (data.has("days")) data.optInt("days", DEFAULT_SLEEP_DAYS) else DEFAULT_SLEEP_DAYS
+        val window = days.coerceIn(1, SleepOps.HISTORY_DAYS)
+        val from = Dates.isoDateTime(Dates.parseKey(today).minusDays(window - 1L).atStartOfDay())
+        val items = db.sleepDao().wakesSince(from)
+        return JSONObject()
+            .put("from", from)
+            .put("today_minutes", wakesOn(db, today).sumOf { it.minutes })
+            .put("items", JSONArray(items.map(::recordOut)))
+    }
+
+    /** Same bounds as the record sheet: end after start, and never the future. */
+    private suspend fun logSleep(db: AppDatabase, data: JSONObject, now: LocalDateTime): JSONObject {
+        val sleepAt = data.localDateTime("sleep_at")
+        val wakeAt = data.localDateTime("wake_at")
+        if (!wakeAt.isAfter(sleepAt)) throw bad("wake_at 要晚于 sleep_at")
+        if (wakeAt.isAfter(now)) throw bad("wake_at 不能是未来（现在是 ${Dates.isoDateTime(now)}）")
+        if (Duration.between(sleepAt, wakeAt).toMinutes() > MAX_SLEEP_MINUTES) {
+            throw bad("单次睡眠最长 $MAX_SLEEP_MINUTES 分钟")
+        }
+        val record = SleepRecord(
+            id = data.id() ?: UUID.randomUUID().toString(),
+            sleepAt = Dates.isoDateTime(sleepAt),
+            wakeAt = Dates.isoDateTime(wakeAt),
+        )
+        db.sleepDao().upsert(record)
+        return JSONObject()
+            .put("id", record.id)
+            .put("minutes", record.minutes)
+            .put("day", SleepOps.dailyKeyOf(record))
+    }
+
+    private suspend fun focusToday(db: AppDatabase, today: String): JSONObject {
+        val stats = db.focusDao().dayStats(today)
+        val byTodo = db.focusDao().dayByTodo(today).map { row ->
+            JSONObject()
+                .put("todo_id", row.todoId)
+                .put("title", db.todoDao().byId(row.todoId)?.title ?: "")
+                .put("minutes", row.minutes)
+        }
+        return JSONObject()
+            .put("date", today)
+            .put("sessions", stats.sessions)
+            .put("minutes", stats.minutes)
+            .put("by_todo", JSONArray(byTodo))
+    }
+
+    /** Records that WOKE on [today] — the same set [SleepOps.dailyKeyOf] files
+     *  under that day (queries filter wake_at, never sleep_at). */
+    private suspend fun wakesOn(db: AppDatabase, today: String): List<SleepRecord> {
+        val (from, to) = SleepOps.dayWindow(today)
+        return db.sleepDao().wakesSince(from).filter { it.wakeAt < to }
+    }
+
     // ---- responses ----
 
     private suspend fun ping(db: AppDatabase, today: String): JSONObject = JSONObject()
@@ -299,6 +470,10 @@ object RemoteApi {
     private fun countdownOut(c: Countdown) = JSONObject()
         .put("id", c.id).put("title", c.title).put("target_at", c.targetAt)
         .put("color_index", c.colorIndex).put("created_at", c.createdAt)
+
+    private fun recordOut(r: SleepRecord) = JSONObject()
+        .put("id", r.id).put("sleep_at", r.sleepAt).put("wake_at", r.wakeAt)
+        .put("minutes", r.minutes).put("day", SleepOps.dailyKeyOf(r))
 
     // ---- field validation: reject typos loudly, clamp only what is cosmetic ----
 
@@ -360,5 +535,11 @@ object RemoteApi {
         val parsed = runCatching { Dates.parseDateTime(raw) }.getOrNull()
             ?: throw bad("target_at 需要本地时间 yyyy-MM-ddTHH:mm(:ss)，收到「$raw」")
         return Dates.isoDateTime(parsed)
+    }
+
+    private fun JSONObject.localDateTime(name: String): LocalDateTime {
+        val raw = optString(name).trim()
+        return runCatching { Dates.parseDateTime(raw) }.getOrNull()
+            ?: throw bad("$name 需要本地时间 yyyy-MM-ddTHH:mm(:ss)，收到「$raw」")
     }
 }

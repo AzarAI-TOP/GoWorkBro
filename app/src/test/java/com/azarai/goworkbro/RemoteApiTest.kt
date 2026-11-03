@@ -260,4 +260,171 @@ class RemoteApiTest {
         enable()
         assertEquals("bad_op", call("todo.explode").getString("error"))
     }
+
+    // ---- v2: today.summary / water / sleep / focus ----
+
+    @Test
+    fun pingReportsProtocolTwo() {
+        enable()
+        assertEquals(2, call("ping").getJSONObject("data").getInt("protocol"))
+        assertEquals(2, RemoteApi.PROTOCOL)
+    }
+
+    @Test
+    fun todosListOnlyFiltersLikeTheTodoPage() {
+        enable()
+        val openId = call("todo.add", JSONObject().put("title", "写毕设"))
+            .getJSONObject("data").getString("id")
+        val doneId = call("todo.add", JSONObject().put("title", "洗床单"))
+            .getJSONObject("data").getString("id")
+        call("todo.done", JSONObject().put("id", doneId))
+
+        fun titles(only: String): List<String> = call("todos.list", JSONObject().put("only", only))
+            .getJSONObject("data").getJSONArray("items")
+            .let { arr -> (0 until arr.length()).map { arr.getJSONObject(it).getString("title") } }
+
+        assertEquals(listOf("写毕设"), titles("open"))
+        assertEquals(listOf("写毕设", "洗床单"), titles("today"))
+        assertEquals(2, titles("all").size)
+        assertNotNull(openId)
+        assertEquals(
+            "bad_request",
+            call("todos.list", JSONObject().put("only", "everything")).getString("error"),
+        )
+    }
+
+    @Test
+    fun waterLogDefaultsToTheFirstCupAndStaysOnItsDay() {
+        enable()
+        val first = call("water.log").getJSONObject("data")
+        assertEquals(150, first.getInt("ml")) // first quick cup
+        assertEquals(150, first.getInt("today_ml"))
+        assertEquals(2000, first.getInt("goal_ml"))
+
+        val second = call("water.log", JSONObject().put("ml", 500)).getJSONObject("data")
+        assertEquals(650, second.getInt("today_ml"))
+
+        // Yesterday's cups do not count towards today.
+        val yesterday = call("water.log", JSONObject().put("ml", 300), at = now.minusDays(1))
+            .getJSONObject("data")
+        assertEquals(300, yesterday.getInt("today_ml"))
+
+        val today = call("water.today").getJSONObject("data")
+        assertEquals(650, today.getInt("ml"))
+        assertEquals(2, today.getJSONArray("logs").length())
+        assertEquals(3, call("water.today").getJSONObject("data").getJSONArray("cups").length())
+    }
+
+    @Test
+    fun waterLogRejectsNonsenseAmountsAndIsReplaySafe() {
+        enable()
+        assertEquals("bad_request", call("water.log", JSONObject().put("ml", 0)).getString("error"))
+        assertEquals("bad_request", call("water.log", JSONObject().put("ml", 9999)).getString("error"))
+
+        val data = JSONObject().put("id", "cup-0001").put("ml", 250)
+        assertEquals(250, call("water.log", data).getJSONObject("data").getInt("today_ml"))
+        // Same id twice: one cup, not two.
+        assertEquals(250, call("water.log", data).getJSONObject("data").getInt("today_ml"))
+    }
+
+    @Test
+    fun sleepLogChecksBothEndsAndNeverTheFuture() {
+        enable()
+        val inverted = call(
+            "sleep.log",
+            JSONObject().put("sleep_at", "2026-11-05T07:00").put("wake_at", "2026-11-05T06:00"),
+        )
+        assertEquals("bad_request", inverted.getString("error"))
+
+        val future = call(
+            "sleep.log",
+            JSONObject().put("sleep_at", "2026-11-05T13:00").put("wake_at", "2026-11-05T15:00"),
+        )
+        assertEquals("bad_request", future.getString("error")) // now is 14:30
+
+        val ok = call(
+            "sleep.log",
+            JSONObject().put("sleep_at", "2026-11-04T23:00").put("wake_at", "2026-11-05T07:10"),
+        )
+        assertTrue(ok.getBoolean("ok"))
+        val data = ok.getJSONObject("data")
+        assertEquals(490, data.getInt("minutes"))
+        assertEquals("2026-11-05", data.getString("day")) // filed by the wake day
+    }
+
+    @Test
+    fun sleepListIsBoundedAndFilesByWakeDay() {
+        enable()
+        call(
+            "sleep.log",
+            JSONObject().put("sleep_at", "2026-11-04T23:00").put("wake_at", "2026-11-05T07:00"),
+        )
+        call(
+            "sleep.log",
+            JSONObject().put("sleep_at", "2026-10-20T13:00").put("wake_at", "2026-10-20T14:00"),
+        ) // a nap two weeks back
+
+        val recent = call("sleep.list", JSONObject().put("days", 7)).getJSONObject("data")
+        assertEquals(1, recent.getJSONArray("items").length())
+        assertEquals(480, recent.getInt("today_minutes"))
+        val record = recent.getJSONArray("items").getJSONObject(0)
+        assertEquals("2026-11-05", record.getString("day"))
+
+        assertEquals(2, call("sleep.list", JSONObject().put("days", 30))
+            .getJSONObject("data").getJSONArray("items").length())
+    }
+
+    @Test
+    fun todaySummaryCountsEverythingInOneFrame() {
+        enable()
+        val todoId = call("todo.add", JSONObject().put("title", "写毕设"))
+            .getJSONObject("data").getString("id")
+        call("todo.add", JSONObject().put("title", "洗床单"))
+        call("todo.done", JSONObject().put("id", todoId))
+        val habitId = call("habit.add", JSONObject().put("title", "冥想"))
+            .getJSONObject("data").getString("id")
+        call("habit.check", JSONObject().put("id", habitId))
+        call("water.log", JSONObject().put("ml", 250))
+        call(
+            "sleep.log",
+            JSONObject().put("sleep_at", "2026-11-04T23:00").put("wake_at", "2026-11-05T07:00"),
+        )
+        call("countdown.add", JSONObject().put("title", "考研预试").put("target_at", "2026-12-19T00:00"))
+
+        val data = call("today.summary").getJSONObject("data")
+        assertEquals("2026-11-05", data.getString("today"))
+        val todos = data.getJSONObject("todos")
+        assertEquals(1, todos.getInt("undone"))
+        assertEquals(1, todos.getInt("done_today"))
+        assertEquals(2, todos.getInt("total"))
+        val habits = data.getJSONObject("habits")
+        assertEquals(1, habits.getInt("total"))
+        assertEquals(1, habits.getInt("done"))
+        assertEquals(250, data.getJSONObject("water").getInt("ml"))
+        assertEquals(2000, data.getJSONObject("water").getInt("goal_ml"))
+        assertEquals(480, data.getJSONObject("sleep").getInt("today_minutes"))
+        assertEquals(1, data.getJSONObject("sleep").getInt("streak"))
+        assertEquals("考研预试", data.getJSONObject("next_countdown").getString("title"))
+        assertEquals(0, data.getJSONObject("focus").getInt("minutes"))
+    }
+
+    @Test
+    fun focusTodayGroupsMinutesByTodo() {
+        enable()
+        val id = call("todo.add", JSONObject().put("title", "写毕设"))
+            .getJSONObject("data").getString("id")
+        runBlocking {
+            db.focusDao().insert(com.azarai.goworkbro.core.db.FocusLog("f1", id, "2026-11-05", 25))
+            db.focusDao().insert(com.azarai.goworkbro.core.db.FocusLog("f2", id, "2026-11-05", 5))
+            db.focusDao().insert(com.azarai.goworkbro.core.db.FocusLog("f3", id, "2026-11-04", 50))
+        }
+
+        val data = call("focus.today").getJSONObject("data")
+        assertEquals(2, data.getInt("sessions"))
+        assertEquals(30, data.getInt("minutes"))
+        val byTodo = data.getJSONArray("by_todo")
+        assertEquals(1, byTodo.length())
+        assertEquals("写毕设", byTodo.getJSONObject(0).getString("title"))
+        assertEquals(30, byTodo.getJSONObject(0).getInt("minutes"))
+    }
 }

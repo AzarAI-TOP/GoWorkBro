@@ -50,6 +50,19 @@ interface TodoDao {
     @Query("SELECT COUNT(*) FROM todos")
     suspend fun countAll(): Int
 
+    @Query("SELECT COUNT(*) FROM todos WHERE is_done = 0")
+    suspend fun countUndone(): Int
+
+    @Query("SELECT COUNT(*) FROM todos WHERE is_done = 1 AND done_date = :date")
+    suspend fun countDoneOn(date: String): Int
+
+    /** The todo page's two halves, as plain lists for the PC channel. */
+    @Query("SELECT * FROM todos WHERE is_done = 0 ORDER BY sort_order DESC")
+    suspend fun listUndone(): List<Todo>
+
+    @Query("SELECT * FROM todos WHERE is_done = 1 AND done_date = :date ORDER BY sort_order DESC")
+    suspend fun listDoneOn(date: String): List<Todo>
+
     /** One statement for a drag-reordered list — a per-row loop would emit a
      *  burst of invalidations and let the grid flicker through half orders. */
     @Update
@@ -88,6 +101,9 @@ interface HabitDao {
 
     @Query("SELECT COUNT(*) FROM habits")
     suspend fun countAll(): Int
+
+    @Query("SELECT COUNT(*) FROM habits WHERE current_count >= target_count")
+    suspend fun countDone(): Int
 
     /** One statement for a drag-reordered list (see TodoDao.updateAll). */
     @Update
@@ -128,11 +144,24 @@ interface SleepDao {
     @Insert
     suspend fun insert(record: SleepRecord)
 
+    /** PC-side writes carry their own id, so a retried logSleep updates rather
+     *  than inserts a second night. */
+    @Upsert
+    suspend fun upsert(record: SleepRecord)
+
     @Insert
     suspend fun insertAll(records: List<SleepRecord>)
 
     @Query("SELECT * FROM sleep_records")
     suspend fun getAll(): List<SleepRecord>
+
+    /** Newest-first records that woke at or after [from] — the PC channel's
+     *  bounded window (it must never load the whole history). */
+    @Query("SELECT * FROM sleep_records WHERE wake_at >= :from ORDER BY wake_at DESC")
+    suspend fun wakesSince(from: String): List<SleepRecord>
+
+    @Query("SELECT * FROM sleep_records ORDER BY wake_at DESC LIMIT 1")
+    suspend fun latest(): SleepRecord?
 
     @Query("DELETE FROM sleep_records WHERE id = :id")
     suspend fun deleteById(id: String)
@@ -176,11 +205,21 @@ interface WaterDao {
     @Insert
     suspend fun insert(log: WaterLog)
 
+    /** See [SleepDao.upsert]: same replay-safety reason. */
+    @Upsert
+    suspend fun upsert(log: WaterLog)
+
     @Insert
     suspend fun insertAll(logs: List<WaterLog>)
 
     @Query("SELECT * FROM water_logs")
     suspend fun getAll(): List<WaterLog>
+
+    @Query("SELECT * FROM water_logs WHERE log_date = :date ORDER BY logged_at")
+    suspend fun logsOn(date: String): List<WaterLog>
+
+    @Query("SELECT IFNULL(SUM(ml), 0) FROM water_logs WHERE log_date = :date")
+    suspend fun totalOn(date: String): Int
 
     @Query("DELETE FROM water_logs WHERE id = :id")
     suspend fun deleteById(id: String)
@@ -226,6 +265,14 @@ interface FocusDao {
 
     @Query("SELECT todo_id, SUM(minutes) AS minutes FROM focus_logs WHERE log_date = :date GROUP BY todo_id")
     fun observeDayByTodo(date: String): Flow<List<FocusByTodo>>
+
+    // Suspend twins for the PC channel (one snapshot, no subscription).
+
+    @Query("SELECT COUNT(*) AS sessions, IFNULL(SUM(minutes), 0) AS minutes FROM focus_logs WHERE log_date = :date")
+    suspend fun dayStats(date: String): FocusStats
+
+    @Query("SELECT todo_id, SUM(minutes) AS minutes FROM focus_logs WHERE log_date = :date GROUP BY todo_id")
+    suspend fun dayByTodo(date: String): List<FocusByTodo>
 
 }
 
