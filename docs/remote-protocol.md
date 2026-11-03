@@ -1,6 +1,6 @@
 # 电脑协同 · 线协议
 
-电脑端（独立仓库 [`goworkbro-mcp`](https://github.com/AzarAI-TOP/goworkbro-mcp)，bleak）之间的约定。协议版本 `RemoteApi.PROTOCOL = 1`。
+电脑端（独立仓库 [`goworkbro-mcp`](https://github.com/AzarAI-TOP/goworkbro-mcp)，bleak）之间的约定。协议版本 `RemoteApi.PROTOCOL = 2`（v2 只**新增** op 和 `todos.list` 的可选 `only`，v1 的每个 op 行为不变，所以旧版 PC 照旧能用；新版 PC 用 `ping.protocol >= 2` 判断新能力在不在）。
 
 手机是唯一数据源：每个 op 都是**单次写入**，走的是 UI 用的同一批 DAO，所以 Room 的 Flow 会自动刷新界面，逻辑日规则（`done_date`、习惯跨天清零）与手点完全一致。
 
@@ -33,7 +33,13 @@ GATT 一次属性写最多 `MTU - 3` 字节，所以必须分片重组 —— �
 
 手机**只广播不扫描**（无需定位权限）。Android 的 LE 地址会轮换，**不要缓存 MAC**，每次扫。
 
-手机侧分片 `min(mtu − 3, 512)`，MTU 未知按 23；PC 侧写请求同理。实测（2026-11-03，Redmi 2602BRT18C ↔ Ubuntu/BlueZ，13 条待办 / 3.2 KB）：单次 `ping` 约 0.35 s，`todos.list` 约 0.45 s —— 瓶颈是连接间隔，不是分片。
+手机侧分片 `min(mtu − 3, 512)`，MTU 未知按 23；PC 侧写请求同理。
+
+**MTU 要由 PC 主动要**：BlueZ 不会自己协商，不请求就两边都停在 23（每次属性写只剩 20 字节，3.7 KB 的待办列表要发 180 条 notify）。客户端在 `BleServer.kt#onMtuChanged` 这一侧是自适应的，PC 一请求就切到 247/517。实测（2026-11-03，Redmi 2602BRT18C ↔ Ubuntu/BlueZ，13 条待办）：MTU 23 时 `ping` 0.34 s、`todos.list` 0.5 s、`habits.list` 0.4 s；协商 MTU 后分别降到 0.09 s / 0.32 s / 0.10 s。
+
+### 请求 / 响应的配对
+
+帧里**没有请求 id**：一条回复靠它回显的 `op` 与请求配对。所以电脑端必须「同一时刻只有一个请求在途」，并且收到 `op` 对不上的回复就判定链路失步、丢弃连接重连，不能复用。2026-11-03 就因为 id 解析绕过了那把锁，两个并发的工具调用共用同一个待回复槽位，回复互相串台，用串来的 id 标错了待办。
 
 Linux 侧两个坑已在 `core/remote/BleServer.kt` 里处理：写响应必须离开回调线程并重试（BlueZ 在我们 notify 在途时会拒收 response，然后等 30 s 断链）；notify 必须串行等 `onNotificationSent`。
 
@@ -57,7 +63,7 @@ Linux 侧两个坑已在 `core/remote/BleServer.kt` 里处理：写响应必须�
 | op | data 入参 | 返回 |
 |---|---|---|
 | `ping` | — | `protocol` `today` `todos` `habits` `countdowns` |
-| `todos.list` | — | `items[]`（与待办页同序：未完成在前，新在上） |
+| `todos.list` | `only?` = `all` / `open` / `today` | `items[]`（与待办页同序：未完成在前，新在上） |
 | `todo.add` | `title` 必填；`id?` `icon?` `color_index?` `timing_type?` `duration_minutes?` | `id` `created` |
 | `todo.update` | `id` 必填；其余同上（不传的字段不动） | `id` `created` |
 | `todo.done` | `id` 必填；`done?`（默认 true） | `id` `is_done` `done_date` |
@@ -71,6 +77,14 @@ Linux 侧两个坑已在 `core/remote/BleServer.kt` 里处理：写响应必须�
 | `countdown.add` | `title` + `target_at` 必填；`id?` `color_index?` | `id` `created` |
 | `countdown.update` | `id` 必填；`title?` `target_at?` `color_index?` | `id` `created` |
 | `countdown.delete` | `id` | `id` `deleted` |
+| `today.summary` | — | `today` `todos{undone,done_today,total}` `habits{total,done}` `water{ml,goal_ml}` `sleep{today_minutes,streak,last}` `focus{sessions,minutes}` `next_countdown` |
+| `water.log` | `ml?`（省略 = 第一档快捷杯量）；`id?` | `id` `ml` `today_ml` `goal_ml` |
+| `water.today` | — | `date` `ml` `goal_ml` `cups[]` `logs[]{id,ml,logged_at}` |
+| `sleep.list` | `days?`（默认 14，上限 370） | `from` `today_minutes` `items[]{id,sleep_at,wake_at,minutes,day}` |
+| `sleep.log` | `sleep_at` + `wake_at`（本地时间）+ `id?` | `id` `minutes` `day` |
+| `focus.today` | — | `date` `sessions` `minutes` `by_todo[]{todo_id,title,minutes}` |
+
+`sleep.*` 的 `day` 是这条记录**醒来那天**（和界面统计口径一致）；`wake_at` 必须晚于 `sleep_at`、且不能是未来。`water.log` / `sleep.log` 带 `id` 时是 upsert —— 和 `*.add` 一样，重放不会多出一条。
 
 ### 校验规则
 
@@ -84,7 +98,9 @@ Linux 侧两个坑已在 `core/remote/BleServer.kt` 里处理：写响应必须�
 
 ### 幂等
 
-同一个 `id` 重复 `*.add` 会**更新**而不是插入第二条，返回 `created:false`。所以 PC 丢响应直接重试是安全的。不带 `id` 时手机生成 UUID；想拿回 id 就从响应里读。
+同一个 `id` 重复 `*.add` 会**更新**而不是插入第二条，返回 `created:false`。所以 PC 丢响应直接重试是安全的。不带 `id` 时手机生成 UUID；想拿回 id 就从响应里读。`water.log` / `sleep.log` 同理。
+
+反过来，**不能重放的 op**（`habit.check`、`todo.done`、`*.update`、`*.delete`）在链路中断时只报 `link_lost`，由调用方先 list 核对——BLE 上「丢响应」和「写已生效」无法区分。macOS/手机端提供的 `ping.protocol` 也让新版电脑能先判断能力再调用（协议 v2 的新 op 在旧版 app 上会得到 `bad_op`）。
 
 ## 电脑端：`goworkbro-mcp`
 

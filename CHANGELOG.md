@@ -4,6 +4,19 @@ All notable changes to GoWorkBro are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+电脑协同协议 v2：多了「今天全景」和喝水/睡眠/专注三块，电脑端也能改条目了。
+
+### Added
+
+- **协议 v2（`RemoteApi.PROTOCOL = 2`）**：新增 `today.summary`（一帧给出待办/习惯/喝水/睡眠/专注/下一个倒计时）、`water.log`、`water.today`、`sleep.list`、`sleep.log`、`focus.today`；`todos.list` 支持 `only=all|open|today`。v1 的每个 op 行为不变，旧版电脑端照旧能用。
+- 电脑端因此可以补记喝水与睡眠（`water.log` / `sleep.log` 带 id 时是 upsert，重放不会多一条）。
+
+### 说明
+
+- 对应电脑端 `goworkbro-mcp` 0.2.0（22 个工具）。旧版手机端遇到新 op 会返回 `bad_op`，新版客户端会先读 `ping.protocol` 并提示升级 app。
+
 ## [3.7.0] - 2026-11-03
 
 电脑协同：电脑可以直接读写手机上的待办、习惯、倒计时 —— 走蓝牙，不联网。

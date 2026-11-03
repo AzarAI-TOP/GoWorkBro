@@ -131,10 +131,13 @@ pushing a detail screen onto the hand-rolled nav stack in `ui/AppRoot.kt`. Data 
   still arrive; third-party apps cannot spoof them). Pending-APK version is
   derived from the file name (`GoWorkBro-update-<version>.apk`); stale APKs
   (<= the running version) and orphaned sidecars are deleted on startup.
-- **电脑协同 (v3.7)** — `core/remote/`: the only write path that is not the
-  UI. `RemoteApi.handle(db, json, now)` is a transport-agnostic op surface
-  (`todos|habits|countdowns.list`, `*.add|update|delete`, `todo.done`,
-  `habit.check`), gated by the `remote_enabled` toggle + `user_settings
+- **电脑协同 (v3.7, protocol v2 in 3.8)** — `core/remote/`: the only write
+  path that is not the UI. `RemoteApi.handle(db, json, now)` is a
+  transport-agnostic op surface (`todos|habits|countdowns.list`, `*.add|update|delete`,
+  `todo.done`, `habit.check`; **v2 adds** `today.summary`, `water.log`,
+  `water.today`, `sleep.list`, `sleep.log`, `focus.today` and the optional
+  `only=all|open|today` on `todos.list` — additions only, so a v1 client keeps
+  working), gated by the `remote_enabled` toggle + `user_settings
   .remote_token` (a token, never the link, is what authorizes a write — BLE
   pairing is Just Works and the adb receiver is exported). Two transports:
   `AdbBridge` (exported receiver; `am broadcast` needs `-n` because Android 8+
@@ -156,7 +159,12 @@ pushing a detail screen onto the hand-rolled nav stack in `ui/AppRoot.kt`. Data 
   callbacks and BlueZ refuses a write response while one of our notifications
   is in flight (then waits 30 s and drops the link) — so responses go to their
   own thread with a retry and notifications are serialized on
-  `onNotificationSent`.
+  `onNotificationSent`. Frames have **no request id**: a reply is matched by
+  the `op` it echoes, so the PC side must keep one request in flight and drop
+  the link on a mismatch (it does since goworkbro-mcp 0.1.1). And the MTU only
+  grows if the *PC* asks (BlueZ never negotiates): at the 23-byte floor a 3.7 KB
+  list costs ~180 notifications, at 517 it is 14. `onMtuChanged` here is
+  already adaptive — nothing to do on this side.
 - **Data-access scale rules** (learned 2026-10: history only grows): home
   reads SQL aggregates (`observeCounts`) and the wake-time calendar window
   (`SleepOps.dayWindow` + `SleepDao.observeWakesBetween`), never `observeAll`;
