@@ -22,8 +22,8 @@ android {
         applicationId = "com.azarai.goworkbro"
         minSdk = 26
         targetSdk = 35
-        versionCode = 18
-        versionName = "3.6.0"
+        versionCode = 19
+        versionName = "3.7.0"
         vectorDrawables.useSupportLibrary = true
     }
 

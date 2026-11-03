@@ -4,6 +4,29 @@ All notable changes to GoWorkBro are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.0] - 2026-11-03
+
+电脑协同：电脑可以直接读写手机上的待办、习惯、倒计时 —— 走蓝牙，不联网。
+
+### Added
+
+- **电脑协同（设置 → 电脑协同）**：打开后手机作为 BLE 外设广播，电脑连上来就能增删改查待办/习惯/倒计时；写进去的内容和手点一样落库，界面立刻刷新。关闭则彻底安静（不广播、无后台服务）。
+- **两条传输**：日常用蓝牙（不同网络、不插线都能用）；插线调试时也可以用 adb 广播直连，中文标题不再受 `input text` 限制。
+- **鉴权用 token**：首次打开时生成，逐条请求校验；配对本身不做认证，所以真正管权限的是这串 token。
+- **电脑端命令行** `tools/gwb.py`：`ping` / `todos` / `todo add|done|rm` / `habit add|check|rm` / `cd add|rm`，id 支持前缀，删除要 `--yes`。
+- **电脑端 MCP 服务器** `tools/gwb_mcp.py`：13 个工具，agent 可以直接调；连接会在调用之间复用，空闲 5 分钟后自动断开。
+
+### Changed
+
+- **锁屏/后台也能写**：协同由前台服务（类型 connectedDevice）承载，带一条常驻通知；app 被系统杀掉后再打开会自动接回链路。
+- **权限新增**：蓝牙广播 + 蓝牙连接 + 前台服务 + 通知。**没有扫描、没有定位**。
+
+### 升级须知
+
+- 无数据库变更（仍是 schema v7），**现有数据不受影响**，不需要先导出。
+- 默认关闭；不开「电脑协同」时行为与 3.6.0 完全一致。
+- 小米/红米上建议给 GoWorkBro 设「无限制」电池策略，否则前台服务可能被清掉。
+
 ## [3.6.0] - 2026-10-30
 
 反馈落地：拖拽排序、睡眠日期标注、去掉健身与熬夜模式。
