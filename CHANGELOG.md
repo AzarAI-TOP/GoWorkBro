@@ -4,7 +4,7 @@ All notable changes to GoWorkBro are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [SemVer](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [3.8.0] - 2026-11-03
 
 电脑协同协议 v2：多了「今天全景」和喝水/睡眠/专注三块，电脑端也能改条目了。
 
@@ -15,7 +15,8 @@ All notable changes to GoWorkBro are documented here. Format follows
 
 ### 说明
 
-- 对应电脑端 `goworkbro-mcp` 0.2.0（22 个工具）。旧版手机端遇到新 op 会返回 `bad_op`，新版客户端会先读 `ping.protocol` 并提示升级 app。
+- 对应电脑端 `goworkbro-mcp` 0.2.0（22 个工具，新增 `today_summary` / `log_water` / `water_today` / `list_sleep` / `log_sleep` / `focus_today` / `update_*`）。旧版手机端遇到新 op 会返回 `bad_op`，新版客户端会先读 `ping.protocol` 并提示升级 app。
+- **没有数据库变更**（仍是 schema v7），升级不动数据。
 
 ## [3.7.0] - 2026-11-03
 
