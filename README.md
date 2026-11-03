@@ -21,6 +21,10 @@
   睡眠是唯一按「结束那天」归档的模块，理由见上。
 - **备份 / 自动更新**：设置页可导出/导入全量 JSON 备份；启动时检查 GitHub Releases
   （可关闭），后台下载新版本 APK，主页横幅一键安装 —— 这是全应用唯一的网络用途。
+- **电脑协同**（3.7）：设置页一键打开后，手机作为 BLE 外设广播，电脑可以直接读写
+  待办 / 习惯 / 倒计时（也可走 adb）；写进去和手点一样落库，界面立刻刷新。
+  靠 token 鉴权，**不联网、不扫扫码、不要定位权限**；默认关闭。电脑端的 CLI 与
+  MCP 服务器在 `tools/`，协议见 `docs/remote-protocol.md`。
 
 ## 构建
 
@@ -33,3 +37,11 @@
 
 签名：`app/key.properties` + `app/goworkbro-release.jks`（均已 gitignore）。
 applicationId 沿用 `com.azarai.goworkbro`，可直接覆盖安装升级。
+
+电脑协同的电脑端工具（独立于 Android 构建，只需 Python + bleak）：
+
+```bash
+uv run --with bleak tools/gwb.py ping         # 连通性
+tools/gwb.py todos                            # 列表
+pi mcp add goworkbro -- ~/.venvs/gwb/bin/python "$PWD/tools/gwb_mcp.py"   # 给 agent 用
+```

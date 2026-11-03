@@ -40,6 +40,16 @@ interface TodoDao {
     @Upsert
     suspend fun upsert(todo: Todo)
 
+    /** Ordered exactly like the todo page: open first, newest on top. */
+    @Query("SELECT * FROM todos ORDER BY is_done ASC, sort_order DESC")
+    suspend fun listAll(): List<Todo>
+
+    @Query("SELECT * FROM todos WHERE id = :id")
+    suspend fun byId(id: String): Todo?
+
+    @Query("SELECT COUNT(*) FROM todos")
+    suspend fun countAll(): Int
+
     /** One statement for a drag-reordered list — a per-row loop would emit a
      *  burst of invalidations and let the grid flicker through half orders. */
     @Update
@@ -69,6 +79,15 @@ interface HabitDao {
 
     @Upsert
     suspend fun upsert(habit: Habit)
+
+    @Query("SELECT * FROM habits ORDER BY sort_order")
+    suspend fun listAll(): List<Habit>
+
+    @Query("SELECT * FROM habits WHERE id = :id")
+    suspend fun byId(id: String): Habit?
+
+    @Query("SELECT COUNT(*) FROM habits")
+    suspend fun countAll(): Int
 
     /** One statement for a drag-reordered list (see TodoDao.updateAll). */
     @Update
@@ -126,6 +145,15 @@ interface CountdownDao {
 
     @Upsert
     suspend fun upsert(item: Countdown)
+
+    @Query("SELECT * FROM countdowns ORDER BY target_at")
+    suspend fun listAll(): List<Countdown>
+
+    @Query("SELECT * FROM countdowns WHERE id = :id")
+    suspend fun byId(id: String): Countdown?
+
+    @Query("SELECT COUNT(*) FROM countdowns")
+    suspend fun countAll(): Int
 
     @Insert
     suspend fun insertAll(items: List<Countdown>)

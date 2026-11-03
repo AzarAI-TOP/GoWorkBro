@@ -1,11 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- The app is offline-first; the network is used ONLY to check and
          download its own updates from GitHub releases. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Lets the system installer be started for downloaded update APKs. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!-- 电脑协同 (core/remote): the phone only ADVERTISES as a BLE peripheral
+         and accepts a connection, so no scan and no location permission. The
+         link is a foreground service so it survives the app leaving the
+         screen; without that a GATT server dies with the UI. -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" tools:targetApi="31" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
 
     <application
         android:name=".GoWorkBroApp"
@@ -30,6 +44,24 @@
                 android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts" />
         </activity>
+
+        <!-- 电脑协同 over adb (core/remote/AdbBridge.kt): `am broadcast` runs as
+             the shell uid, so the receiver has to be exported; the token check
+             inside RemoteApi is what authorizes a write. -->
+        <receiver
+            android:name=".core.remote.AdbBridge"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.azarai.goworkbro.ADB_CMD" />
+            </intent-filter>
+        </receiver>
+
+        <!-- The BLE link (core/remote/RemoteService.kt) — connectedDevice is the
+             type the platform defines for exactly this: serving a paired device. -->
+        <service
+            android:name=".core.remote.RemoteService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
 
     </application>
 </manifest>

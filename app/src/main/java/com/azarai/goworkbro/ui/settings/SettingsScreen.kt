@@ -17,6 +17,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.SettingsBackupRestore
 import androidx.compose.material.icons.filled.SystemUpdate
@@ -38,13 +39,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import android.widget.Toast
+import android.bluetooth.BluetoothAdapter
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.azarai.goworkbro.core.Backup
 import com.azarai.goworkbro.core.Updater
+import com.azarai.goworkbro.core.remote.RemoteBle
+import com.azarai.goworkbro.core.remote.RemoteStatus
 import com.azarai.goworkbro.ui.components.CuteTopBar
 import com.azarai.goworkbro.ui.theme.LocalForestExtras
 
@@ -54,6 +63,11 @@ fun SettingsScreen(onBack: () -> Unit) {
     val vm: SettingsViewModel = viewModel()
     val extras = LocalForestExtras.current
     val autoUpdate by vm.autoUpdate.collectAsState()
+    val remoteEnabled by vm.remoteEnabled.collectAsState()
+    val remoteToken by vm.remoteToken.collectAsState()
+    val clients by RemoteStatus.clients.collectAsState()
+    val remoteError by RemoteStatus.lastError.collectAsState()
+    val clipboard = LocalClipboardManager.current
     var showDelete by remember { mutableStateOf(false) }
     var showImportConfirm by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -66,6 +80,41 @@ fun SettingsScreen(onBack: () -> Unit) {
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri -> if (uri != null) vm.importFrom(uri) }
+
+    // 电脑协同 needs a radio and a foreground notification: ask once, then go.
+    val bluetoothLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) {
+        if (RemoteBle.readiness(context) is RemoteBle.Readiness.Ready) {
+            vm.setRemoteEnabled(true)
+        } else {
+            Toast.makeText(context, "蓝牙没打开，协同开不了", Toast.LENGTH_LONG).show()
+        }
+    }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { grants ->
+        if (!grants.values.all { it }) {
+            Toast.makeText(context, "没有蓝牙权限，协同开不了", Toast.LENGTH_LONG).show()
+            return@rememberLauncherForActivityResult
+        }
+        when (val ready = RemoteBle.readiness(context)) {
+            is RemoteBle.Readiness.Ready -> vm.setRemoteEnabled(true)
+            is RemoteBle.Readiness.AdapterOff ->
+                runCatching { bluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)) }
+            is RemoteBle.Readiness.Blocked ->
+                Toast.makeText(context, ready.reason, Toast.LENGTH_LONG).show()
+            is RemoteBle.Readiness.NeedsPermission -> Unit
+        }
+    }
+
+    // The service reports why a start failed (radio busy, no advertiser…).
+    LaunchedEffect(remoteError) {
+        val reason = remoteError ?: return@LaunchedEffect
+        RemoteStatus.lastError.value = null
+        vm.setRemoteEnabled(false)
+        Toast.makeText(context, reason, Toast.LENGTH_LONG).show()
+    }
 
     Column(
         Modifier
@@ -89,6 +138,43 @@ fun SettingsScreen(onBack: () -> Unit) {
             onClick = { vm.checkNow() },
         )
         InfoRow(title = "当前版本", value = "v$version")
+        Spacer(Modifier.size(10.dp))
+        SettingSwitchRow(
+            title = "电脑协同",
+            subtitle = when {
+                !remoteEnabled -> "电脑通过蓝牙读写待办、习惯、倒计时（默认关闭）"
+                clients > 0 -> "已连接 $clients 台电脑，可以直接读写"
+                else -> "已开启，等电脑连接…"
+            },
+            checked = remoteEnabled,
+            onCheckedChange = { on ->
+                if (!on) {
+                    vm.setRemoteEnabled(false)
+                } else {
+                    when (val ready = RemoteBle.readiness(context)) {
+                        is RemoteBle.Readiness.Ready -> vm.setRemoteEnabled(true)
+                        is RemoteBle.Readiness.NeedsPermission ->
+                            permissionLauncher.launch(ready.permissions)
+                        is RemoteBle.Readiness.AdapterOff -> runCatching {
+                            bluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+                        }
+                        is RemoteBle.Readiness.Blocked ->
+                            Toast.makeText(context, ready.reason, Toast.LENGTH_LONG).show()
+                    }
+                }
+            },
+        )
+        if (remoteEnabled) {
+            SettingRow(
+                title = "协同 token",
+                subtitle = remoteToken.ifBlank { "生成中…" },
+                icon = Icons.Filled.ContentCopy,
+                onClick = {
+                    clipboard.setText(AnnotatedString(remoteToken))
+                    Toast.makeText(context, "token 已复制", Toast.LENGTH_SHORT).show()
+                },
+            )
+        }
         Spacer(Modifier.size(10.dp))
         SettingRow(
             title = "导出数据",

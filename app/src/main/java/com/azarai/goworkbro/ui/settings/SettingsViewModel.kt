@@ -10,6 +10,7 @@ import com.azarai.goworkbro.core.Backup
 import com.azarai.goworkbro.core.LogicalDay
 import com.azarai.goworkbro.core.Store
 import com.azarai.goworkbro.core.Updater
+import com.azarai.goworkbro.core.remote.RemoteService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -36,6 +37,31 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setAutoUpdate(enabled: Boolean) {
         viewModelScope.launch { Graph.store.set(Store.Keys.AUTO_UPDATE, enabled.toString()) }
+    }
+
+    /** 电脑协同: the PC-facing command surface over Bluetooth / adb, off by default. */
+    val remoteEnabled: StateFlow<Boolean> = Graph.store.observe(Store.Keys.REMOTE_ENABLED)
+        .map { it == "true" }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /** Empty until the switch is first turned on (that is what mints it). */
+    val remoteToken: StateFlow<String> = Graph.store.observe(Store.Keys.REMOTE_TOKEN)
+        .map { it.orEmpty() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
+
+    fun setRemoteEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            if (enabled) {
+                // Mint before flipping the gate: a request must never be able
+                // to land while no token exists (RemoteApi rejects an empty one).
+                Graph.store.remoteToken()
+                Graph.store.set(Store.Keys.REMOTE_ENABLED, "true")
+                RemoteService.start(getApplication())
+            } else {
+                Graph.store.set(Store.Keys.REMOTE_ENABLED, "false")
+                RemoteService.stop(getApplication())
+            }
+        }
     }
 
     private val checking = java.util.concurrent.atomic.AtomicBoolean(false)

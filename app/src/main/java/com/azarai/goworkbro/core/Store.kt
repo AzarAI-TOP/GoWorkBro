@@ -7,6 +7,7 @@ import com.azarai.goworkbro.core.util.Dates
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import org.json.JSONArray
+import java.util.UUID
 
 /**
  * Settings key-value store on top of `user_settings`. All v3 settings are
@@ -24,6 +25,23 @@ class Store(private val dao: SettingsDao) {
         const val LAST_UPDATE_CHECK = "last_update_check"
         /** Calendar day of the last cold-start reveal (play at most once a day). */
         const val LAST_REVEAL_DATE = "last_reveal_date"
+        /** 电脑协同: "true" opens the PC command surface (see core/remote). */
+        const val REMOTE_ENABLED = "remote_enabled"
+        /** Shared secret every remote request must echo (see RemoteApi). */
+        const val REMOTE_TOKEN = "remote_token"
+    }
+
+    /**
+     * The 协同 token, minted on first use so the settings page can show one.
+     * It rides along in backups (it lives in `user_settings`), so a restore
+     * keeps an already-configured PC working — and a leaked backup file leaks
+     * the token, which is why 电脑协同 is a toggle, not always-on.
+     */
+    suspend fun remoteToken(): String {
+        get(Keys.REMOTE_TOKEN)?.takeIf { it.isNotBlank() }?.let { return it }
+        val fresh = UUID.randomUUID().toString().replace("-", "")
+        set(Keys.REMOTE_TOKEN, fresh)
+        return fresh
     }
 
     suspend fun get(key: String): String? = dao.get(key)

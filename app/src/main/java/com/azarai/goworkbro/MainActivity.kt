@@ -8,6 +8,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.azarai.goworkbro.core.ShortcutActions
+import com.azarai.goworkbro.core.remote.RemoteService
 import com.azarai.goworkbro.ui.AppRoot
 
 class MainActivity : ComponentActivity() {
@@ -20,6 +21,9 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         shortcutAction.value = intent?.takeIfShortcut()
+        // 电脑协同 lives in a foreground service; a process death (or a MIUI
+        // kill) leaves the switch on while the radio is gone — put it back.
+        RemoteService.ensureRunning(this)
         setContent {
             AppRoot(
                 pendingShortcut = shortcutAction.value,

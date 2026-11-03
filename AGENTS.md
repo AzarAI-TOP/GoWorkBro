@@ -131,6 +131,30 @@ pushing a detail screen onto the hand-rolled nav stack in `ui/AppRoot.kt`. Data 
   still arrive; third-party apps cannot spoof them). Pending-APK version is
   derived from the file name (`GoWorkBro-update-<version>.apk`); stale APKs
   (<= the running version) and orphaned sidecars are deleted on startup.
+- **电脑协同 (v3.7)** — `core/remote/`: the only write path that is not the
+  UI. `RemoteApi.handle(db, json, now)` is a transport-agnostic op surface
+  (`todos|habits|countdowns.list`, `*.add|update|delete`, `todo.done`,
+  `habit.check`), gated by the `remote_enabled` toggle + `user_settings
+  .remote_token` (a token, never the link, is what authorizes a write — BLE
+  pairing is Just Works and the adb receiver is exported). Two transports:
+  `AdbBridge` (exported receiver; `am broadcast` needs `-n` because Android 8+
+  drops implicit broadcasts to manifest receivers) and `BleServer` +
+  `RemoteService` (phone advertises a GATT service, `INFO`/`UP`/`DOWN`, bytes
+  framed by `Framing.kt`; a `connectedDevice` foreground service keeps it
+  alive). PC side is `tools/` (bleak): `gwbcore.py` (framing + link, shared),
+  `gwb.py` (CLI), `gwb_mcp.py` (13 MCP tools, registered as `goworkbro` in
+  `~/.pi/agent/mcp.json`; the link is reused across calls and closed after 5
+  idle minutes). Protocol in `docs/remote-protocol.md`. Rules: every op is a single write through the
+  normal DAOs — so Room flows refresh the screens and the logical-day rules
+  (`done_date`, `habit.last_reset_date`) apply exactly as for a tap; `*.add`
+  with an existing `id` updates instead of inserting (a retried PC request is
+  safe); nothing here clears a table (`Backup.import` stays the only
+  destructive path); bump `RemoteApi.PROTOCOL` when an op changes shape.
+  Hard-won on hardware (2026-11-03): Android serializes the GATT server
+  callbacks and BlueZ refuses a write response while one of our notifications
+  is in flight (then waits 30 s and drops the link) — so responses go to their
+  own thread with a retry and notifications are serialized on
+  `onNotificationSent`.
 - **Data-access scale rules** (learned 2026-10: history only grows): home
   reads SQL aggregates (`observeCounts`) and the wake-time calendar window
   (`SleepOps.dayWindow` + `SleepDao.observeWakesBetween`), never `observeAll`;
@@ -148,6 +172,10 @@ pushing a detail screen onto the hand-rolled nav stack in `ui/AppRoot.kt`. Data 
   settings page's explicit, confirmed bulk wipe.
 - All tests are hermetic JVM tests (Robolectric, fresh DB per test via
   `Graph.rebindForTesting`); they cannot touch device data. Keep it that way.
+- **`adb install -r` BYPASSES `Backup.snapshotToDownloads`** — the app takes
+  that snapshot itself before an in-app update install, so an adb-driven
+  upgrade has NO safety net. For any data-dropping migration, ask Azar to
+  导出数据 from 设置 first (or accept the loss explicitly).
 - Room invalidation only tracks writes through the SAME database instance, so
   tests that seed data must seed BEFORE the activity launches
   (`createEmptyComposeRule` + `ActivityScenario`, see `OverviewFlowTest`).
@@ -191,6 +219,12 @@ pushing a detail screen onto the hand-rolled nav stack in `ui/AppRoot.kt`. Data 
     singletons shared across classes in one classloader; parallel classes
     poison each other's day/db.
   - New test classes get sorted into a tier in `scripts/test.sh`.
+- **Release gate: the Gradle cache fakes a passing round.** `scripts/test.sh
+  all` after an earlier run prints `FROM-CACHE` / `UP-TO-DATE` in ~1s and
+  executes nothing. Before a release run
+  `./gradlew :app:cleanTestDebugUnitTest :app:testDebugUnitTest --no-build-cache`
+  (≈15s) and tally `app/build/test-results/testDebugUnitTest/*.xml` —
+  2026-11-03 baseline: 15 classes / 86 tests, 0 failures.
 - Emulator testing (local-only skill, gitignored): `.agents/skills/gwb-emu`
   drives the headless local AVD — install/launch, tap-by-label, screenshots,
   app-data reset, guest-clock faking for midnight day-boundary tests. Prefer it
@@ -209,6 +243,19 @@ pushing a detail screen onto the hand-rolled nav stack in `ui/AppRoot.kt`. Data 
   `performScrollTo()`), and clicks on a `clickable` nested inside another
   `clickable` (the home cards' 打卡 buttons) are never delivered — cover those
   flows from the detail pages or through the ViewModel instead.
+- **Tap by bounds, not by guessed coordinates**: `adb shell uiautomator dump`
+  then read `text="…" … bounds="[x1,y1][x2,y2]"` (screencap pixel coords are
+  the same space; a shrunken preview in a chat is not). `input tap` with a
+  centre computed from that dump lands every time.
+- **Never validate sorting on his phone**: a drag reorder WRITES `sort_order`
+  (real data change). Verify scroll/tap flows only, and leave drag-to-sort to
+  Azar — same reasoning as "deleting a todo is a user action".
+- **Checking an upgrade on the phone** (release builds are not debuggable, so
+  the DB cannot be read): `dumpsys package` for versionCode before/after →
+  `adb logcat -c` → launch → the home screen must render REAL numbers and
+  `pidof` must stay alive → `adb logcat -d -b crash` empty. Home reads SQL
+  aggregates, so a rendered home proves Room opened and the migration ran; a
+  missing migration looks exactly like the old v1→v2 crash.
 
 ## Conventions
 
@@ -228,9 +275,11 @@ pushing a detail screen onto the hand-rolled nav stack in `ui/AppRoot.kt`. Data 
   | Pure refactor / dependency bump | rides along, no own release |
 
   Heuristic: if the CHANGELOG entry needs a “升级会…” warning sentence
-  (data wiped, uninstall required), that is a MAJOR signal — 3.2.0 and
-  3.3.0 both qualified and shipped as MINOR only because the single user
-  consented. `versionCode` is orthogonal: +1 every release, always.
+  (data wiped, uninstall required), that is a MAJOR signal — 3.2.0, 3.3.0 and
+  3.6.0 (dropped `fitness_logs`) all qualified and shipped as MINOR only
+  because the single user consented. `versionCode` is orthogonal: +1 every
+  release, always. **The DB `version` is unrelated to `versionName`** — a
+  v6→v7 schema step does not mean 6.0.0.
 
 ## User command shorthand
 
@@ -240,6 +289,22 @@ pushing a detail screen onto the hand-rolled nav stack in `ui/AppRoot.kt`. Data 
   `app/build.gradle.kts`, add a CHANGELOG entry, `chore(release)` commit, tag
   `vX.Y.Z`, `assembleRelease`, then `gh release create` with
   `GoWorkBro-vX.Y.Z.apk` + `.sha256`; Chinese notes with 安装/校验 sections
-  (see v2.0.1 for the template).
+  (see v2.0.1 for the template). Mechanics that bite (2026-10-30):
+  - **Cross-check the CHANGELOG against the feature commit body first** — the
+    `Unreleased` block had no `Fixed` bullet for the crash fix the commit
+    message listed, and a hardcoded date example (10月27日) went stale. The
+    release notes must also open with the ⚠️ data-loss warning when the
+    migration drops tables.
+  - `git push origin main` does NOT push the tag — push `vX.Y.Z` separately.
+  - `gh release create` must run INSIDE the repo: from a temp asset dir it dies
+    with `fatal: not a git repository`. Stage the renamed APK + `.sha256` in a
+    temp dir (`sha256sum … | tee …`), but run `gh` from the project root with
+    `--notes-file` and absolute asset paths.
+  - Verify after publishing: `gh release view` assets, and that the downloaded
+    `.sha256` matches the local APK.
 - **sync** → 同步到手机: `adb install -r` the latest APK (uninstall first if
-  signatures differ — debug and release builds do NOT interinstall).
+  signatures differ — debug and release builds do NOT interinstall). Data is
+  retained (`Retain data and using new` in logcat); run the upgrade check in
+  "Device automation" afterwards.
+- **Phone often is not attached**: poll `adb devices` (authorized = state
+  `device`) instead of assuming; MIUI may need the RSA dialog confirmed.
